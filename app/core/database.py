@@ -14,3 +14,4 @@ engine = create_engine(settings.DB_URL)
 def get_session():
     with Session(engine) as session:
         yield session
+

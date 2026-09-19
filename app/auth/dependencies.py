@@ -1,15 +1,35 @@
-"""다른 트랙(receipts, deduction)이 그대로 import해서 쓰는 인증 의존성.
+"""다른 트랙(receipts, deduction)이 재사용하는 JWT 사용자 의존성."""
 
-사용 예: def handler(user: User = Depends(get_current_user)): ...
-"""
+import uuid
 
 from fastapi import Depends
-from fastapi.security import HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlmodel import Session, select
 
-bearer_scheme = HTTPBearer()
+from app.auth.models import User
+from app.common.exceptions import AppError
+from app.core.database import get_session
+from app.core.security import decode_access_token
 
 
-def get_current_user(credentials=Depends(bearer_scheme)):
-    raise NotImplementedError
-    # TODO: core.security.decode_access_token으로 payload["sub"] 추출
-    # -> users 테이블에서 조회, 없으면 AppError(401, "UNAUTHORIZED", ...)
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: Session = Depends(get_session),
+) -> User:
+    if credentials is None:
+        raise AppError(401, "UNAUTHORIZED", "인증이 필요합니다.")
+
+    payload = decode_access_token(credentials.credentials)
+    try:
+        user_id = uuid.UUID(payload["sub"])
+    except (ValueError, TypeError) as exc:
+        raise AppError(401, "UNAUTHORIZED", "유효하지 않은 인증 토큰입니다.") from exc
+
+    user = session.exec(select(User).where(User.id == user_id)).first()
+    if user is None:
+        raise AppError(401, "UNAUTHORIZED", "사용자를 찾을 수 없습니다.")
+    return user
+

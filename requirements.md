@@ -26,6 +26,7 @@
 | `python-jose[cryptography]` | 3.5.0 | JWT 발급/검증 |
 | `bcrypt` | 5.0.0 | 비밀번호 해싱 (passlib은 bcrypt 4.1+와 호환 문제가 있어 제외, bcrypt 직접 사용) |
 | `python-multipart` | 0.0.32 | 파일 업로드(영수증 이미지) 파싱 |
+| `Pillow` | 12.3.0 | 이미지 디코딩·손상/픽셀 수 검증 |
 | `boto3` | 1.43.95 | AWS S3 업로드 |
 | `openai` | 3.14.1 | GPT API 호출 (AI 로직 인터페이스 내부 구현체) |
 | `httpx` | 0.28.1 | CLOVA OCR / 국세청(NTS) API 호출 |
@@ -49,5 +50,5 @@
 
 ## 검증 방법
 
-- Backend: 위 16개 패키지를 한 번에 `pip install --dry-run`으로 설치 시도 → resolver 에러 없이 전체 설치 계획 산출 확인.
+- Backend: 위 17개 패키지를 한 번에 `pip install --dry-run`으로 설치 시도 → resolver 에러 없이 전체 설치 계획 산출 확인.
 - Frontend: 위 10개 패키지를 한 번에 `npm install --dry-run`으로 설치 시도 → peer dependency 경고/에러 없이 57개 패키지 설치 계획 산출 확인.

@@ -20,6 +20,8 @@ build/
 
 # Logs
 *.log
+*.db
+storage/
 
 # OS
 .DS_Store

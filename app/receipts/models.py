@@ -19,3 +19,4 @@ class Receipt(SQLModel, table=True):
     date: Optional[date_] = Field(default=None)
     status: str = Field(nullable=False)  # "done" | "failed"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+
