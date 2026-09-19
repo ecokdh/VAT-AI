@@ -3,13 +3,32 @@
 사용 예: def handler(user: User = Depends(get_current_user)): ...
 """
 
-from fastapi import Depends
-from fastapi.security import HTTPBearer
+import uuid
 
-bearer_scheme = HTTPBearer()
+from fastapi import Depends, Header
+from sqlmodel import Session
+
+from app.auth.models import User
+from app.common.exceptions import AppException
+from app.core.database import get_session
+from app.core.security import decode_access_token
 
 
-def get_current_user(credentials=Depends(bearer_scheme)):
-    raise NotImplementedError
-    # TODO: core.security.decode_access_token으로 payload["sub"] 추출
-    # -> users 테이블에서 조회, 없으면 AppError(401, "UNAUTHORIZED", ...)
+def get_current_user(
+    authorization: str = Header(default=None),
+    db: Session = Depends(get_session),
+) -> User:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise AppException(401, "UNAUTHORIZED", "인증 토큰이 필요합니다.")
+
+    token = authorization.removeprefix("Bearer ").strip()
+    try:
+        payload = decode_access_token(token)
+        user_id = uuid.UUID(payload["sub"])
+    except (ValueError, KeyError) as e:
+        raise AppException(401, "UNAUTHORIZED", "유효하지 않은 토큰입니다.") from e
+
+    user = db.get(User, user_id)
+    if not user:
+        raise AppException(401, "UNAUTHORIZED", "존재하지 않는 사용자입니다.")
+    return user
