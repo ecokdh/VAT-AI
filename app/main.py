@@ -11,7 +11,7 @@ app = FastAPI(title="VAT-AI")
 # TODO: 프론트 실제 배포 도메인이 정해지면 allow_origins를 그걸로 좁힌다.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
