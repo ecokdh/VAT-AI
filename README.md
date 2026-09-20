@@ -60,3 +60,4 @@ uvicorn app.main:app --reload
 ### 참고
 - `.gitignore`에 `venv/` 항목 누락돼 있던 것 발견하여 추가함 (기존에는 `.venv/`만 있었음)
 - `app/common/exceptions.py`의 validation 에러 메시지에 로컬 파일 경로가 노출되던 문제 수정
+- `tests/test_auth.py`가 고정된 이메일(`test@example.com`)을 써서 재실행 시 DB에 남은 데이터와 충돌(409)하던 문제 발견, `uuid`로 매 실행마다 랜덤 이메일을 생성하도록 수정 → 테스트 재실행 가능해짐
