@@ -1,17 +1,31 @@
 import { useState } from "react";
+import { isAxiosError } from "axios";
 import { useNavigate, Link } from "react-router-dom";
 import { PageHeader } from "../../components/PageHeader";
 import { mockUser } from "../../mocks/user";
+import { login } from "../../api/auth";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState(mockUser.email);
   const [password, setPassword] = useState("");
   const [rememberEmail, setRememberEmail] = useState(true);
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleLogin() {
-    // 스켈레톤 단계: 실제 인증 없이 목데이터 기반으로 대시보드로 이동
-    navigate("/dashboard");
+  async function handleLogin() {
+    setError("");
+    setIsSubmitting(true);
+    try {
+      const { access_token } = await login(email, password);
+      localStorage.setItem("access_token", access_token);
+      navigate("/dashboard");
+    } catch (e) {
+      const message = isAxiosError(e) ? e.response?.data?.error?.message : undefined;
+      setError(message ?? "로그인에 실패하였습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -57,9 +71,16 @@ export function LoginPage() {
           <span className="muted">비밀번호를 잊으셨나요?</span>
         </div>
 
+        {error && (
+          <div className="banner banner--error" style={{ marginBottom: 20 }}>
+            <span>⚠️</span>
+            <div>{error}</div>
+          </div>
+        )}
+
         <div className="stack-gap-sm">
-          <button className="btn btn--primary" onClick={handleLogin}>
-            로그인
+          <button className="btn btn--primary" onClick={handleLogin} disabled={isSubmitting}>
+            {isSubmitting ? "로그인 중..." : "로그인"}
           </button>
           <Link to="/signup" className="btn btn--ghost">
             회원가입 하기

@@ -1,13 +1,24 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { mockUser } from "../mocks/user";
 import { mockReport } from "../mocks/report";
 import { purchaseTotals, salesTotals } from "../mocks/receipts";
 import { useMaskedFormat } from "../hooks/useMaskedFormat";
 import { AmountVisibilityToggle } from "../components/AmountVisibilityToggle";
+import { getMe } from "../api/auth";
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const fmt = useMaskedFormat();
+  // 스켈레톤 단계: User 엔티티에 사업장명이 아직 없어 대표자명만 실제 로그인 정보로 대체
+  const [representativeName, setRepresentativeName] = useState(mockUser.representativeName);
+
+  useEffect(() => {
+    if (!localStorage.getItem("access_token")) return;
+    getMe()
+      .then((me) => setRepresentativeName(me.name))
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="page">
@@ -16,7 +27,7 @@ export function DashboardPage() {
           <div className="muted" style={{ fontSize: 13 }}>
             {mockUser.businessName}
           </div>
-          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2 }}>{mockUser.representativeName}님, 반갑습니다 👋</div>
+          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2 }}>{representativeName}님, 반갑습니다 👋</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <AmountVisibilityToggle />

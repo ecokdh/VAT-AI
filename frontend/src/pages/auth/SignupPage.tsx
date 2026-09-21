@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { isAxiosError } from "axios";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "../../components/PageHeader";
 import { mockUser } from "../../mocks/user";
+import { register } from "../../api/auth";
 
 export function SignupPage() {
   const navigate = useNavigate();
@@ -11,6 +13,8 @@ export function SignupPage() {
   const [email, setEmail] = useState("");
   const [emailChecked, setEmailChecked] = useState(false);
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function handleVerifyBusiness() {
     // 스켈레톤 단계: 국세청 공공데이터포털 실시간 조회를 흉내내는 목업 동작
@@ -20,6 +24,22 @@ export function SignupPage() {
 
   function handleCheckEmail() {
     setEmailChecked(true);
+  }
+
+  async function handleSignup() {
+    setError("");
+    setIsSubmitting(true);
+    try {
+      // 스켈레톤 단계: User 엔티티에 사업자 필드가 아직 없어 사업장명을 name으로 전달
+      const { access_token } = await register(email, password, businessName);
+      localStorage.setItem("access_token", access_token);
+      navigate("/dashboard");
+    } catch (e) {
+      const message = isAxiosError(e) ? e.response?.data?.error?.message : undefined;
+      setError(message ?? "회원가입에 실패하였습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -78,8 +98,15 @@ export function SignupPage() {
           <div>공공데이터포털 사업자정보 API 검증을 마쳤습니다. 입력된 사업장 정보는 암호화되어 안전하게 보관됩니다.</div>
         </div>
 
-        <button className="btn btn--primary" onClick={() => navigate("/dashboard")}>
-          휴대폰 본인 인증
+        {error && (
+          <div className="banner banner--error" style={{ margin: "0 0 16px" }}>
+            <span>⚠️</span>
+            <div>{error}</div>
+          </div>
+        )}
+
+        <button className="btn btn--primary" onClick={handleSignup} disabled={isSubmitting}>
+          {isSubmitting ? "가입 처리 중..." : "휴대폰 본인 인증"}
         </button>
       </div>
     </div>

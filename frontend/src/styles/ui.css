@@ -372,6 +372,11 @@
   color: var(--color-warning-text);
 }
 
+.banner--error {
+  background: #fdecec;
+  color: var(--color-danger);
+}
+
 .banner__title {
   font-weight: 700;
   margin-bottom: 2px;
