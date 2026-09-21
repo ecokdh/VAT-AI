@@ -1,20 +1,30 @@
-"""Track A 구현 대상: 비밀번호 해싱(bcrypt) + JWT 발급/검증(python-jose).
+from datetime import datetime, timedelta
 
-JWT payload는 api-spec.md §1.1 기준: {"sub": <User.id>, "email": <User.email>}
-"""
+import bcrypt
+from jose import JWTError, jwt
 
-
-def hash_password(plain_password: str) -> str:
-    raise NotImplementedError  # TODO: bcrypt로 해싱
+from app.core.config import settings
 
 
-def verify_password(plain_password: str, password_hash: str) -> bool:
-    raise NotImplementedError  # TODO: bcrypt 비교
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
-def create_access_token(user_id: str, email: str) -> str:
-    raise NotImplementedError  # TODO: jose.jwt.encode({"sub": user_id, "email": email}, ...)
+def verify_password(password: str, password_hash: str) -> bool:
+    return bcrypt.checkpw(password.encode(), password_hash.encode())
+
+
+def create_access_token(user_id, email: str) -> str:
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "exp": datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES),
+    }
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
 def decode_access_token(token: str) -> dict:
-    raise NotImplementedError  # TODO: jose.jwt.decode, 실패 시 AppError(401, "UNAUTHORIZED", ...)
+    try:
+        return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    except JWTError as e:
+        raise ValueError("invalid token") from e
