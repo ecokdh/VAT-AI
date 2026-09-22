@@ -16,4 +16,4 @@ class DeductionJudgement:
 
 def judge_deduction(vendor: str, amount: float, ocr_raw: str) -> DeductionJudgement:
     raise NotImplementedError
-    # TODO: OpenAI API 단순 호출. 실패 시 AppError(502, "EXTERNAL_API_ERROR", ...)
+    # TODO: OpenAI API 단순 호출. 실패 시 AppException(502, "EXTERNAL_API_ERROR", ...)

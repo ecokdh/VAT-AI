@@ -1,7 +1,6 @@
-import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, EmailStr
 
 
 class RegisterRequest(BaseModel):
@@ -16,16 +15,12 @@ class LoginRequest(BaseModel):
 
 
 class UserOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
+    id: str
     email: EmailStr
     name: str
     created_at: datetime
 
 
-class TokenResponse(BaseModel):
-    """api-spec.md §3.1 — register/login 공통 응답 형태."""
-
+class AuthResponse(BaseModel):
     access_token: str
     user: UserOut

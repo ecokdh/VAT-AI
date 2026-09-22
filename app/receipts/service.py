@@ -8,7 +8,7 @@ from typing import Optional
 from PIL import Image, UnidentifiedImageError
 from sqlmodel import Session, select
 
-from app.common.exceptions import AppError
+from app.common.exceptions import AppException
 from app.core.config import settings
 from app.receipts import ocr_client
 from app.receipts.models import Receipt
@@ -27,14 +27,14 @@ def detect_image_type(file_bytes: bytes) -> tuple[str, str] | None:
 def _decode_image(file_bytes: bytes, media_type: str) -> None:
     expected_format = {"image/jpeg": "JPEG", "image/png": "PNG"}.get(media_type)
     if expected_format is None:
-        raise AppError(400, "VALIDATION_ERROR", "지원하지 않는 이미지 형식입니다.")
+        raise AppException(400, "VALIDATION_ERROR", "지원하지 않는 이미지 형식입니다.")
 
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
             with Image.open(BytesIO(file_bytes)) as image:
                 if image.format != expected_format:
-                    raise AppError(
+                    raise AppException(
                         400,
                         "VALIDATION_ERROR",
                         "파일 형식과 실제 이미지 형식이 일치하지 않습니다.",
@@ -45,7 +45,7 @@ def _decode_image(file_bytes: bytes, media_type: str) -> None:
                     or height <= 0
                     or width * height > settings.MAX_IMAGE_PIXELS
                 ):
-                    raise AppError(
+                    raise AppException(
                         400,
                         "VALIDATION_ERROR",
                         "이미지 픽셀 수 제한을 초과했습니다.",
@@ -55,7 +55,7 @@ def _decode_image(file_bytes: bytes, media_type: str) -> None:
             # verify()는 구조 검사를 수행하므로, 별도로 실제 디코딩도 한다.
             with Image.open(BytesIO(file_bytes)) as image:
                 image.load()
-    except AppError:
+    except AppException:
         raise
     except (
         Image.DecompressionBombError,
@@ -64,7 +64,7 @@ def _decode_image(file_bytes: bytes, media_type: str) -> None:
         UnidentifiedImageError,
         ValueError,
     ) as exc:
-        raise AppError(
+        raise AppException(
             400,
             "VALIDATION_ERROR",
             "읽을 수 없는 손상된 이미지입니다.",
@@ -73,16 +73,16 @@ def _decode_image(file_bytes: bytes, media_type: str) -> None:
 
 def validate_image(file_bytes: bytes, content_type: Optional[str]) -> tuple[str, str]:
     if not file_bytes:
-        raise AppError(400, "VALIDATION_ERROR", "빈 파일은 업로드할 수 없습니다.")
+        raise AppException(400, "VALIDATION_ERROR", "빈 파일은 업로드할 수 없습니다.")
     if len(file_bytes) > settings.MAX_UPLOAD_SIZE_BYTES:
-        raise AppError(400, "VALIDATION_ERROR", "파일 크기 제한을 초과했습니다.")
+        raise AppException(400, "VALIDATION_ERROR", "파일 크기 제한을 초과했습니다.")
 
     detected = detect_image_type(file_bytes)
     if detected is None:
-        raise AppError(400, "VALIDATION_ERROR", "지원하지 않는 이미지 형식입니다.")
+        raise AppException(400, "VALIDATION_ERROR", "지원하지 않는 이미지 형식입니다.")
     detected_type, extension = detected
     if content_type and content_type not in {detected_type, "application/octet-stream"}:
-        raise AppError(
+        raise AppException(
             400,
             "VALIDATION_ERROR",
             "파일 형식과 내용이 일치하지 않습니다.",
@@ -130,7 +130,7 @@ async def upload_receipt(
     try:
         stored = storage.save(user_id, file_bytes, media_type, extension)
     except OSError as exc:
-        raise AppError(500, "STORAGE_ERROR", "파일 저장에 실패했습니다.") from exc
+        raise AppException(500, "STORAGE_ERROR", "파일 저장에 실패했습니다.") from exc
 
     try:
         ocr_result = await ocr_client.extract_receipt(file_bytes, media_type)
@@ -168,7 +168,7 @@ async def upload_receipt(
     except Exception as exc:
         _rollback_best_effort(session)
         _delete_after_failure(stored.key)
-        raise AppError(500, "DATABASE_ERROR", "영수증 저장에 실패했습니다.") from exc
+        raise AppException(500, "DATABASE_ERROR", "영수증 저장에 실패했습니다.") from exc
 
     # commit()이 예외를 던져도 서버/네트워크 상태에 따라 커밋 여부가
     # 불확실할 수 있다. 이 경우 참조 레코드가 이미 있을 수 있으므로 파일을
@@ -177,7 +177,7 @@ async def upload_receipt(
         session.commit()
     except Exception as exc:
         _rollback_best_effort(session)
-        raise AppError(500, "DATABASE_ERROR", "영수증 저장에 실패했습니다.") from exc
+        raise AppException(500, "DATABASE_ERROR", "영수증 저장에 실패했습니다.") from exc
 
     # 여기부터는 Receipt가 이미 커밋되었다. refresh/응답 변환 실패 시에도
     # 커밋된 레코드가 참조하는 원본 파일을 삭제하지 않는다.
@@ -186,7 +186,7 @@ async def upload_receipt(
         return ReceiptOut.model_validate(receipt)
     except Exception as exc:
         _rollback_best_effort(session)
-        raise AppError(500, "DATABASE_ERROR", "영수증 응답 생성에 실패했습니다.") from exc
+        raise AppException(500, "DATABASE_ERROR", "영수증 응답 생성에 실패했습니다.") from exc
 
 
 def list_receipts(session: Session, user_id: uuid.UUID) -> list[ReceiptSummary]:
@@ -204,5 +204,5 @@ def get_receipt(session: Session, user_id: uuid.UUID, receipt_id: int) -> Receip
     )
     receipt = session.exec(statement).first()
     if receipt is None:
-        raise AppError(404, "NOT_FOUND", "영수증을 찾을 수 없습니다.")
+        raise AppException(404, "NOT_FOUND", "영수증을 찾을 수 없습니다.")
     return ReceiptOut.model_validate(receipt)

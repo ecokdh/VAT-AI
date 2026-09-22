@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from jose import JWTError, jwt
 
-from app.common.exceptions import AppError
+from app.common.exceptions import AppException
 from app.core.config import settings
 
 
@@ -14,10 +14,10 @@ BCRYPT_MAX_PASSWORD_BYTES = 72
 
 def _validate_password_bytes(plain_password: str) -> bytes:
     if not plain_password:
-        raise AppError(400, "VALIDATION_ERROR", "비밀번호는 비어 있을 수 없습니다.")
+        raise AppException(400, "VALIDATION_ERROR", "비밀번호는 비어 있을 수 없습니다.")
     encoded = plain_password.encode("utf-8")
     if len(encoded) > BCRYPT_MAX_PASSWORD_BYTES:
-        raise AppError(
+        raise AppException(
             400,
             "VALIDATION_ERROR",
             "비밀번호는 UTF-8 기준 72바이트 이하로 입력해야 합니다.",
@@ -44,7 +44,7 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
 
 def create_access_token(user_id: str, email: str) -> str:
     expires_at = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.JWT_EXPIRES_MINUTES
+        minutes=settings.JWT_EXPIRE_MINUTES
     )
     payload = {"sub": str(user_id), "email": email, "exp": expires_at}
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
@@ -58,10 +58,10 @@ def decode_access_token(token: str) -> dict:
             algorithms=[settings.JWT_ALGORITHM],
         )
     except JWTError as exc:
-        raise AppError(401, "UNAUTHORIZED", "유효하지 않은 인증 토큰입니다.") from exc
+        raise ValueError("유효하지 않은 인증 토큰입니다.") from exc
 
     if not isinstance(payload.get("sub"), str) or not isinstance(
         payload.get("email"), str
     ):
-        raise AppError(401, "UNAUTHORIZED", "유효하지 않은 인증 토큰입니다.")
+        raise ValueError("유효하지 않은 인증 토큰입니다.")
     return payload

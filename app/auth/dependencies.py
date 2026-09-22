@@ -2,34 +2,31 @@
 
 import uuid
 
-from fastapi import Depends
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlmodel import Session, select
+from fastapi import Depends, Header
+from sqlmodel import Session
 
 from app.auth.models import User
-from app.common.exceptions import AppError
+from app.common.exceptions import AppException
 from app.core.database import get_session
 from app.core.security import decode_access_token
 
 
-bearer_scheme = HTTPBearer(auto_error=False)
-
-
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    session: Session = Depends(get_session),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_session),
 ) -> User:
-    if credentials is None:
-        raise AppError(401, "UNAUTHORIZED", "인증이 필요합니다.")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise AppException(401, "UNAUTHORIZED", "인증 토큰이 필요합니다.")
 
-    payload = decode_access_token(credentials.credentials)
+    token = authorization.removeprefix("Bearer ").strip()
     try:
+        payload = decode_access_token(token)
         user_id = uuid.UUID(payload["sub"])
-    except (ValueError, TypeError) as exc:
-        raise AppError(401, "UNAUTHORIZED", "유효하지 않은 인증 토큰입니다.") from exc
+    except (ValueError, KeyError, TypeError) as exc:
+        raise AppException(401, "UNAUTHORIZED", "유효하지 않은 토큰입니다.") from exc
 
-    user = session.exec(select(User).where(User.id == user_id)).first()
+    user = db.get(User, user_id)
     if user is None:
-        raise AppError(401, "UNAUTHORIZED", "사용자를 찾을 수 없습니다.")
+        raise AppException(401, "UNAUTHORIZED", "존재하지 않는 사용자입니다.")
     return user
 

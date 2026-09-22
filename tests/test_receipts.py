@@ -8,7 +8,7 @@ import httpx
 import pytest
 from PIL import Image
 
-from app.common.exceptions import AppError
+from app.common.exceptions import AppException
 from app.core import config
 from app.receipts import ocr_client
 from app.receipts import service as receipt_service
@@ -540,7 +540,7 @@ def test_database_failure_cleans_file_and_is_distinct(tmp_path, monkeypatch):
             raise RuntimeError("database unavailable before commit")
 
     with PreCommitFailingSession(engine) as session:
-        with pytest.raises(AppError) as error:
+        with pytest.raises(AppException) as error:
             asyncio.run(
                 receipt_service.upload_receipt(
                     session, user_id, PNG_BYTES, "image/png"
@@ -587,7 +587,7 @@ def test_refresh_failure_after_commit_keeps_row_and_file(tmp_path, monkeypatch):
             )
 
     with RefreshFailSession(engine) as session:
-        with pytest.raises(AppError) as error:
+        with pytest.raises(AppException) as error:
             asyncio.run(
                 receipt_service.upload_receipt(
                     session, user_id, PNG_BYTES, "image/png"
@@ -636,7 +636,7 @@ def test_uncertain_commit_failure_keeps_row_and_file(tmp_path, monkeypatch):
             raise OperationalError("COMMIT", {}, Exception("connection lost after commit"))
 
     with CommitUnknownSession(engine) as session:
-        with pytest.raises(AppError) as error:
+        with pytest.raises(AppException) as error:
             asyncio.run(
                 receipt_service.upload_receipt(
                     session, user_id, PNG_BYTES, "image/png"

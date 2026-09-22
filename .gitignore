@@ -22,6 +22,8 @@ build/
 *.log
 *.db
 storage/
+!frontend/src/pages/storage/
+!frontend/src/pages/storage/**
 
 # OS
 .DS_Store

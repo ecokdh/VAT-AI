@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     DB_URL: str = "sqlite:///./vat_ai.db"
     JWT_SECRET: str = "local-dev-secret-change-me"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRES_MINUTES: int = 7 * 24 * 60
+    # A트랙 계약명에 맞춘 JWT 만료 시간 설정.
+    JWT_EXPIRE_MINUTES: int = 60 * 24
     OPENAI_API_KEY: str = ""
 
     # CLOVA_API_KEY는 최초 스켈레톤의 이름과 호환하기 위한 fallback이다.

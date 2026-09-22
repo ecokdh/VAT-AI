@@ -5,8 +5,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
-class AppError(Exception):
-    """api-spec.md §1.3 공통 에러 응답 포맷을 만들기 위한 예외."""
+class AppException(Exception):
+    """A트랙과 모든 기능 라우터가 공유하는 애플리케이션 예외."""
 
     def __init__(self, status_code: int, code: str, message: str):
         super().__init__(message)
@@ -16,8 +16,8 @@ class AppError(Exception):
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    @app.exception_handler(AppError)
-    async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
+    @app.exception_handler(AppException)
+    async def app_exception_handler(_: Request, exc: AppException) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
             content={"error": {"code": exc.code, "message": exc.message}},

@@ -39,6 +39,12 @@ Swagger UI: <http://127.0.0.1:8000/docs>
 
 `.env.example`을 `.env`로 복사한 뒤 환경에 맞는 값을 입력합니다. `.env`에는 실제 비밀값을 넣되 Git에 커밋하지 않습니다.
 
+새 로컬 데이터베이스를 만들 때는 저장소 루트에서 아래 명령을 실행합니다. 현재 작업본의 A 기준 migration이 `users`, `receipts`, `deductions` 테이블을 만듭니다.
+
+```powershell
+python -m alembic upgrade head
+```
+
 ## 환경변수
 
 | 변수 | 용도 |
@@ -80,7 +86,7 @@ python -m pytest -q
 
 ## 현재 제한
 
-- A트랙과 공통 인증·설정·예외 처리 및 migration 체인의 통합이 필요합니다. 이 브랜치는 A트랙과 최종 통합된 상태를 의미하지 않습니다.
-- B트랙 migration은 `users` 테이블이 먼저 있어야 하며 현재 독립적으로 `alembic upgrade head`를 실행할 수 있는 완성된 공통 migration 체인이 아닙니다.
-- 실제 CLOVA OCR 계정/API 호출, PostgreSQL 연결, 프론트엔드 연동은 이 브랜치에서 확인하지 않았습니다.
+- 이 작업본은 A트랙의 인증·설정·예외 계약과 초기 migration을 포함하지만, Track D에 최종 병합된 상태를 의미하지는 않습니다.
+- PostgreSQL 공유 DB에서의 migration 실행과 기존 운영 데이터에 대한 이력 전환은 아직 확인하지 않았습니다. 새 로컬 DB와 기존 DB에 같은 명령을 무작정 실행하지 마세요.
+- 실제 CLOVA OCR 계정/API 호출과 공유 PostgreSQL 연결은 아직 확인하지 않았습니다. Track D 프론트엔드에는 로그인과 B트랙 영수증 업로드·처리 결과·매입 목록 호출 코드를 연결했고, TypeScript/Vite 빌드는 확인했지만 실행 중인 백엔드와의 브라우저 연동은 아직 확인하지 않았습니다.
 - `image_url` 접근 권한·다운로드 API 계약은 별도 통합이 필요합니다.
