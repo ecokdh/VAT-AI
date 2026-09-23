@@ -28,7 +28,7 @@ class _DeductionResponse(BaseModel):
 
 
 def judge_deduction(vendor: str, amount: float, ocr_raw: str) -> DeductionJudgement:
-    """영수증 OCR 결과를 받아 스켈레톤 단계의 공제 가능 여부를 판별한다."""
+    """영수증 OCR 결과를 받아 공제 가능 여부를 판별한다."""
     try:
         from openai import OpenAI
 

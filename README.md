@@ -3,7 +3,7 @@
 VAT-AI는 소상공인을 위한 부가가치세 자동 신고 보조 시스템입니다.
 영수증 이미지를 업로드하면 Naver CLOVA OCR로 매입 내역을 자동 판독하고, AI 세법 분석을 거쳐 매입 보관함 및 세무 신고 데이터로 집계합니다.
 
-현재 브랜치(`track-b-align-a`)는 **Track A(계정/인증)**, **Track B(영수증/OCR 백엔드)**, **Track D(React 프론트엔드)**가 상호 호환성을 검증받고 하나로 통합된 코드베이스입니다.
+현재 브랜치(`track-b-align-a`)는 **Track A(계정/인증)**, **Track B(영수증/OCR 백엔드)**, **Track C(공제 판별·리포트 백엔드)**, **Track D(React 프론트엔드)**를 통합한 코드베이스입니다. Track C의 프론트엔드 화면은 아직 실제 API 대신 목데이터를 사용합니다.
 
 ---
 
@@ -27,7 +27,7 @@ VAT-AI는 소상공인을 위한 부가가치세 자동 신고 보조 시스템�
 | **Track A** | 계정 및 사용자 인증 | **완료** — 회원가입, 로그인, `/auth/me`, JWT Bearer 토큰 인가, 비밀번호 bcrypt 해싱 |
 | **Track B** | 영수증 파이프라인 & DB | **완료** — 이미지 검증·로컬 저장, CLOVA OCR V2 어댑터, 영수증 CRUD, Alembic 통합 마이그레이션 (`users`, `receipts`, `deductions`) |
 | **Track D** | 사용자 UI 및 클라이언트 | **완료** — React 19 기반 모바일 퍼스트 UI, 백엔드 인증 연동, 영수증 촬영/업로드, OCR 결과 처리, 매입 보관함 실시간 연동 |
-| **Track C** | 세액 공제 판별 & 리포트 | **스켈레톤 준비** — 백엔드 라우터/스키마 준비 완료, AI 판별 엔진 연동 대기 |
+| **Track C** | 세액 공제 판별 & 리포트 | **백엔드 완료** — OpenAI 기반 공제 판별, deduction upsert, `POST /receipts/{id}/analyze`, `GET /reports` 구현 완료. 프론트엔드는 현재 목데이터 사용 |
 
 ---
 
@@ -40,7 +40,7 @@ VAT-AI/
 │   ├── auth/               # [Track A] 인증 모듈 (Router, Service, Schemas, Models)
 │   ├── common/             # 공통 예외(AppException), 에러 핸들러, 응답 규격
 │   ├── core/               # 앱 설정(config.py), DB 세션(database.py), 보안(security.py)
-│   ├── deduction/          # [Track C] 공제 판별 및 리포트 모듈 (스켈레톤)
+│   ├── deduction/          # [Track C] 공제 판별 및 리포트 백엔드 모듈
 │   ├── migrations/         # Alembic 마이그레이션 환경 및 버전 스크립트
 │   │   └── versions/       # 0632cbc850ef (users, receipts, deductions 생성)
 │   ├── receipts/           # [Track B] 영수증 파이프라인 (Storage, OCR Client, Service, Router)
@@ -50,12 +50,12 @@ VAT-AI/
 │   │   ├── api/            # Axios API 클라이언트 (auth.ts, receipts.ts, client.ts)
 │   │   ├── components/     # UI 공통 컴포넌트 (StorageView, SummaryCard 등)
 │   │   ├── pages/          # 페이지 단위 컴포넌트 (LoginPage, CapturePage, Storage 등)
-│   │   ├── mocks/          # 아직 백엔드가 미구현된 화면(Track C)용 목데이터
+│   │   ├── mocks/          # 현재 Track C 화면 등을 위한 목데이터
 │   │   └── styles/         # 디자인 토큰(tokens.css) 및 스타일(ui.css)
 │   ├── package.json
 │   └── vite.config.ts
 ├── storage/                # 업로드된 원본 영수증 파일 로컬 저장소
-├── tests/                  # 백엔드 pytest 테스트 스위트 (총 35개 테스트 통과)
+├── tests/                  # 백엔드 pytest/unittest 테스트 스위트 (Track C 테스트 포함)
 ├── .env.example            # 백엔드 환경변수 예시 템플릿
 ├── requirements.txt        # 운영 의존성
 ├── requirements-dev.txt    # 개발 및 테스트 의존성
@@ -72,6 +72,8 @@ VAT-AI/
 cp .env.example .env
 ```
 
+`.env.example`은 로컬 PostgreSQL 연결 예시를 제공합니다. SQLite로 시작하려면 `DB_URL=sqlite:///./vat_ai.db`로 바꾸고, 실제 공제 판별을 사용하려면 `OPENAI_API_KEY`를 설정합니다.
+
 ### 백엔드 환경변수 (`.env`)
 
 | 변수명 | 기본값 | 설명 |
@@ -80,6 +82,7 @@ cp .env.example .env
 | `JWT_SECRET` | `local-dev-secret-change-me` | JWT 토큰 서명용 비밀키 |
 | `JWT_ALGORITHM` | `HS256` | 토큰 암호화 알고리즘 |
 | `JWT_EXPIRE_MINUTES`| `1440` | 토큰 만료 시간 (기본 24시간) |
+| `OPENAI_API_KEY` | - | `POST /receipts/{id}/analyze`의 OpenAI 공제 판별 API 키 |
 | `STORAGE_DIR` | `storage` | 업로드 영수증 파일 로컬 저장 디렉터리 경로 |
 | `MAX_UPLOAD_SIZE_BYTES` | `10485760` (10MB) | 업로드 허용 최대 파일 크기 |
 | `MAX_IMAGE_PIXELS` | `25000000` | 이미지 최대 픽셀 수 제한 (Decompression Bomb 방어) |
@@ -128,9 +131,16 @@ python3 -m uvicorn app.main:app --reload --port 8000
 - **Swagger API 대화형 문서**: `http://localhost:8000/docs`
 - **ReDoc 명세서**: `http://localhost:8000/redoc`
 
+### 4.2 백엔드 테스트
+
+```powershell
+python -m pytest
+python -m unittest tests\test_deduction.py
+```
+
 ---
 
-### 4.2 프론트엔드 구동 (Node.js 18+)
+### 4.3 프론트엔드 구동 (Node.js 18+)
 
 ```bash
 cd frontend
@@ -164,6 +174,14 @@ npm run dev
 > - 영수증 업로드는 OCR 성공/실패 여부와 관계없이 파일 저장 및 DB 등록을 정상 완료합니다 (항상 **HTTP 201 Created** 반환).
 > - 세무 필수 3개 필드(상호명, 금액, 거래일자)가 온전히 판독되면 `status="done"`으로 기록됩니다.
 > - 템플릿 불일치, 해상도 미달 등으로 인식이 안 된 경우 `status="failed"`로 저장되며 추출 필드는 `null`로 보존됩니다.
+
+### 5.3 공제 판별 및 리포트 (Track C)
+| Method | Endpoint | 설명 | 인증 |
+| :--- | :--- | :--- | :---: |
+| `POST` | `/receipts/{id}/analyze` | OpenAI 판별 결과를 생성 또는 갱신 | 필요 |
+| `GET` | `/reports?period=YYYY-MM` | 해당 월의 공제 가능 금액과 항목 집계 | 필요 |
+
+Track C backend는 구현되어 있습니다. 현재 React 분석·리포트 화면은 별도의 frontend 연동 작업 전까지 목데이터를 사용합니다.
 
 ---
 
@@ -305,7 +323,7 @@ sequenceDiagram
 
 ## 8. 백엔드 테스트 스위트 심층 분석
 
-Track B는 금융/세무 데이터의 무결성을 보장하기 위해 총 **35개의 단위 및 통합 테스트**를 통과한 상태입니다 (`35 passed, 26 warnings`).
+백엔드 테스트는 pytest 함수형 테스트와 Track C의 unittest 테스트를 함께 포함합니다. 전체 수집 결과는 개발 환경에서 `python -m pytest`로 확인합니다.
 모든 테스트는 격리된 메모리/임시 SQLite DB와 임시 파일 디렉터리를 사용하므로 실제 외부 시스템(PostgreSQL, CLOVA API)에 영향을 주지 않습니다.
 
 ### 8.1 영수증 및 OCR 파이프라인 테스트 (`tests/test_receipts.py` — 23개)
@@ -344,6 +362,9 @@ Track B는 금융/세무 데이터의 무결성을 보장하기 위해 총 **35�
 ### 8.3 인증 및 계정 테스트 (`tests/test_auth.py` — 11개)
 - Track A와 연동된 회원가입, 중복 이메일 차단(409), 정상 로그인(200), 비밀번호 불일치(401), `/auth/me` 조회, 만료된 JWT 토큰 거부 등 계정 보안 전반 검증.
 
+### 8.4 공제 판별 및 리포트 테스트 (`tests/test_deduction.py` — 5개)
+- 공제 판별 생성·upsert, 타 사용자 영수증 404, 외부 AI 오류 502, 월별 리포트 집계, 잘못된 `period`의 400 응답을 검증합니다.
+
 ---
 
 ## 9. 현재 연동 상태 및 개발 참고사항
@@ -356,8 +377,9 @@ Track B는 금융/세무 데이터의 무결성을 보장하기 위해 총 **35�
    - 백엔드의 CLOVA Template V2 통신 파이프라인은 정상 작동(HTTP 200)합니다.
    - 단, 실제 영수증 인식은 **네이버 클라우드 OCR 콘솔(도메인: 58199, 템플릿: 43533)에 등록된 기준 샘플 양식 및 판독 영역과 일치하는 영수증**이어야 매칭(`inferResult: SUCCESS`)됩니다. 양식이 다를 경우 템플릿 매칭 실패(`NOT_FOUND: not found matched template`)로 인해 `status="failed"` 처리됩니다.
    - 추후 콘솔의 [테스트] 화면에서 판독 영역(상호명, 금액, 일자)을 기준 양식과 재매칭한 후 [배포]를 갱신해야 실제 인식이 완료(`done`)됩니다.
-3. **공제 판별(Track C) 연동 대기**:
-   - 현재 프론트엔드의 세액 분석 결과 화면 및 리포트 화면은 목데이터(`mocks/`)를 바라보고 있으며, Track C 백엔드 로직 완성 시 손쉽게 교체 가능하도록 설계되어 있습니다.
+3. **공제 판별(Track C) 상태**:
+   - backend의 OpenAI 공제 판별, deduction upsert, 월별 리포트 endpoint는 구현되어 있습니다.
+   - 프론트엔드의 세액 분석 결과 및 리포트 화면은 현재 목데이터(`mocks/`)를 사용하며, 실제 Track C API 연동은 별도 작업입니다.
 
 ## 10. 최근 변경 사항 — CapturePage 실시간 카메라 촬영 기능 추가 (2026-09-23)
 
