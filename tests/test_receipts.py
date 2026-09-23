@@ -460,7 +460,7 @@ def test_ocr_request_uses_custom_v2_multipart_contract(monkeypatch):
     assert result.ocr_raw == "테스트 상점\n4,500\n2026-09-15"
 
 
-def test_non_template_ocr_shapes_do_not_succeed():
+def test_general_and_document_ocr_shapes_succeed():
     general = {
         "images": [
             {
@@ -489,8 +489,17 @@ def test_non_template_ocr_shapes_do_not_succeed():
         ]
     }
 
-    assert ocr_client.parse_response(general) is None
-    assert ocr_client.parse_response(document) is None
+    res_general = ocr_client.parse_response(general)
+    assert res_general is not None
+    assert res_general.vendor == "테스트 상점"
+    assert res_general.amount == 4500.0
+    assert res_general.date == date(2026, 9, 15)
+
+    res_document = ocr_client.parse_response(document)
+    assert res_document is not None
+    assert res_document.vendor == "테스트 상점"
+    assert res_document.amount == 4500.0
+    assert res_document.date == date(2026, 9, 15)
 
 
 def test_storage_failure_is_distinct_from_ocr_failure(client, monkeypatch):
