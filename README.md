@@ -4,6 +4,10 @@ VAT-AI는 소상공인을 위한 부가가치세 자동 신고 보조 시스템�
 영수증 이미지를 업로드하면 Naver CLOVA OCR로 매입 내역을 자동 판독하고, AI 세법 분석을 거쳐 매입 보관함 및 세무 신고 데이터로 집계합니다.
 
 현재 브랜치(`track-b-align-a`)는 **Track A(계정/인증)**, **Track B(영수증/OCR 백엔드)**, **Track C(공제 판별·리포트 백엔드)**, **Track D(React 프론트엔드)**를 통합한 코드베이스입니다. Track C의 프론트엔드 화면은 아직 실제 API 대신 목데이터를 사용합니다.
+<img width="306" height="899" alt="rm2" src="https://github.com/user-attachments/assets/95e118b1-ca32-43e8-8a58-1effc2073b9e" />
+<img width="468" height="852" alt="rn1" src="https://github.com/user-attachments/assets/b912f7ad-a868-4785-883c-c71793cd046c" />
+<img width="468" height="852" alt="rn1" src="https://github.com/user-attachments/assets/033b4f5b-3ba5-4a93-83da-5fd51b8c567f" />
+<img width="306" height="899" alt="rm2" src="https://github.com/user-attachments/assets/df08f1ca-2a6d-4489-a4b5-f36fa4ed4bc9" />
 
 ---
 
