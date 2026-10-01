@@ -5,6 +5,30 @@ export interface AuthUser {
   email: string;
   name: string;
   created_at: string;
+  business: BusinessProfile | null;
+}
+
+export interface BusinessProfile {
+  id: string;
+  user_id: string;
+  business_number: string;
+  business_name: string | null;
+  business_status: string | null;
+  business_status_code: string | null;
+  tax_type: string | null;
+  tax_type_code: string | null;
+  end_date: string | null;
+  verification_status: string;
+  verified_at: string | null;
+  created_at: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  name: string;
+  business_name: string;
+  business_number: string;
 }
 
 export interface AuthResponse {
@@ -16,8 +40,8 @@ export function login(email: string, password: string) {
   return apiClient.post<AuthResponse>("/auth/login", { email, password }).then((res) => res.data);
 }
 
-export function register(email: string, password: string, name: string) {
-  return apiClient.post<AuthResponse>("/auth/register", { email, password, name }).then((res) => res.data);
+export function register(data: RegisterRequest) {
+  return apiClient.post<AuthResponse>("/auth/register", data).then((res) => res.data);
 }
 
 export function getMe() {

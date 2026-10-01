@@ -30,8 +30,31 @@ def test_alembic_upgrade_head_creates_a_base_schema(tmp_path: Path):
             "users",
             "receipts",
             "deductions",
+            "business_profiles",
         }
+        columns = {column["name"]: column for column in inspect(connection).get_columns("business_profiles")}
+        assert set(columns) == {
+            "id", "user_id", "business_number", "business_name", "business_status",
+            "business_status_code", "tax_type", "tax_type_code", "end_date",
+            "verification_status", "verified_at", "created_at",
+        }
+        for name in ("id", "user_id", "business_number", "verification_status", "created_at"):
+            assert not columns[name]["nullable"]
+        assert any(
+            fk["constrained_columns"] == ["user_id"]
+            and fk["referred_table"] == "users"
+            and fk["referred_columns"] == ["id"]
+            for fk in inspect(connection).get_foreign_keys("business_profiles")
+        )
+        assert any(
+            constraint["column_names"] == ["user_id"]
+            for constraint in inspect(connection).get_unique_constraints("business_profiles")
+        )
+        assert not any(
+            "business_number" in index["column_names"]
+            for index in inspect(connection).get_indexes("business_profiles")
+        )
         revision = connection.execute(
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
-        assert revision == "0632cbc850ef"
+        assert revision == "015d7b1f7bdb"
