@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.router import router as auth_router
+from app.business.router import router as business_router
 from app.common.exceptions import register_exception_handlers
 from app.deduction.router import router as deduction_router
 from app.receipts.router import router as receipts_router
@@ -19,5 +20,6 @@ app.add_middleware(
 register_exception_handlers(app)
 
 app.include_router(auth_router)
+app.include_router(business_router)
 app.include_router(receipts_router)
 app.include_router(deduction_router)
