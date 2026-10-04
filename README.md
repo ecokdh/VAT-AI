@@ -32,7 +32,7 @@ VAT-AI는 소상공인의 증빙 수집·구조화, 사업자정보 확인, 매�
 | **Track A** | 계정 및 사용자 인증 | **완료** — 회원가입, 로그인, `/auth/me`, JWT Bearer 토큰 인가, 비밀번호 bcrypt 해싱 |
 | **Track B** | 영수증 파이프라인 & DB | **완료** — 이미지 검증·로컬 저장, CLOVA OCR V2 어댑터, 영수증 CRUD, Alembic 기반 DB 스키마 |
 | **Track D** | 사용자 UI 및 클라이언트 | **완료** — React 19 기반 모바일 퍼스트 UI, 백엔드 인증 연동, 영수증 촬영/업로드, OCR 결과 처리, 매입 보관함 실시간 연동 |
-| **Track C** | Sprint 0 공제 판별·리포트; Sprint 1 사업자 상태조회·회원가입 (재황 / Product·Front·Back) | **Sprint 0 구현 결과** — GPT 기반 공제 판별, deduction upsert, 기간별 리포트. **Sprint 1 구현** — 국세청 상태·과세유형 조회 client, User + BusinessProfile 연동, 회원가입 UX. 실제 NTS 키 실호출 검증은 대기 중. 분석·리포트 화면은 목데이터 사용. **후속 계획** — Sprint 2 증빙 보관함 v2, Sprint 3 Evidence UI / Context Verification, Sprint 4 Final Review / PDF |
+| **Track C** | Sprint 0 공제 판별·리포트; Sprint 1 사업자 상태조회·회원가입 (재황 / Product·Front·Back) | **Sprint 0 구현 결과** — GPT 기반 공제 판별, deduction upsert, 기간별 리포트. **Sprint 1 구현·검증** — 국세청 상태·과세유형 조회 client, User + BusinessProfile 연동, 회원가입 UX 및 실제 NTS API Key 기반 상태조회·회원가입·로그인·`/auth/me` E2E 확인. 분석·리포트 화면은 목데이터 사용. **후속 계획** — Sprint 2 증빙 보관함 v2, Sprint 3 Evidence UI / Context Verification, Sprint 4 Final Review / PDF |
 
 ---
 
@@ -67,7 +67,7 @@ VAT-AI/
 │   ├── package.json
 │   └── vite.config.ts
 ├── storage/                # 업로드된 원본 영수증 파일 로컬 저장소
-├── docs/images/sprint1-business/ # Sprint 1 상태조회·회원가입 검증 캡처 8개
+├── docs/images/sprint1-business/ # Sprint 1 상태조회·회원가입 검증 캡처 8개 및 실호출 성공 캡처 2개
 ├── tests/                  # 백엔드 pytest/unittest 테스트 스위트 (Track C 테스트 포함)
 ├── .env.example            # 백엔드 환경변수 예시 템플릿
 ├── requirements.txt        # 운영 의존성
@@ -206,13 +206,15 @@ Track C backend는 구현되어 있습니다. 현재 React 분석·리포트 화
 | :--- | :--- | :--- | :---: |
 | `POST` | `/business/verify` | 회원가입 전 사업자번호의 공백·하이픈을 제거하고 숫자 10자리를 검증한 뒤 국세청 상태조회 API에서 계속·휴업·폐업 상태와 과세유형 조회 | 불필요 |
 
-응답에는 정규화된 `business_number`, `business_status`/`business_status_code`, `tax_type`/`tax_type_code`, `end_date`, `verified`가 포함됩니다. `verified=true`는 **상태조회 성공**을 뜻하며 매입세액 공제 가능성이나 상호명 진위확인을 뜻하지 않습니다. 미등록 사업자와 외부 API 오류는 별도 application error로 처리합니다. API client와 mock 테스트는 구현됐지만 실제 인증키를 사용한 호출 검증은 대기 중입니다.
+응답에는 정규화된 `business_number`, `business_status`/`business_status_code`, `tax_type`/`tax_type_code`, `end_date`, `verified`가 포함됩니다. `verified=true`는 **상태조회 성공**을 뜻하며 매입세액 공제 가능성이나 상호명 진위확인을 뜻하지 않습니다. 미등록 사업자와 외부 API 오류는 별도 application error로 처리합니다. 실제 NTS API Key를 사용한 외부 상태조회 호출을 확인했습니다.
 
 ### 5.5 Business Profile 데이터 출처 및 검증 정책
 
 `business_name`은 사용자 직접 입력값이고 `business_number`도 사용자가 입력한 뒤 서버가 정규화·형식 검증합니다. `business_status`, `business_status_code`, `tax_type`, `tax_type_code`, `end_date`, `verified_at`은 국세청 상태조회 API 확인값에 근거합니다. 사용자 입력과 API 확인 사실을 구분해 저장합니다.
 
 `verification_status="status_checked"`는 **사업자 상태조회 수행**을 뜻합니다. 상호명·대표자명·개업일자의 진위확인 완료를 뜻하지 않습니다. 휴업·폐업 사업자도 가입할 수 있으며 UI에서 상태를 경고합니다. 상태조회 결과만으로 deduction을 결정하지 않습니다. 국세청 진위확인 API는 Sprint 1 MUST 범위에서 제외한 후속 고도화 대상입니다.
+
+실제 API Key는 로컬 `.env`에서만 관리하고 `.env`는 저장소에 커밋하지 않습니다. README와 검증 이미지에는 실제 API Key 및 JWT를 포함하지 않습니다.
 
 `business_profiles`는 User와 1:1이며 `user_id`는 `users.id` 외래키이자 unique입니다. 테이블에는 `business_number`, `business_name`, 사업자 상태·코드, 과세유형·코드, `end_date`, `verification_status`, `verified_at`, `created_at`을 저장합니다. 기존 기본 테이블 migration은 유지하고 `015d7b1f7bdb_add_business_profiles.py`가 이 테이블을 추가합니다.
 
@@ -418,7 +420,7 @@ sequenceDiagram
 4. **Sprint 1 Track C 사업자 상태조회·회원가입 연동 상태**:
    - 완료: Backend business module과 NTS 상태조회 client 구현, BusinessProfile 및 User와의 단일 트랜잭션, Alembic migration, Swagger schema, Frontend 조회·회원가입 UX, 로그인·`/auth/me` 타입 연동, Browser UX 확인.
    - 검증: Backend 66개 테스트 통과, Frontend build 성공, lint 성공(기존 warning 2개).
-   - 대기: 승인된 실제 NTS API Key로 외부 상태조회부터 회원가입·로그인·Dashboard까지 real-call E2E 검증. **client 구현 완료 / real-call validation pending**.
+   - 실제 NTS API Key 실호출 확인: 등록 사업자 상태·과세유형 조회, 회원가입 시 User + BusinessProfile 저장과 JWT 발급, 로그인 및 `/auth/me` 인증 조회까지 확인했습니다. 미등록 번호는 `404 BUSINESS_NOT_REGISTERED`로 변환됐습니다. Dashboard 표시까지는 이번 실호출 검증 범위에 포함하지 않습니다.
 
 ## 10. 최근 변경 사항 — CapturePage 실시간 카메라 촬영 기능 추가 (2026-09-23)
 
@@ -448,9 +450,9 @@ sequenceDiagram
 - **Backend:** `python -m pytest -v` — 66 passed. 국세청 HTTP 응답은 mock으로 검증했습니다.
 - **Frontend:** `npm run build` 성공. `npm run lint` 성공(기존 warning 2개).
 - **Browser UX:** 사용자 이름·상호명·사업자번호·이메일·비밀번호·비밀번호 확인 필드, 잘못된 번호의 즉시 차단, API 키 미설정 시 서비스 이용 불가 메시지, 조회 실패 시 가입 차단, 번호 변경 시 조회 상태 초기화, 상호명이 직접 입력값이라는 안내를 확인했습니다. 아래 캡처는 이 중 표시된 화면과 Swagger 스키마를 기록합니다.
-- **Pending:** 실제 NTS API Key 승인 후 실번호의 상태·과세유형 조회 → 회원가입 → JWT → 로그인 → `/auth/me` → Dashboard를 잇는 real-call E2E 검증. 현재 캡처는 실제 외부 API 성공 호출의 증거가 아닙니다.
+- **Real API E2E Verification:** 실제 NTS API Key가 `.env`에서 로딩되고 미등록 번호의 외부 조회 결과가 `404 BUSINESS_NOT_REGISTERED`로 변환되는 것을 확인했습니다. 등록 번호로 `/business/verify` `200`과 번호 정규화, 사업자 상태·코드, 과세유형·코드, `verified=true`를 확인했습니다. 같은 번호로 `/auth/register` `201`, User + BusinessProfile 저장 및 연결, `verification_status=status_checked`, JWT 발급을 확인했습니다. 이어 `/auth/login` `200`에서 저장된 BusinessProfile 반환, Bearer 토큰을 사용한 `/auth/me`의 User·BusinessProfile 조회를 확인했습니다. Dashboard 표시는 이번 실호출 검증 범위에 포함하지 않습니다.
 
-### 검증 이미지 (첨부 순서 1–8)
+### 검증 이미지 (기존 1–8, 실호출 성공 9·11)
 
 ![Step 1 - Invalid business number in signup](docs/images/sprint1-business/01-invalid-number-signup.png)
 
@@ -483,3 +485,11 @@ sequenceDiagram
 ![Step 8 - Auth me schema](docs/images/sprint1-business/08-auth-me-schema.png)
 
 *8. Swagger의 `/auth/me` 인증 헤더와 BusinessProfile 포함 응답 스키마입니다.*
+
+![Step 9 - Real NTS status lookup success](docs/images/sprint1-business/09-real-nts-verify-success.png)
+
+*9. 실제 NTS API Key로 등록 사업자의 상태·과세유형 조회가 `200`으로 성공했습니다. 사업자번호는 가렸습니다.*
+
+![Step 11 - Login E2E success](docs/images/sprint1-business/11-login-e2e-success.png)
+
+*11. `/auth/login`이 `200`으로 성공하고 저장된 BusinessProfile을 반환했습니다. JWT와 식별 정보는 가렸습니다.*
