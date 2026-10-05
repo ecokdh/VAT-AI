@@ -5,6 +5,7 @@ from app.auth.router import router as auth_router
 from app.common.exceptions import register_exception_handlers
 from app.deduction.router import router as deduction_router
 from app.receipts.router import router as receipts_router
+from app.receipts.transactions import router as transactions_router
 
 app = FastAPI(title="VAT-AI")
 
@@ -20,4 +21,5 @@ register_exception_handlers(app)
 
 app.include_router(auth_router)
 app.include_router(receipts_router)
+app.include_router(transactions_router)
 app.include_router(deduction_router)

@@ -9,6 +9,7 @@ import { AnalysisResultPage } from "./pages/receipts/AnalysisResultPage";
 import { PurchaseStoragePage } from "./pages/storage/PurchaseStoragePage";
 import { SalesStoragePage } from "./pages/storage/SalesStoragePage";
 import { ReportPage } from "./pages/reports/ReportPage";
+import { TransactionPage } from "./pages/transactions/TransactionPage";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
       <Route path="/storage/purchase" element={<PurchaseStoragePage />} />
       <Route path="/storage/sales" element={<SalesStoragePage />} />
       <Route path="/reports" element={<ReportPage />} />
+      <Route path="/transactions/:id" element={<TransactionPage />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

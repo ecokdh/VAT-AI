@@ -23,6 +23,7 @@ class FileStorage(Protocol):
     ) -> StoredFile: ...
 
     def delete(self, key: str) -> None: ...
+    def read(self, key: str) -> tuple[bytes, str]: ...
 
 
 class LocalFileStorage:
@@ -51,4 +52,14 @@ class LocalFileStorage:
             raise OSError("storage key escapes storage root")
         if path.exists():
             path.unlink()
+
+    def read(self, key: str) -> tuple[bytes, str]:
+        root = self.root.resolve()
+        path = (self.root / key).resolve()
+        if root not in path.parents or not path.is_file():
+            raise OSError("receipt image unavailable")
+        media_type = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(path.suffix.lower())
+        if media_type is None:
+            raise OSError("unsupported receipt image")
+        return path.read_bytes(), media_type
 

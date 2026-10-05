@@ -1,10 +1,11 @@
 """Naver CLOVA OCR 어댑터 (Template V2, Document OCR, General OCR 및 Fallback 지원)."""
 
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date as date_
 from decimal import Decimal, InvalidOperation
 import json
+import math
 from pathlib import Path
 import re
 import subprocess
@@ -16,6 +17,43 @@ import uuid
 import httpx
 
 from app.core.config import settings
+from app.receipts.kie import boxes_from_fields, fill_from_boxes, financial_from_fields
+
+
+@dataclass(frozen=True)
+class PartialRead:
+    """필수 칸이 빠져도 읽은 값만 담는다. 성공 완료가 아니다."""
+
+    vendor: str | None
+    amount: float | None
+    date: date_ | None
+    ocr_raw: str
+    business_number: str | None = None
+    supply_amount: float | None = None
+    vat_amount: float | None = None
+    items: tuple[str, ...] = ()
+    text_boxes: tuple[dict, ...] = ()
+    taxable_supply_amount: float | None = None
+    tax_exempt_amount: float | None = None
+    transaction_amount: float | None = None
+    payment_amount: float | None = None
+    subtotal_amount: float | None = None
+    item_amounts: tuple[dict, ...] = ()
+    line_items: tuple[dict, ...] = ()
+    review_reasons: tuple[str, ...] = ()
+    raw_response: dict | None = None
+    document: dict | None = None
+    money_evidence: dict | None = None
+
+    def useful(self) -> bool:
+        return bool(
+            (self.vendor and self.vendor.strip())
+            or self.amount is not None
+            or self.date is not None
+            or self.business_number
+            or self.items
+            or (self.ocr_raw and self.ocr_raw.strip())
+        )
 
 
 @dataclass(frozen=True)
@@ -24,12 +62,32 @@ class OcrResult:
     amount: float
     date: date_
     ocr_raw: str
+    business_number: str | None = None
+    supply_amount: float | None = None
+    vat_amount: float | None = None
+    items: tuple[str, ...] = ()
+    text_boxes: tuple[dict, ...] = ()
+    taxable_supply_amount: float | None = None
+    tax_exempt_amount: float | None = None
+    transaction_amount: float | None = None
+    payment_amount: float | None = None
+    subtotal_amount: float | None = None
+    item_amounts: tuple[dict, ...] = ()
+    line_items: tuple[dict, ...] = ()
+    review_reasons: tuple[str, ...] = ()
+    raw_response: dict | None = None
+    document: dict | None = None
+    money_evidence: dict | None = None
 
 
 VENDOR_FIELDS = ("상호명", "상호", "가맹점명", "상점명", "store_name")
-# amount는 현재 api-spec.md의 합계/총 결제금액만 매핑한다. 공급가액은 매핑하지 않는다.
+# amount는 합계/총 결제금액만 매핑한다. 공급가액은 총액으로 쓰지 않는다.
 AMOUNT_FIELDS = ("총금액", "총액", "결제금액", "합계", "total_amount", "total")
 DATE_FIELDS = ("거래일자", "거래일", "작성일자", "transaction_date", "date")
+BUSINESS_NUMBER_FIELDS = ("사업자등록번호", "사업자번호", "사업자 번호", "business_number")
+SUPPLY_FIELDS = ("공급가액", "공급가", "supply_amount")
+VAT_FIELDS = ("부가세", "부가가치세", "부가가치세액", "vat", "VAT")
+ITEM_FIELDS = ("품목", "상품명", "품명", "item")
 OCR_CONTRACT = "template_v2"
 
 
@@ -55,7 +113,28 @@ def _parse_amount(value: str | None) -> float | None:
         return None
     if not amount.is_finite() or amount < 0:
         return None
-    return float(amount)
+    parsed = float(amount)
+    return parsed if math.isfinite(parsed) else None
+
+
+def _parse_business_number(value: str | None) -> str | None:
+    if not value:
+        return None
+    digits = re.sub(r"\D", "", value)
+    if len(digits) != 10:
+        return None
+    return digits
+
+
+def _item_texts(fields: list[dict[str, Any]]) -> tuple[str, ...]:
+    items: list[str] = []
+    for field in fields:
+        if field.get("name") not in ITEM_FIELDS:
+            continue
+        value = field.get("inferText")
+        if isinstance(value, str) and value.strip():
+            items.append(value.strip())
+    return tuple(items)
 
 
 def _parse_date(value: str | None) -> date_ | None:
@@ -87,8 +166,8 @@ def _parse_text_lines(text: str) -> Optional[OcrResult]:
     tx_date = _parse_date(dm.group(1)) if dm else _parse_date(text)
 
     # 금액 추출: 합계/총금액 키워드
-    am = re.search(r"(?:총금액|총액|결제금액|합계)\s*[:：]?\s*([0-9,]+(?:\.\d+)?)", text)
-    amount = float(Decimal(am.group(1).replace(",", ""))) if am else None
+    am = re.search(r"(?:총금액|총액|결제금액|합계)[ \t]*[:：]?[ \t]*([0-9,]+(?:\.\d+)?)", text)
+    amount = _parse_amount(am.group(1)) if am else None
 
     # 키워드 접두사가 없을 때의 상호명 fallback: 영수증 최상단 유효 라인
     if not vendor:
@@ -104,11 +183,15 @@ def _parse_text_lines(text: str) -> Optional[OcrResult]:
 
     # 금액 fallback: 합계 관련 토큰 인근의 숫자
     if amount is None:
-        matches = re.findall(r"(?:합계|총액|결제|금액)[^\d]{0,10}(\d[\d,]*)", text)
-        for m in matches:
-            val = _parse_amount(m)
-            if val is not None:
-                amount = val
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        for index, line in enumerate(lines):
+            if not any(keyword in line for keyword in ("합계", "총액", "총금액", "결제금액")):
+                continue
+            if index + 1 >= len(lines):
+                continue
+            nxt = lines[index + 1]
+            if re.fullmatch(r"\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?", nxt):
+                amount = _parse_amount(nxt)
                 break
 
     if not vendor or amount is None or tx_date is None:
@@ -131,26 +214,67 @@ def parse_response(payload: object) -> Optional[OcrResult]:
         return None
     image = images[0]
 
+    # 실패 응답은 필드가 있어도 성공으로 치지 않는다.
+    if str(image.get("inferResult", "SUCCESS")).upper() == "FAILURE":
+        return None
+
     # 1. Document OCR 영수증 규격 (receipt.result)
-    receipt_data = image.get("receipt", {}).get("result")
+    receipt_node = image.get("receipt", {})
+    if not isinstance(receipt_node, dict):
+        receipt_data = None
+    else:
+        receipt_data = receipt_node.get("result")
     if isinstance(receipt_data, dict):
-        store_info = receipt_data.get("storeInfo", {})
+        store_info = receipt_data.get("storeInfo") or {}
+        if not isinstance(store_info, dict):
+            store_info = {}
         vendor = (
             store_info.get("name", {}).get("text")
             or store_info.get("subName", {}).get("text")
         )
-        total_price = receipt_data.get("totalPrice", {})
+        total_price = receipt_data.get("totalPrice") or {}
+        if not isinstance(total_price, dict):
+            total_price = {}
         amount = _parse_amount(total_price.get("price", {}).get("text"))
-        payment_info = receipt_data.get("paymentInfo", {})
+        payment_info = receipt_data.get("paymentInfo") or {}
+        if not isinstance(payment_info, dict):
+            payment_info = {}
         tx_date = _parse_date(payment_info.get("date", {}).get("text"))
         raw_parts = [str(vendor or ""), str(amount or ""), str(tx_date or "")]
         raw_text = "\n".join([p for p in raw_parts if p])
         if vendor and amount is not None and tx_date is not None:
+            biz = store_info.get("bizNum", {})
+            business_number = _parse_business_number(
+                biz.get("text") if isinstance(biz, dict) else None
+            )
+            sub_total = receipt_data.get("subTotal", {})
+            tax = receipt_data.get("tax", {})
+            supply_amount = _parse_amount(
+                sub_total.get("price", {}).get("text") if isinstance(sub_total, dict) else None
+            )
+            vat_amount = _parse_amount(
+                tax.get("price", {}).get("text") if isinstance(tax, dict) else None
+            )
+            items: list[str] = []
+            raw_items = receipt_data.get("items")
+            if isinstance(raw_items, list):
+                for item in raw_items:
+                    if not isinstance(item, dict):
+                        continue
+                    name = item.get("name", {})
+                    text = name.get("text") if isinstance(name, dict) else None
+                    if isinstance(text, str) and text.strip():
+                        items.append(text.strip())
             return OcrResult(
                 vendor=vendor.strip(),
                 amount=amount,
                 date=tx_date,
                 ocr_raw=raw_text,
+                business_number=business_number,
+                supply_amount=supply_amount,
+                vat_amount=vat_amount,
+                items=tuple(items),
+                transaction_amount=amount,
             )
 
     fields = image.get("fields")
@@ -167,29 +291,124 @@ def parse_response(payload: object) -> Optional[OcrResult]:
 
     # 2. Template OCR V2 규격 (템플릿 필드명이 매핑된 경우)
     has_template_names = any(
-        f.get("name") in (VENDOR_FIELDS + AMOUNT_FIELDS + DATE_FIELDS + ("공급가액",))
+        f.get("name")
+        in (
+            VENDOR_FIELDS
+            + AMOUNT_FIELDS
+            + DATE_FIELDS
+            + SUPPLY_FIELDS
+            + BUSINESS_NUMBER_FIELDS
+            + VAT_FIELDS
+        )
         for f in typed_fields
     )
-    if has_template_names:
-        vendor = _field_text(typed_fields, VENDOR_FIELDS)
-        amount = _parse_amount(_field_text(typed_fields, AMOUNT_FIELDS))
-        transaction_date = _parse_date(_field_text(typed_fields, DATE_FIELDS))
-        if not raw_text or not vendor or amount is None or transaction_date is None:
-            return None
-        return OcrResult(
-            vendor=vendor,
-            amount=amount,
-            date=transaction_date,
-            ocr_raw=raw_text,
-        )
+    boxes = boxes_from_fields(typed_fields)
 
-    # 3. General OCR 규격 (템플릿 미지정 일반 텍스트 라인)
+    if has_template_names:
+        current = {
+            "vendor": _field_text(typed_fields, VENDOR_FIELDS),
+            "amount": _parse_amount(_field_text(typed_fields, AMOUNT_FIELDS)),
+            "date": _parse_date(_field_text(typed_fields, DATE_FIELDS)),
+            "business_number": _parse_business_number(
+                _field_text(typed_fields, BUSINESS_NUMBER_FIELDS)
+            ),
+            "supply_amount": _parse_amount(_field_text(typed_fields, SUPPLY_FIELDS)),
+            "vat_amount": _parse_amount(_field_text(typed_fields, VAT_FIELDS)),
+            "items": _item_texts(typed_fields),
+        }
+        current.update(financial_from_fields(typed_fields))
+        filled = fill_from_boxes(current, boxes)
+        return _result_from_filled(filled, raw_text)
+
     if raw_text:
         parsed = _parse_text_lines(raw_text)
-        if parsed is not None:
-            return parsed
+        current = {
+            "vendor": parsed.vendor if parsed else None,
+            "amount": parsed.amount if parsed else None,
+            "date": parsed.date if parsed else None,
+            "business_number": parsed.business_number if parsed else None,
+            "supply_amount": parsed.supply_amount if parsed else None,
+            "vat_amount": parsed.vat_amount if parsed else None,
+            "items": parsed.items if parsed else (),
+        }
+        current.update(financial_from_fields(typed_fields))
+        filled = fill_from_boxes(current, boxes)
+        return _result_from_filled(filled, raw_text)
 
     return None
+
+
+def collect_partial(payload: object) -> PartialRead | None:
+    """실패 응답이나 일부 칸만 있어도 읽은 값만 돌려준다. 예외는 내지 않는다."""
+    if not isinstance(payload, dict):
+        return None
+    images = payload.get("images")
+    if not isinstance(images, list) or not images or not isinstance(images[0], dict):
+        return None
+    image = images[0]
+    fields = image.get("fields")
+    typed_fields = [field for field in fields if isinstance(field, dict)] if isinstance(fields, list) else []
+    raw_lines = [
+        field["inferText"].strip()
+        for field in typed_fields
+        if isinstance(field.get("inferText"), str) and field["inferText"].strip()
+    ]
+    boxes = boxes_from_fields(typed_fields)
+    current = {
+        "vendor": _field_text(typed_fields, VENDOR_FIELDS),
+        "amount": _parse_amount(_field_text(typed_fields, AMOUNT_FIELDS)),
+        "date": _parse_date(_field_text(typed_fields, DATE_FIELDS)),
+        "business_number": _parse_business_number(_field_text(typed_fields, BUSINESS_NUMBER_FIELDS)),
+        "supply_amount": _parse_amount(_field_text(typed_fields, SUPPLY_FIELDS)),
+        "vat_amount": _parse_amount(_field_text(typed_fields, VAT_FIELDS)),
+        "items": _item_texts(typed_fields),
+    }
+    current.update(financial_from_fields(typed_fields))
+    filled = fill_from_boxes(current, boxes)
+    vendor = filled.get("vendor")
+    raw_text = "\n".join(raw_lines)
+    partial = PartialRead(
+        vendor=vendor.strip() if isinstance(vendor, str) and vendor.strip() else None,
+        amount=filled.get("amount"),
+        date=filled.get("date"),
+        ocr_raw=raw_text,
+        business_number=filled.get("business_number"),
+        supply_amount=filled.get("supply_amount"),
+        vat_amount=filled.get("vat_amount"),
+        items=tuple(filled.get("items") or ()),
+        text_boxes=tuple(filled.get("text_boxes") or ()),
+        line_items=tuple(filled.get("line_items") or ()),
+        review_reasons=tuple(filled.get("review_reasons") or ()),
+        document=filled.get("document"),
+        money_evidence=filled.get("money_evidence"),
+        **{field: filled.get(field) for field in ("taxable_supply_amount", "tax_exempt_amount", "transaction_amount", "payment_amount", "subtotal_amount")},
+    )
+    return partial if partial.useful() else None
+
+
+def _result_from_filled(filled: dict, raw_text: str) -> OcrResult | None:
+    vendor = filled.get("vendor")
+    amount = filled.get("amount")
+    date = filled.get("date")
+    if not raw_text or not vendor or amount is None or date is None:
+        return None
+    boxes = filled.get("text_boxes") or []
+    return OcrResult(
+        vendor=vendor,
+        amount=amount,
+        date=date,
+        ocr_raw=raw_text,
+        business_number=filled.get("business_number"),
+        supply_amount=filled.get("supply_amount"),
+        vat_amount=filled.get("vat_amount"),
+        items=tuple(filled.get("items") or ()),
+        text_boxes=tuple(boxes),
+        line_items=tuple(filled.get("line_items") or ()),
+        review_reasons=tuple(filled.get("review_reasons") or ()),
+        document=filled.get("document"),
+        money_evidence=filled.get("money_evidence"),
+        **{field: filled.get(field) for field in ("taxable_supply_amount", "tax_exempt_amount", "transaction_amount", "payment_amount", "subtotal_amount")},
+    )
 
 
 def _format_for_mime_type(mime_type: str) -> tuple[str, str] | None:
@@ -244,7 +463,7 @@ Write-Output $b64
 
 async def extract_receipt(
     image_bytes: bytes, mime_type: str = "image/jpeg"
-) -> Optional[OcrResult]:
+) -> OcrResult | PartialRead | None:
     api_url = settings.CLOVA_OCR_API_URL.strip()
     secret_key = (settings.CLOVA_OCR_SECRET_KEY or settings.CLOVA_API_KEY).strip()
     format_info = _format_for_mime_type(mime_type)
@@ -271,9 +490,13 @@ async def extract_receipt(
                 files=files,
             )
         if 200 <= response.status_code < 300:
-            parsed = parse_response(response.json())
+            payload = response.json()
+            parsed = parse_response(payload)
             if parsed is not None:
-                return parsed
+                return replace(parsed, raw_response=payload)
+            partial = collect_partial(payload)
+            if partial is not None:
+                return replace(partial, raw_response=payload)
         return _extract_fallback(image_bytes)
     except (
         httpx.TimeoutException,

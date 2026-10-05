@@ -1,6 +1,7 @@
 """api-spec.md §3.2 — POST /receipts, GET /receipts, GET /receipts/{id}"""
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import Response
 from sqlmodel import Session
 
 from app.auth.dependencies import get_current_user
@@ -8,7 +9,12 @@ from app.auth.models import User
 from app.core.config import settings
 from app.core.database import get_session
 from app.receipts import service
-from app.receipts.schemas import ReceiptOut, ReceiptSummary
+from app.receipts.schemas import (
+    ReceiptConfirmIn,
+    ReceiptOcrUpdate,
+    ReceiptOut,
+    ReceiptSummary,
+)
 
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
@@ -33,6 +39,44 @@ def list_receipts(
     session: Session = Depends(get_session),
 ) -> list[ReceiptSummary]:
     return service.list_receipts(session, user.id)
+
+
+@router.get("/confirmed", response_model=list[ReceiptOut])
+def list_confirmed_receipts(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> list[ReceiptOut]:
+    return service.list_confirmed_receipts(session, user.id)
+
+
+@router.patch("/{receipt_id}/ocr", response_model=ReceiptOut)
+def update_ocr(
+    receipt_id: int,
+    payload: ReceiptOcrUpdate,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> ReceiptOut:
+    return service.update_ocr(session, user.id, receipt_id, payload)
+
+
+@router.post("/{receipt_id}/ocr/confirm", response_model=ReceiptOut)
+def confirm_receipt(
+    receipt_id: int,
+    payload: ReceiptConfirmIn,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> ReceiptOut:
+    return service.confirm_receipt(session, user.id, receipt_id, payload)
+
+
+@router.get("/{receipt_id}/image")
+def get_receipt_image(
+    receipt_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    content, media_type = service.get_receipt_image(session, user.id, receipt_id)
+    return Response(content=content, media_type=media_type, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/{receipt_id}", response_model=ReceiptOut)
