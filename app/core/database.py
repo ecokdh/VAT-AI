@@ -6,7 +6,7 @@ from app.core.config import settings
 # 새 모델을 추가하면 반드시 아래 import 목록에도 추가할 것.
 from app.auth.models import User  # noqa: F401
 from app.business.models import BusinessProfile  # noqa: F401
-from app.receipts.models import Receipt  # noqa: F401
+from app.receipts.models import Receipt, Transaction, LineItem, ReconciliationIssue  # noqa: F401
 from app.deduction.models import Deduction  # noqa: F401
 
 engine = create_engine(settings.DB_URL)

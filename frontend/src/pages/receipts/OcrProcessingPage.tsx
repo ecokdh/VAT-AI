@@ -19,8 +19,11 @@ export function OcrProcessingPage() {
         const result = await getReceipt(Number(id));
         if (!active) return;
         setReceipt(result);
-        if (result.status === "done") {
-          timer = window.setTimeout(() => navigate("/storage/purchase", { replace: true }), 1200);
+        if (result.status === "done" || result.status === "failed" || result.status === "needs_edit") {
+          timer = window.setTimeout(
+            () => navigate(`/receipts/${result.id}/edit`, { replace: true }),
+            800,
+          );
         }
       } catch (requestError) {
         if (!active) return;
@@ -39,6 +42,8 @@ export function OcrProcessingPage() {
   }, [id, navigate]);
 
   const failed = receipt?.status === "failed";
+  const retake = receipt?.status === "retake";
+  const stopped = failed || retake;
 
   return (
     <div className="page">
@@ -60,10 +65,18 @@ export function OcrProcessingPage() {
           ✨
         </div>
         <div style={{ fontSize: 20, fontWeight: 800 }}>
-          {failed ? "Naver CLOVA OCR 처리 실패" : "Naver CLOVA OCR 분석 결과"}
+          {retake
+            ? "사진을 다시 찍어 주세요"
+            : failed
+              ? "Naver CLOVA OCR 처리 실패"
+              : "Naver CLOVA OCR 분석 결과"}
         </div>
         <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>
-          {failed ? "영수증은 저장됐지만 OCR 결과를 만들지 못했습니다." : "업로드한 영수증 처리 결과를 확인하고 있습니다."}
+          {retake
+            ? receipt?.quality_reason ?? "사진이 흔들리거나 어두워서 읽을 수 없습니다."
+            : failed
+              ? "영수증은 저장됐지만 OCR 결과를 만들지 못했습니다."
+              : "업로드한 영수증 처리 결과를 확인하고 있습니다."}
         </div>
 
         <div
@@ -104,8 +117,8 @@ export function OcrProcessingPage() {
             }}
           >
             <span>{receipt?.vendor ?? "영수증"}</span>
-            <span style={{ color: failed ? "#ff8b8b" : "#7ea0ff", fontWeight: 700 }}>
-              {receipt ? (failed ? "실패" : "완료") : "확인 중..."}
+            <span style={{ color: stopped ? "#ff8b8b" : "#7ea0ff", fontWeight: 700 }}>
+              {receipt ? (retake ? "재촬영" : failed ? "실패" : "완료") : "확인 중..."}
             </span>
           </div>
         </div>
@@ -126,7 +139,9 @@ export function OcrProcessingPage() {
             </div>
             <div className="field-row">
               <span className="field-row__label">상태</span>
-              <span className="field-row__value">{failed ? "OCR 실패" : "완료"}</span>
+              <span className="field-row__value">
+                {retake ? "다시 촬영 필요" : failed ? "OCR 실패" : "완료"}
+              </span>
             </div>
           </div>
         )}
@@ -138,9 +153,13 @@ export function OcrProcessingPage() {
           </div>
         )}
 
-        {failed && (
-          <button className="btn btn--secondary" style={{ marginTop: 24 }} onClick={() => navigate("/storage/purchase")}>
-            보관함으로 돌아가기
+        {stopped && (
+          <button
+            className="btn btn--secondary"
+            style={{ marginTop: 24 }}
+            onClick={() => navigate(retake ? "/capture" : "/storage/purchase")}
+          >
+            {retake ? "다시 촬영하기" : "보관함으로 돌아가기"}
           </button>
         )}
       </div>

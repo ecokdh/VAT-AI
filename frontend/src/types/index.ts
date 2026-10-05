@@ -22,9 +22,17 @@ export interface Receipt {
   itemSummary: string;
   supplyAmount: number;
   amount?: number | null;
+  transactionAmount?: number | null;
+  taxExemptAmount?: number | null;
+  paymentAmount?: number | null;
+  subtotalAmount?: number | null;
   vatAmount: number;
   isExempt: boolean;
   status: ReceiptStatus;
+  amountMissing?: boolean;
+  includedInTotal?: boolean;
+  supplyMissing?: boolean;
+  vatMissing?: boolean;
 }
 
 export interface OcrResult {

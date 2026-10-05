@@ -1,5 +1,56 @@
 # VAT-AI — 소상공인을 위한 AI 부가가치세 신고 지원 서비스
 
+## Document AI 작업 공유 — 2026-10-05
+
+현재 `feature/document-ai`는 최신 `main`의 사업자 검증·개발환경을 보존하면서 영수증 구조화·사진 대조·OCR 확정·거래 증빙 연결을 추가한 작업 브랜치입니다. 아래의 기존 Sprint 문서는 이 절과 [현재 API 명세](api-spec.md)를 함께 참고하세요.
+
+- **구현:** 고정 ID 품목, 수량·인쇄/실효 단가·행 금액, 할인 범위, 과세/면세/VAT/거래·결제·할인 전 금액, 값 상태·좌표·출처, 인증 사진 조회와 품목 편집.
+- **확정 방어:** PATCH/확정 POST 모두 `base_revision` 필수. 충돌은 `409 DATA_CONFLICT`; 화면은 최신 데이터 재조회. 확정과 거래 생성은 동일 DB 트랜잭션으로 처리합니다.
+- **거래:** 복수 증빙 연결, 대표 증빙 한 번 집계, 중복 후보의 사용자 MERGE/SEPARATE, 음수 반품·취소와 원거래 연결·초과 조정 방어.
+- **범위:** OCR 사실 확인과 세무분석 확정은 별도입니다. 전용 세금계산서/계산서 자동 추출·공제 판단·PDF·외부 RAG/Rule Engine 통합은 이 변경에서 지원 완료로 표시하지 않습니다.
+- **migration:** `20261005a6` 단일 head. 사업자 프로필의 `015d7b1f7bdb`와 Document AI의 `20261005a5`를 merge revision으로 연결합니다. 기존 migration 이력과 금액·품목·확정 기록을 유지합니다.
+- **의존성:** requirements.txt, requirements-dev.txt, requirements.md에 이 PR 자체의 변경은 없습니다. PyTorch 실험은 앱 실행 경로에 들어가지 않으며 별도 실험 환경이 필요합니다.
+
+### 팀원이 실행하는 순서
+
+아래 명령은 프로젝트 루트의 PowerShell 기준입니다. 기존 사용자 DB에는 먼저 백업한 뒤 migration을 적용하세요. `.env`는 `.env.example`을 참고해 각자 설정하며 저장소에 올리지 않습니다. 공용 PostgreSQL 16 + pgvector의 `docker-compose.yml`과 `/health`는 기존 main 구성을 사용합니다.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m alembic heads
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m alembic current
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+```
+
+다른 터미널에서 `frontend`로 이동해 `npm ci`, `npm run dev`를 실행합니다. 백엔드 포트가 다르면 로컬 `frontend/.env`의 `VITE_API_URL`을 맞춥니다. 사용자 사진 업로드는 설정된 CLOVA OCR을 호출할 수 있습니다. 단위·회귀 테스트는 외부 OCR/NTS 응답을 격리합니다.
+
+### API 연결 시 확인할 점
+
+- 목록은 요약 응답이며 사진 대조에는 `GET /receipts/{id}`를 사용합니다. 원본은 인증된 `GET /receipts/{id}/image`로 조회합니다.
+- 신규 화면은 `line_items`를 사용합니다. `items`/`item_amounts`는 호환용이며 두 입력 형식을 한 PATCH에서 동시에 수정하면 거절됩니다.
+- 품목 누락값은 null과 READ/ABSENT/FAILED/UNREVIEWED/NOT_APPLICABLE로 구분합니다. 누락 수량을 1로 만들지 않습니다.
+- 확정은 저장 응답의 revision으로 요청합니다. 다른 세션이 바꾸면 재조회 후 확인해야 합니다.
+- `/transactions/{id}`의 canonical facts/items를 한 번 사용합니다. 연결된 모든 증빙을 추가 구매로 합산하지 않습니다.
+- `tax_analysis_confirmed=false`, `deduction_status=UNDETERMINED`와 로컬 계약 상태를 후속 파트에서 존중해야 합니다.
+
+### 평가 결과와 한계
+
+공유 전 최신 main 통합 상태에서 백엔드 205개 테스트와 프론트 빌드(113 modules)가 통과했습니다. Alembic head는 `20261005a6` 하나이며 신규 DB와 양쪽 팀 migration 출발점의 upgrade·기존 데이터 보존을 검사했습니다. 로컬 DB 검증은 격리된 SQLite 기준입니다. PostgreSQL + pgvector 검증은 PR의 기존 GitHub Actions CI 결과로 별도 확인하며, 이 문서의 로컬 테스트 통과와 동일시하지 않습니다.
+
+실제 한국 영수증 30건의 동일 CLOVA 저장 응답을 비교한 잠정 Baseline입니다. 개선 품목명 F1=0.676, 전체 품목 행 F1=0.511, VAT 정확 일치율=77.3%, 거래총액=57.1%, 결제금액=40.0%입니다. 엄격한 필드·품목 오류 기준의 수정 필요 비율은 100%입니다. 확장 정답은 독립 검증되지 않았습니다.
+
+CNN·MobileNet 비교는 인위적 흐림·저조도·잘림·기울기 조건 실험입니다. 실제 품질 gold는 0/30이며 실제 정상 오거절률은 미측정입니다. 학습 모델은 앱에 적용하지 않았고 전처리+새 OCR 비교도 하지 않았습니다. 실제 사진·캐시·개인 DB·비밀 키·모델 checkpoint는 이 PR에 포함하지 않습니다.
+
+평가 프로그램은 `app/receipts/evaluation.py`, 실험 프로그램은 `app/receipts/quality_experiment.py`에 있습니다. 별도 확보한 로컬 ROOT에 각각 `test_dataset.jsonl`/기존 예측/캐시/사진이 필요하므로 Git clone만으로 기존 30건 결과를 재생성할 수는 없습니다. 공개 데이터 재배포 범위와 정답 검증은 별도 확인합니다.
+
+자세한 데이터 계약·함수·화면·평가 설명은 [Document AI 코드 해설](docs/document-ai-guide.md)을 참고하세요. 개발·PR·병합 기준은 [CONTRIBUTING.md](CONTRIBUTING.md)를 따릅니다. main 직접 push나 PR 자동 병합은 하지 않습니다.
+
+---
+
+
 VAT-AI는 소상공인의 증빙 수집·구조화, 사업자정보 확인, 매입세액 공제 검토를 구현하고 예상세액 확인과 신고 전 Review를 목표로 합니다. 홈택스 신고서를 자동 제출하지 않습니다.
 영수증 이미지를 업로드하면 Naver CLOVA OCR로 매입 내역을 판독하고, AI 분석을 거쳐 매입 보관함 및 세무 신고 검토 데이터로 집계합니다.
 
