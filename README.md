@@ -493,3 +493,278 @@ sequenceDiagram
 ![Step 11 - Login E2E success](docs/images/sprint1-business/11-login-e2e-success.png)
 
 *11. `/auth/login`이 `200`으로 성공하고 저장된 BusinessProfile을 반환했습니다. JWT와 식별 정보는 가렸습니다.*
+
+---
+
+# Sprint 1 — 공용 개발환경 및 CI 기반 구축
+
+## 목적
+
+Sprint 1부터 각 Track이 독립적으로 개발한 기능을 하나의 VAT-AI로 안정적으로 통합하기 위해 공용 개발환경과 자동 검증 기반을 구축하였다.
+
+이번 작업의 핵심은 새로운 사용자 기능을 추가하는 것이 아니라, 각 팀원이 개발한 기능을 동일한 DB·환경·Migration·Test 기준에서 실행하고 안전하게 main에 통합할 수 있는 기반을 만드는 것이다.
+
+## 1. 공용 Local DB 환경
+
+팀원별 PostgreSQL 설정 차이를 줄이기 위해 Docker Compose 기반의 공용 DB 환경을 구성하였다.
+
+기본 구성:
+
+- PostgreSQL 16
+- pgvector
+- Database: `vatai`
+- User: `postgres`
+- Port: `5432`
+
+실행:
+
+```bash
+docker compose up -d
+```
+
+상태 확인:
+
+```bash
+docker compose ps
+```
+
+정상 환경에서는 `vatai-db`가 `healthy` 상태로 표시되어야 한다.
+
+## 2. pgvector
+
+향후 RAG Pipeline에서 법령 등의 Embedding Vector를 PostgreSQL에 저장할 수 있도록 pgvector 환경을 구성하였다.
+
+새 PostgreSQL Volume 생성 시 다음 초기화 Script를 통해 pgvector Extension이 활성화된다.
+
+```text
+docker/postgres/init/01-enable-pgvector.sql
+```
+
+초기화 내용:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+Local 환경에서 pgvector 0.8.6 활성화 및 Vector 연산을 확인하였다.
+
+## 3. 환경변수 및 Secret 관리
+
+`.env.example`을 공용 환경변수 계약 파일로 정리하였다.
+
+주요 환경변수:
+
+```text
+DB_URL
+JWT_SECRET
+JWT_ALGORITHM
+JWT_EXPIRE_MINUTES
+OPENAI_API_KEY
+NTS_BUSINESS_API_KEY
+NTS_BUSINESS_API_URL
+NTS_BUSINESS_TIMEOUT_SECONDS
+CLOVA_OCR_API_URL
+CLOVA_OCR_SECRET_KEY
+CLOVA_API_KEY
+STORAGE_DIR
+MAX_UPLOAD_SIZE_BYTES
+MAX_IMAGE_PIXELS
+CLOVA_TIMEOUT_SECONDS
+```
+
+실제 Secret/API Key는 `.env`에 저장하며 `.env`는 Git Repository에 Commit하지 않는다.
+
+## 4. Alembic Migration 재현성
+
+빈 PostgreSQL 환경에서 다음 명령만으로 현재 DB Schema를 재현할 수 있는지 검증하였다.
+
+```bash
+alembic upgrade head
+```
+
+현재 Migration Head:
+
+```text
+015d7b1f7bdb
+```
+
+현재 생성되는 주요 테이블:
+
+```text
+users
+business_profiles
+receipts
+deductions
+alembic_version
+```
+
+`alembic current`와 `alembic heads`가 동일한 Head를 가리키는 것을 확인하였다.
+
+## 5. Backend / DB Health Check
+
+Backend뿐 아니라 PostgreSQL 연결 상태까지 확인하기 위해 다음 Endpoint를 추가하였다.
+
+```text
+GET /health
+```
+
+정상 응답:
+
+```json
+{
+  "status": "ok",
+  "database": "connected"
+}
+```
+
+Local 및 main 통합 후 실제 검증에서 HTTP 200 응답을 확인하였다.
+
+## 6. Backend Regression Test
+
+전체 Backend Test:
+
+```bash
+PYTHONPATH=. pytest -v
+```
+
+Sprint 1 DevOps 환경 main 통합 시점의 검증 결과:
+
+```text
+66 passed
+```
+
+인증, 사업자 검증, 영수증/OCR, Storage, 공제분석, Migration 등 기존 기능이 공용 개발환경에서도 정상 동작하는 것을 확인하였다.
+
+## 7. GitHub Actions CI
+
+Pull Request가 main에 통합되기 전에 자동으로 Backend를 검증하도록 GitHub Actions CI를 구성하였다.
+
+Workflow:
+
+```text
+.github/workflows/ci.yml
+```
+
+자동 검증 흐름:
+
+```text
+Pull Request
+    ↓
+Repository Checkout
+    ↓
+Python 3.12
+    ↓
+Dependencies 설치
+    ↓
+PostgreSQL / pgvector
+    ↓
+Alembic Migration
+    ↓
+Backend pytest
+    ↓
+CI 통과 후 Merge
+```
+
+Sprint 1 DevOps PR에서 실제 GitHub Actions CI가 정상 통과한 뒤 main에 Merge하였다.
+
+## 8. PR / Merge 규칙
+
+개발 및 통합 규칙은 다음 문서에서 관리한다.
+
+```text
+CONTRIBUTING.md
+```
+
+기본 원칙:
+
+1. main 직접 작업 및 직접 Push 금지
+2. 최신 main에서 Feature Branch 생성
+3. 기능 개발 및 Local Test
+4. Pull Request 생성
+5. GitHub Actions CI 확인
+6. CI 통과 후 Merge
+7. Merge 후 Regression Test
+
+## 9. 팀원 기본 실행 절차
+
+Repository를 받은 후 공용 개발환경 실행:
+
+```bash
+docker compose up -d
+alembic upgrade head
+```
+
+Backend 실행:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Health Check:
+
+```bash
+curl -i http://127.0.0.1:8000/health
+```
+
+전체 테스트:
+
+```bash
+PYTHONPATH=. pytest -v
+```
+
+기존 Feature Branch에서 최신 main 반영:
+
+```bash
+git fetch origin
+git merge origin/main
+```
+
+## 10. 현재 개발환경의 의미
+
+기존에는 각 팀원이 자신의 Local DB와 환경설정을 기준으로 기능을 개발할 가능성이 있었다.
+
+현재는 다음 공용 기반을 기준으로 개발한다.
+
+```text
+                VAT-AI Repository
+                       │
+               Docker Compose
+                       │
+          PostgreSQL 16 + pgvector
+                       │
+               Alembic Migration
+                       │
+               동일한 DB Schema
+                       │
+        ┌──────────────┼──────────────┐
+      Track A        Track B        Track C/D
+        └──────────────┼──────────────┘
+                       │
+                 Pull Request
+                       │
+               GitHub Actions CI
+                       │
+              Regression Test
+                       │
+                     main
+```
+
+즉 각 Track이 독립적으로 기능을 개발하더라도 동일한 환경에서 통합·검증할 수 있는 기반을 마련하였다.
+
+## 11. 향후 작업
+
+현재 Local 개발환경과 CI 기반 구축은 완료되었다.
+
+향후 다음 작업을 진행한다.
+
+- 팀원별 공용 Local DB 환경 적용 확인
+- AWS EC2 환경 구성
+- AWS RDS PostgreSQL 구성
+- AWS S3 연결
+- Staging 환경 구축
+- 환경별 CORS 설정
+- Staging Migration Deployment 검증
+- Staging Health Check
+- 장애 발생 시 Log 확인 체계 점검
+
+Staging 구축 전까지 Local 개발 및 PR 검증은 Docker Compose + Alembic + GitHub Actions CI를 공통 기준으로 사용한다.
