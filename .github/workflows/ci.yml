@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vatai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d vatai"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Enable pgvector
+        run: |
+          PGPASSWORD=postgres psql \
+            -h localhost \
+            -U postgres \
+            -d vatai \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Run database migrations
+        run: alembic upgrade head
+        env:
+          DB_URL: postgresql://postgres:postgres@localhost:5432/vatai
+          JWT_SECRET: ci-test-secret
+
+      - name: Run backend tests
+        run: PYTHONPATH=. pytest -v
+        env:
+          DB_URL: postgresql://postgres:postgres@localhost:5432/vatai
+          JWT_SECRET: ci-test-secret
