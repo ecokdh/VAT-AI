@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # A트랙 계약명에 맞춘 JWT 만료 시간 설정.
     JWT_EXPIRE_MINUTES: int = 60 * 24
     OPENAI_API_KEY: str = ""
+    NTS_BUSINESS_API_KEY: str = ""
+    NTS_BUSINESS_API_URL: str = "https://api.odcloud.kr/api/nts-businessman/v1/status"
+    NTS_BUSINESS_TIMEOUT_SECONDS: float = 10.0
 
     # CLOVA_API_KEY는 최초 스켈레톤의 이름과 호환하기 위한 fallback이다.
     CLOVA_API_KEY: str = ""

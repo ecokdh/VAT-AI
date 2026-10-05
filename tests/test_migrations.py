@@ -3,7 +3,34 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 from sqlalchemy import create_engine, inspect, text
+
+
+@pytest.mark.parametrize("starting_revision", ["015d7b1f7bdb", "20261005a5"])
+def test_merged_migration_upgrades_either_team_history_without_losing_users(tmp_path, starting_revision):
+    database_url = f"sqlite:///{(tmp_path / 'merged.db').as_posix()}"
+    environment = {**os.environ, "DB_URL": database_url, "JWT_SECRET": "migration-test-only"}
+
+    def migrate(target):
+        result = subprocess.run([sys.executable, "-B", "-m", "alembic", "upgrade", target],
+            cwd=Path(__file__).parents[1], env=environment, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    migrate(starting_revision)
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id,email,password_hash,name,created_at) VALUES (:id,'merge@example.com','x','merge','2026-10-05')"), {"id": "b" * 32})
+        if starting_revision == "015d7b1f7bdb":
+            connection.execute(text("INSERT INTO business_profiles (id,user_id,business_number,verification_status,created_at) VALUES (:id,:user,'1234567890','VERIFIED','2026-10-05')"), {"id": "c" * 32, "user": "b" * 32})
+    migrate("head")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "20261005a6"
+        assert connection.execute(text("SELECT email FROM users")).scalar_one() == "merge@example.com"
+        assert {"business_profiles", "transactions", "line_items", "reconciliation_issues"} <= set(inspect(connection).get_table_names())
+        if starting_revision == "015d7b1f7bdb":
+            assert connection.execute(text("SELECT business_number,verification_status FROM business_profiles")).one() == ("1234567890", "VERIFIED")
 
 
 def test_alembic_upgrade_head_creates_a_base_schema(tmp_path: Path):
@@ -33,11 +60,34 @@ def test_alembic_upgrade_head_creates_a_base_schema(tmp_path: Path):
             "transactions",
             "line_items",
             "reconciliation_issues",
+            "business_profiles",
         }
+        columns = {column["name"]: column for column in inspect(connection).get_columns("business_profiles")}
+        assert set(columns) == {
+            "id", "user_id", "business_number", "business_name", "business_status",
+            "business_status_code", "tax_type", "tax_type_code", "end_date",
+            "verification_status", "verified_at", "created_at",
+        }
+        for name in ("id", "user_id", "business_number", "verification_status", "created_at"):
+            assert not columns[name]["nullable"]
+        assert any(
+            fk["constrained_columns"] == ["user_id"]
+            and fk["referred_table"] == "users"
+            and fk["referred_columns"] == ["id"]
+            for fk in inspect(connection).get_foreign_keys("business_profiles")
+        )
+        assert any(
+            constraint["column_names"] == ["user_id"]
+            for constraint in inspect(connection).get_unique_constraints("business_profiles")
+        )
+        assert not any(
+            "business_number" in index["column_names"]
+            for index in inspect(connection).get_indexes("business_profiles")
+        )
         revision = connection.execute(
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
-        assert revision == "20261005a5"
+        assert revision == "20261005a6"
         columns = {column["name"] for column in inspect(connection).get_columns("receipts")}
         assert {"taxable_supply_amount", "tax_exempt_amount", "transaction_amount", "payment_amount", "money_sources_json", "subtotal_amount", "item_amounts_json"} <= columns
         assert "money_schema_version" in columns

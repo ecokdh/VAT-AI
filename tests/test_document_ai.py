@@ -3,6 +3,7 @@ import json
 from datetime import date
 
 import pytest
+from test_receipts import mock_business_verification  # noqa: F401; reuse isolated registration fixture
 from pydantic import ValidationError
 from sqlmodel import Session, SQLModel, create_engine
 

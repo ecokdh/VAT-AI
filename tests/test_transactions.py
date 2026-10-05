@@ -1,6 +1,7 @@
 from datetime import date
 
 import pytest
+from test_receipts import mock_business_verification  # noqa: F401; reuse isolated registration fixture
 
 from app.receipts import ocr_client
 from test_receipts import auth_headers, PNG_BYTES

@@ -9,6 +9,8 @@ import pytest
 from PIL import Image, ImageDraw
 
 from app.common.exceptions import AppException
+from app.auth import service as auth_service
+from app.business.schemas import BusinessVerifyResponse
 from app.core import config
 from app.receipts import ocr_client
 from app.receipts import service as receipt_service
@@ -49,10 +51,20 @@ def with_revision(client, path, headers, payload):
     return {"base_revision": current.json().get("revision", 1), **payload}
 
 
+@pytest.fixture(autouse=True)
+def mock_business_verification(monkeypatch):
+    monkeypatch.setattr(auth_service, "verify_business", lambda _: BusinessVerifyResponse(
+        business_number="1234567890", business_status="계속사업자",
+        business_status_code="01", tax_type="부가가치세 일반과세자",
+        tax_type_code="01", verified=True,
+    ))
+
+
 def auth_headers(client, email="owner@example.com"):
     response = client.post(
         "/auth/register",
-        json={"email": email, "password": "correct-password", "name": email},
+        json={"email": email, "password": "correct-password", "name": email,
+              "business_name": "Test Store", "business_number": "123-45-67890"},
     )
     assert response.status_code == 201
     return {"Authorization": f"Bearer {response.json()['access_token']}"}

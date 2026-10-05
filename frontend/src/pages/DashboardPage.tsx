@@ -1,22 +1,20 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { mockUser } from "../mocks/user";
 import { mockReport } from "../mocks/report";
 import { purchaseTotals, salesTotals } from "../mocks/receipts";
 import { useMaskedFormat } from "../hooks/useMaskedFormat";
 import { AmountVisibilityToggle } from "../components/AmountVisibilityToggle";
-import { getMe } from "../api/auth";
+import { getMe, type AuthUser } from "../api/auth";
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const fmt = useMaskedFormat();
-  // 스켈레톤 단계: User 엔티티에 사업장명이 아직 없어 대표자명만 실제 로그인 정보로 대체
-  const [representativeName, setRepresentativeName] = useState(mockUser.representativeName);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
     if (!localStorage.getItem("access_token")) return;
     getMe()
-      .then((me) => setRepresentativeName(me.name))
+      .then(setAuthUser)
       .catch(() => {});
   }, []);
 
@@ -25,13 +23,13 @@ export function DashboardPage() {
       <header className="page-header">
         <div>
           <div className="muted" style={{ fontSize: 13 }}>
-            {mockUser.businessName}
+            {authUser?.business?.business_name ?? "사업자정보 미확인"}
           </div>
-          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2 }}>{representativeName}님, 반갑습니다 👋</div>
+          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2 }}>{authUser?.name ?? "사용자"}님, 반갑습니다 👋</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <AmountVisibilityToggle />
-          <span className="pill pill--primary">{mockUser.taxationType}</span>
+          <span className="pill pill--primary">{authUser?.business?.tax_type ?? "과세유형 미확인"}</span>
         </div>
       </header>
 

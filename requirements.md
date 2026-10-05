@@ -1,4 +1,4 @@
-# VAT-AI 스켈레톤 — 필요 언어 및 프레임워크 (버전 고정)
+# VAT-AI — 필요 언어 및 프레임워크 (버전 고정)
 
 모든 버전은 PyPI/npm의 현재 최신 배포본이며, `pip install --dry-run` / `npm install --dry-run`으로 아래 조합 전체를 함께 설치했을 때 **의존성 충돌이 없음을 실제로 검증**했다.
 
@@ -28,7 +28,7 @@
 | `python-multipart` | 0.0.32 | 파일 업로드(영수증 이미지) 파싱 |
 | `Pillow` | 12.3.0 | 이미지 디코딩·손상/픽셀 수 검증 |
 | `boto3` | 1.43.95 | AWS S3 업로드 |
-| `openai` | 3.14.1 | GPT API 호출 (AI 로직 인터페이스 내부 구현체) |
+| `openai` | 3.14.1 | `app/deduction/ai_client.py`의 OpenAI Responses API 기반 공제 판별 호출 |
 | `httpx` | 0.28.1 | CLOVA OCR / 국세청(NTS) API 호출 |
 | `pgvector` | 0.5.0 | pgvector 컬럼 타입 (SQLAlchemy/SQLModel 연동) |
 | `python-dotenv` | 1.2.3 | 로컬 `.env` 로드 |

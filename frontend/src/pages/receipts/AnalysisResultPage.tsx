@@ -18,11 +18,11 @@ export function AnalysisResultPage() {
           style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}
         >
           <div>
-            <div className="summary-card__eyebrow">Naver OCR + ChatGPT 4o 분석</div>
+            <div className="summary-card__eyebrow">Naver OCR + AI 분석 (목데이터)</div>
             <div style={{ fontWeight: 800, fontSize: 18, marginTop: 4 }}>의제매입세액 자동 분석 완료</div>
           </div>
           <span className="pill" style={{ background: "rgba(255,255,255,0.2)", color: "#fff", whiteSpace: "nowrap", flexShrink: 0 }}>
-            GPT-4o
+            Mock
           </span>
         </div>
 
