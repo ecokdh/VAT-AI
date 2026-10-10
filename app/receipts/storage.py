@@ -24,6 +24,8 @@ class FileStorage(Protocol):
 
     def delete(self, key: str) -> None: ...
 
+    def read(self, key: str) -> bytes: ...
+
 
 class LocalFileStorage:
     def __init__(self, root: str | Path):
@@ -51,4 +53,36 @@ class LocalFileStorage:
             raise OSError("storage key escapes storage root")
         if path.exists():
             path.unlink()
+
+    def read(self, key: str) -> bytes:
+        root = self.root.resolve()
+        path = (self.root / key).resolve()
+        if path != root and root not in path.parents:
+            raise OSError("storage key escapes storage root")
+        return path.read_bytes()
+
+
+class S3FileStorage:
+    def __init__(self, bucket: str, region: str):
+        import boto3
+
+        self.bucket = bucket
+        self.client = boto3.client("s3", region_name=region)
+
+    def save(self, user_id: uuid.UUID, content: bytes, media_type: str, extension: str) -> StoredFile:
+        key = f"receipts/{user_id}/{uuid.uuid4()}.{extension}"
+        self.client.put_object(Bucket=self.bucket, Key=key, Body=content, ContentType=media_type)
+        return StoredFile(key=key, path=Path(key), media_type=media_type)
+
+    def read(self, key: str) -> bytes:
+        response = self.client.get_object(Bucket=self.bucket, Key=key)
+        return response["Body"].read()
+
+    def delete(self, key: str) -> None:
+        self.client.delete_object(Bucket=self.bucket, Key=key)
+
+    def presigned_url(self, key: str, expires_in: int = 300) -> str:
+        return self.client.generate_presigned_url(
+            "get_object", Params={"Bucket": self.bucket, "Key": key}, ExpiresIn=expires_in
+        )
 

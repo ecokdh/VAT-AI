@@ -1,17 +1,24 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isAxiosError } from "axios";
-import { useNavigate, Link } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import { PageHeader } from "../../components/PageHeader";
 import { mockUser } from "../../mocks/user";
 import { login } from "../../api/auth";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState(mockUser.email);
+  const location = useLocation();
+  const routeState = location.state as { signupEmail?: string; signupComplete?: boolean } | null;
+  const passwordInput = useRef<HTMLInputElement>(null);
+  const [email, setEmail] = useState(routeState?.signupEmail ?? mockUser.email);
   const [password, setPassword] = useState("");
   const [rememberEmail, setRememberEmail] = useState(true);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (routeState?.signupComplete) passwordInput.current?.focus();
+  }, [routeState?.signupComplete]);
 
   async function handleLogin() {
     setError("");
@@ -60,8 +67,10 @@ export function LoginPage() {
         </div>
         <div className="form-field">
           <label className="form-field__label">비밀번호</label>
-          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input ref={passwordInput} className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
+
+        {routeState?.signupComplete && <div className="banner" style={{ marginBottom: 16 }} role="status">가입이 완료되었습니다. 이메일과 비밀번호로 로그인해 주세요.</div>}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, margin: "4px 0 28px" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--color-primary)" }}>

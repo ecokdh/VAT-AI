@@ -1,207 +1,103 @@
+import { useEffect, useState } from "react";
+import { isAxiosError } from "axios";
+import { getMe } from "../../api/auth";
+import { createPdfJob, downloadPdfJob, getAsyncJob, getTaxEstimate, type TaxEstimateApi } from "../../api/transactions";
 import { PageHeader } from "../../components/PageHeader";
-import { mockReport } from "../../mocks/report";
-import { mockDeduction } from "../../mocks/deduction";
-import { purchaseTotals } from "../../mocks/receipts";
-import { useMaskedFormat } from "../../hooks/useMaskedFormat";
+
+const won = (value: number | null) => value == null ? "확인 필요" : `${value.toLocaleString()}원`;
 
 export function ReportPage() {
-  const fmt = useMaskedFormat();
+  const [estimate, setEstimate] = useState<TaxEstimateApi | null>(null);
+  const [period, setPeriod] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfMessage, setPdfMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const user = await getMe();
+        const taxType = user.business?.tax_type_code === "01" ? "general" : user.business?.tax_type_code === "02" ? "simplified" : null;
+        if (!taxType) throw new Error("국세청 과세유형 확인이 필요합니다.");
+        const nextPeriod = taxType === "simplified" ? "2026-YEAR" : "2026-H1";
+        const result = await getTaxEstimate(nextPeriod);
+        if (active) { setPeriod(nextPeriod); setEstimate(result); }
+      } catch (cause) {
+        if (!active) return;
+        const message = isAxiosError(cause) ? cause.response?.data?.error?.message : undefined;
+        setError(message ?? (cause instanceof Error ? cause.message : "예상 세액을 불러오지 못했습니다."));
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void load();
+    return () => { active = false; };
+  }, []);
+
+  async function createReviewPdf() {
+    if (!period || pdfBusy) return;
+    setPdfBusy(true);
+    setPdfMessage("검토용 PDF 작업을 시작했습니다.");
+    setError("");
+    try {
+      let job = await createPdfJob(period);
+      for (let attempt = 0; attempt < 60 && (job.status === "PENDING" || job.status === "PROCESSING"); attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        job = await getAsyncJob(job.id);
+      }
+      if (job.status === "FAILED") throw new Error(job.error_message ?? "PDF 생성에 실패했습니다.");
+      if (job.status !== "COMPLETED") {
+        setPdfMessage("작업은 계속 처리 중입니다. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      const blob = await downloadPdfJob(job.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `vat-ai-review-${period}.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setPdfMessage("검토용 PDF를 다운로드했습니다.");
+    } catch (cause) {
+      const message = isAxiosError(cause) ? cause.response?.data?.error?.message : undefined;
+      setError(message ?? (cause instanceof Error ? cause.message : "PDF 생성에 실패했습니다."));
+      setPdfMessage("");
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   return (
     <div className="page">
-      <PageHeader title="부가가치세 신고서 생성" showAmountToggle />
+      <PageHeader title="신고 전 검토 자료" showAmountToggle />
       <div className="page__body">
-        <div className="summary-card summary-card--primary" style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div className="summary-card__eyebrow">
-                {mockReport.businessType.split(" · ")[0]} 일반과세자 · {mockReport.period.slice(0, 12)}
-              </div>
-              <div style={{ fontWeight: 800, fontSize: 18, marginTop: 4 }}>부가가치세 신고서 자동 생성 완료</div>
-            </div>
-            <span className="pill" style={{ background: "rgba(255,255,255,0.2)", color: "#fff", whiteSpace: "nowrap", flexShrink: 0 }}>
-              국세청
-            </span>
-          </div>
+        <div className="banner banner--warning" style={{ marginBottom: 16 }}>
+          <span>안내</span><div>이 자료는 사업자의 검토를 위한 예상치이며 세무 신고서가 아닙니다. VAT-AI는 홈택스에 신고하거나 제출하지 않습니다.</div>
         </div>
-
-        <div className="card">
-          <div className="card__title">👤 ① 사업자 기본 정보</div>
-          <div className="field-row">
-            <span className="field-row__label">상호 (법인명)</span>
-            <span className="field-row__value">{mockReport.businessName}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">사업자등록번호</span>
-            <span className="field-row__value">{mockReport.businessNumber}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">대표자 성명</span>
-            <span className="field-row__value">{mockReport.representativeName}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">업태 / 종목</span>
-            <span className="field-row__value">{mockReport.businessType}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">과세기간</span>
-            <span className="field-row__value">{mockReport.period.match(/\(([^)]+)\)/)?.[1]}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">신고구분</span>
-            <span className="field-row__value">확정신고</span>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card__title">📈 ② 과세표준 및 매출세액</div>
-          <div className="field-row">
-            <span className="field-row__label">세금계산서 발급분 공급가액</span>
-            <span className="field-row__value">{fmt.won(mockReport.taxBase)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">세금계산서 발급분 세액</span>
-            <span className="field-row__value">{fmt.won(mockReport.salesTax)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">과세표준 합계</span>
-            <span className="field-row__value field-row__value--total">{fmt.won(mockReport.taxBase)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">매출세액 합계</span>
-            <span className="field-row__value field-row__value--accent field-row__value--total">
-              {fmt.won(mockReport.salesTax)}
-            </span>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card__title">📉 ③ 매입세액</div>
-          <div className="field-row">
-            <span className="field-row__label">세금계산서 수취분 공급가액</span>
-            <span className="field-row__value">{fmt.won(purchaseTotals.supplyAmount)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">세금계산서 수취분 세액</span>
-            <span className="field-row__value">{fmt.won(purchaseTotals.vatAmount)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">면세농산물 의제매입세액공제</span>
-            <span className="field-row__value">−{fmt.won(mockDeduction.deductibleAmount)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">의제매입세액 (2/102 적용)</span>
-            <span className="field-row__value">{fmt.won(mockDeduction.deductibleAmount)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">매입세액 합계</span>
-            <span className="field-row__value field-row__value--total">{fmt.won(mockReport.purchaseTaxTotal)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">공제세액 소계</span>
-            <span className="field-row__value field-row__value--accent field-row__value--total">
-              {fmt.won(mockReport.purchaseTaxTotal)}
-            </span>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card__title">⚖️ ④ 경감·공제세액</div>
-          <div className="field-row">
-            <span className="field-row__label">전자신고 세액공제</span>
-            <span className="field-row__value">{fmt.won(mockReport.reductionTotal)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">신용카드 발행 세액공제</span>
-            <span className="field-row__value">0 원</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">경감·공제세액 합계</span>
-            <span className="field-row__value field-row__value--accent field-row__value--total">
-              {fmt.won(mockReport.reductionTotal)}
-            </span>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card__title">ℹ️ ⑤ 가산세</div>
-          <div className="field-row">
-            <span className="field-row__label">세금계산서 지연 발급 가산세</span>
-            <span className="field-row__value">0 원</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">무신고 가산세</span>
-            <span className="field-row__value">0 원</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">가산세 합계</span>
-            <span className="field-row__value field-row__value--accent field-row__value--total">
-              {fmt.won(mockReport.additionalTaxTotal)}
-            </span>
-          </div>
-        </div>
-
-        <div className="card" style={{ background: "var(--color-primary-light)", border: "none" }}>
-          <div className="card__title">🧮 ⑥ 최종 납부(환급)세액 계산</div>
-          <div className="field-row">
-            <span className="field-row__label">매출세액</span>
-            <span className="field-row__value">+ {fmt.won(mockReport.salesTax)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">매입세액 공제</span>
-            <span className="field-row__value">− {fmt.won(mockReport.purchaseTaxTotal)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">경감·공제세액</span>
-            <span className="field-row__value">− {fmt.won(mockReport.reductionTotal)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">가산세</span>
-            <span className="field-row__value">+ {fmt.won(mockReport.additionalTaxTotal)}</span>
-          </div>
-          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(61,90,254,0.2)" }}>
-            <div className="field-row__label" style={{ color: "var(--color-primary-dark)", fontWeight: 700 }}>
-              최종 납부세액
-            </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: "var(--color-primary)", marginTop: 4 }}>
-              {fmt.won(mockReport.finalTax)}
-            </div>
-          </div>
-        </div>
-
-        <div className="banner banner--warning" style={{ margin: "16px 0" }}>
-          <span>📅</span>
-          <div>
-            <div className="banner__title">신고·납부 기한</div>
-            {mockReport.dueDate}
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card__title">📘 근거 법령</div>
-          <div className="stack-gap-sm">
-            <div>
-              <span className="pill pill--primary" style={{ marginBottom: 6, display: "inline-block" }}>
-                부가가치세법 제48조
-              </span>
-              <p style={{ fontSize: 13, color: "var(--color-text-muted)", margin: "4px 0 0", lineHeight: 1.5 }}>
-                확정신고 및 납부: 사업자는 각 과세기간에 대한 과세표준과 세액을 그 과세기간 종료 후 25일 이내에 신고·납부하여야 한다.
-              </p>
-            </div>
-            <div>
-              <span className="pill pill--primary" style={{ marginBottom: 6, display: "inline-block" }}>
-                부가가치세법 제42조
-              </span>
-              <p style={{ fontSize: 13, color: "var(--color-text-muted)", margin: "4px 0 0", lineHeight: 1.5 }}>
-                의제매입세액: 음식점업 2/102 적용 (과세표준 2억 이하 개인사업자).
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="stack-gap-sm" style={{ marginTop: 24 }}>
-          <button className="btn btn--primary">국세청 홈택스 신고서 제출</button>
-          <button className="btn btn--secondary">PDF로 저장하기</button>
-        </div>
+        {error && <div className="banner banner--error" role="alert">{error}</div>}
+        {loading && <div className="center-note">2026년 거래를 계산하고 있습니다.</div>}
+        {estimate && <>
+          <section className="summary-card summary-card--primary" style={{ marginBottom: 16 }}>
+            <div className="summary-card__eyebrow">{estimate.tax_type === "general" ? "일반과세자" : "간이과세자"} · {period === "2026-YEAR" ? "2026년 연간" : period === "2026-H1" ? "2026년 1기" : "2026년 2기"}</div>
+            <div style={{ fontWeight: 800, fontSize: 18, marginTop: 4 }}>예상 납부세액 {won(estimate.payable_estimate)}</div>
+            <div style={{ marginTop: 8 }}>계산 상태: {estimate.status} · 검토 {estimate.caution_transaction_count}건 · 미계산 {estimate.uncalculated_transaction_count}건</div>
+          </section>
+          <section className="card">
+            <div className="card__title">2026년 예상 세액</div>
+            <div className="field-row"><span className="field-row__label">매출세액</span><span className="field-row__value">{won(estimate.output_vat)}</span></div>
+            <div className="field-row"><span className="field-row__label">일반 매입 공제액</span><span className="field-row__value">{won(estimate.eligible_input_vat)}</span></div>
+            <div className="field-row"><span className="field-row__label">의제매입세액공제</span><span className="field-row__value">{won(estimate.deemed_input_vat)}</span></div>
+            <div className="field-row"><strong>예상 납부세액</strong><strong>{won(estimate.payable_estimate)}</strong></div>
+          </section>
+          <section className="card" style={{ marginTop: 12 }}>
+            <div className="card__title">검토할 내용</div>
+            {estimate.notes.length ? estimate.notes.map((note) => <p key={note}>{note}</p>) : <p>현재 계산에 포함되지 않은 안내가 없습니다.</p>}
+          </section>
+          <button className="btn btn--primary" style={{ marginTop: 16 }} disabled={pdfBusy} onClick={() => void createReviewPdf()}>{pdfBusy ? "PDF 생성 중…" : "검토용 PDF 만들기"}</button>
+          {pdfMessage && <p className="muted" role="status">{pdfMessage}</p>}
+        </>}
       </div>
     </div>
   );

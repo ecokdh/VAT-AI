@@ -17,6 +17,7 @@ def register_body(email="owner@example.com", password="correct-password"):
     return {
         "email": email, "password": password, "name": "Owner",
         "business_name": "Owner Store", "business_number": "123-45-67890",
+        "terms_accepted": True, "privacy_accepted": True, "marketing_accepted": False,
     }
 
 
@@ -25,6 +26,7 @@ def test_register_login_and_me(client):
     assert register.status_code == 201
     token = register.json()["access_token"]
     assert register.json()["user"]["email"] == "owner@example.com"
+    assert "terms_accepted_at" not in register.json()["user"]
 
     login = client.post("/auth/login", json={"email": "owner@example.com", "password": "correct-password"})
     assert login.status_code == 200
@@ -50,6 +52,23 @@ def test_duplicate_register_and_invalid_login_use_contract_errors(client):
     assert invalid.json()["error"]["code"] == "INVALID_CREDENTIALS"
 
 
+def test_email_availability_check_handles_new_and_registered_emails(client):
+    available = client.post("/auth/email-availability", json={"email": "new@example.com"})
+    assert available.status_code == 200
+    assert available.json() == {"available": True}
+
+    assert client.post("/auth/register", json=register_body()).status_code == 201
+    registered = client.post("/auth/email-availability", json={"email": "OWNER@example.com"})
+    assert registered.status_code == 200
+    assert registered.json() == {"available": False}
+
+
+def test_email_availability_check_rejects_invalid_email(client):
+    response = client.post("/auth/email-availability", json={"email": "not-an-email"})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
 @pytest.mark.parametrize("password", ["x" * 72, "가" * 24])
 def test_passwords_within_bcrypt_utf8_boundary_are_accepted(client, password):
     response = client.post("/auth/register", json=register_body("boundary@example.com", password))
@@ -61,3 +80,14 @@ def test_password_over_bcrypt_utf8_boundary_is_json_validation_error(client):
     assert response.status_code == 400
     assert response.headers["content-type"].startswith("application/json")
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.parametrize("field", ["terms_accepted", "privacy_accepted"])
+def test_registration_requires_mandatory_consents(client, field):
+    body = register_body()
+    body[field] = False
+
+    response = client.post("/auth/register", json=body)
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "CONSENT_REQUIRED"

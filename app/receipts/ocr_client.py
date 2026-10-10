@@ -283,3 +283,38 @@ async def extract_receipt(
         json.JSONDecodeError,
     ):
         return _extract_fallback(image_bytes)
+
+
+def extract_receipt_sync(image_bytes: bytes, mime_type: str = "image/jpeg") -> Optional[OcrResult]:
+    """Worker-safe synchronous OCR adapter; avoids nesting event loops in workers."""
+    api_url = settings.CLOVA_OCR_API_URL.strip()
+    secret_key = (settings.CLOVA_OCR_SECRET_KEY or settings.CLOVA_API_KEY).strip()
+    format_info = _format_for_mime_type(mime_type)
+    if not api_url or not secret_key or format_info is None:
+        return _extract_fallback(image_bytes)
+    image_format, extension = format_info
+    message = {
+        "version": "V2",
+        "requestId": str(uuid.uuid4()),
+        "timestamp": int(time.time() * 1000),
+        "lang": "ko",
+        "images": [{"format": image_format, "name": "receipt"}],
+    }
+    try:
+        response = httpx.post(
+            api_url,
+            headers={"X-OCR-SECRET": secret_key},
+            data={"message": json.dumps(message, ensure_ascii=False)},
+            files={"file": (f"receipt.{extension}", image_bytes, mime_type)},
+            timeout=settings.CLOVA_TIMEOUT_SECONDS,
+        )
+        if 200 <= response.status_code < 300:
+            try:
+                parsed = parse_response(response.json())
+            except (ValueError, TypeError, json.JSONDecodeError):
+                parsed = None
+            if parsed is not None:
+                return parsed
+        return _extract_fallback(image_bytes)
+    except (httpx.TimeoutException, httpx.RequestError):
+        return _extract_fallback(image_bytes)

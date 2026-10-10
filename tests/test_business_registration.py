@@ -4,7 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import select
 
 from app.auth import service as auth_service
-from app.auth.models import User
+from app.auth.models import ConsentRecord, User
 from app.business.models import BusinessProfile
 from app.business import nts_client
 from app.business.schemas import BusinessVerifyResponse
@@ -19,6 +19,7 @@ def body(email="owner@example.com"):
     return {
         "email": email, "password": "correct-password", "name": "Owner",
         "business_name": " Owner Store ", "business_number": "123-45-67890",
+        "terms_accepted": True, "privacy_accepted": True, "marketing_accepted": False,
     }
 
 
@@ -61,6 +62,12 @@ def test_registration_persists_user_and_business(client, monkeypatch, code, stat
     assert profiles[0].verified_at is not None
     assert profiles[0].end_date == ("20200101" if code == "03" else None)
     assert users[0].name == "Owner"
+    consents = db_rows(ConsentRecord)
+    assert {(consent.consent_type, consent.accepted) for consent in consents} == {
+        ("terms", True), ("privacy", True), ("marketing", False),
+    }
+    assert all(consent.user_id == users[0].id and consent.recorded_at is not None for consent in consents)
+    assert all(consent.document_version is None for consent in consents)
 
     login = client.post("/auth/login", json={"email": "owner@example.com", "password": "correct-password"})
     assert login.status_code == 200
@@ -76,6 +83,20 @@ def test_registration_persists_user_and_business(client, monkeypatch, code, stat
     assert db_rows(Deduction) == []
 
 
+def test_registration_persists_marketing_opt_in(client, monkeypatch):
+    mock_status(monkeypatch)
+    registration = body()
+    registration["marketing_accepted"] = True
+
+    result = client.post("/auth/register", json=registration)
+
+    assert result.status_code == 201
+    consents = db_rows(ConsentRecord)
+    marketing = next(consent for consent in consents if consent.consent_type == "marketing")
+    assert marketing.accepted is True
+    assert marketing.recorded_at is not None
+
+
 @pytest.mark.parametrize("code,http_status", [("BUSINESS_NOT_REGISTERED", 404), ("BUSINESS_API_TIMEOUT", 504)])
 def test_lookup_failure_does_not_register(client, monkeypatch, code, http_status):
     def fail(_):
@@ -86,6 +107,7 @@ def test_lookup_failure_does_not_register(client, monkeypatch, code, http_status
     assert result.json()["error"]["code"] == code
     assert db_rows(User) == []
     assert db_rows(BusinessProfile) == []
+    assert db_rows(ConsentRecord) == []
 
 
 def test_duplicate_email_does_not_repeat_lookup(client, monkeypatch):
@@ -115,6 +137,7 @@ def test_business_insert_failure_rolls_back_user(client, monkeypatch):
     assert result.json()["error"]["code"] == "DATABASE_ERROR"
     assert db_rows(User) == []
     assert db_rows(BusinessProfile) == []
+    assert db_rows(ConsentRecord) == []
 
 
 def test_registration_normalizes_number_before_lookup(client, monkeypatch):

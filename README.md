@@ -85,7 +85,7 @@ VAT-AI/
 cp .env.example .env
 ```
 
-`.env.example`은 로컬 PostgreSQL 연결 예시를 제공합니다. SQLite로 시작하려면 `DB_URL=sqlite:///./vat_ai.db`로 바꿉니다. 실제 공제 판별에는 `OPENAI_API_KEY`, 국세청 사업자 상태조회에는 승인된 `NTS_BUSINESS_API_KEY`가 필요합니다.
+`.env.example`은 로컬 PostgreSQL 연결 예시를 제공합니다. SQLite로 시작하려면 `DB_URL=sqlite:///./vat_ai.db`로 바꿉니다. OCR 작업에는 CLOVA 키, 국세청 사업자 상태조회에는 승인된 `NTS_BUSINESS_API_KEY`가 필요합니다. 리뷰 PDF 생성에는 `wkhtmltopdf` 실행 파일과 한글 글꼴이 필요하며, 파일 저장은 기본 로컬 저장소 또는 설정된 S3 버킷을 사용합니다.
 
 ### 백엔드 환경변수 (`.env`)
 
@@ -96,10 +96,15 @@ cp .env.example .env
 | `JWT_ALGORITHM` | `HS256` | 토큰 암호화 알고리즘 |
 | `JWT_EXPIRE_MINUTES`| `1440` | 토큰 만료 시간 (기본 24시간) |
 | `OPENAI_API_KEY` | - | `POST /receipts/{id}/analyze`의 OpenAI 공제 판별 API 키 |
+| `DEDUCTION_ANALYZER` | 빈 문자열 | 거래 분석 어댑터의 `모듈경로:팩토리함수`. 비우면 안전 기본 구현이 분석을 검토 보류 |
+| `OCR_PIPELINE` | 빈 문자열 | OCR 어댑터의 `모듈경로:팩토리함수`. 비우면 현재 CLOVA 추출기 어댑터 사용 |
 | `NTS_BUSINESS_API_KEY` | 빈 문자열 | 국세청 사업자등록 상태조회 서비스 인증키. 미설정 시 조회 불가 |
 | `NTS_BUSINESS_API_URL` | `https://api.odcloud.kr/api/nts-businessman/v1/status` | 국세청 사업자등록 상태조회 URL |
 | `NTS_BUSINESS_TIMEOUT_SECONDS` | `10.0` | 상태조회 요청 타임아웃(초). `.env.example`에는 `10`으로 표기 |
 | `STORAGE_DIR` | `storage` | 업로드 영수증 파일 로컬 저장 디렉터리 경로 |
+| `S3_BUCKET` | 빈 문자열 | 설정하면 영수증 및 생성 PDF를 S3에 저장. 비어 있으면 로컬 저장소 사용 |
+| `AWS_REGION` | `ap-northeast-2` | S3 버킷 리전 |
+| `PDFKIT_WKHTMLTOPDF_PATH` | 빈 문자열 | `wkhtmltopdf` 실행 파일 경로. PATH에서 찾을 수 있으면 비워 둡니다 |
 | `MAX_UPLOAD_SIZE_BYTES` | `10485760` (10MB) | 업로드 허용 최대 파일 크기 |
 | `MAX_IMAGE_PIXELS` | `25000000` | 이미지 최대 픽셀 수 제한 (Decompression Bomb 방어) |
 | `CLOVA_OCR_API_URL` | - | Naver Cloud CLOVA OCR Template V2 invoke URL |
@@ -146,6 +151,22 @@ python3 -m uvicorn app.main:app --reload --port 8000
 
 - **Swagger API 대화형 문서**: `http://localhost:8000/docs`
 - **ReDoc 명세서**: `http://localhost:8000/redoc`
+
+### 비동기 작업자 (OCR·분석·PDF)
+
+API 서버와 별도 터미널에서 같은 `.env`와 데이터베이스를 사용하는 작업자 프로세스를 실행합니다. 작업 상태는 DB에 저장되며 클라이언트는 `GET /v2/jobs/{job_id}`로 조회합니다.
+
+```powershell
+.\.venv\Scripts\python.exe -m app.jobs.worker
+```
+
+OCR을 사용하려면 `CLOVA_OCR_API_URL` 및 `CLOVA_OCR_SECRET_KEY`가 설정되어야 합니다. PDF 작업을 사용하려면 `pdfkit` Python 패키지 외에 시스템 `wkhtmltopdf`와 한글 폰트를 설치하고, 실행 파일이 PATH에 없으면 `PDFKIT_WKHTMLTOPDF_PATH`에 경로를 지정합니다. S3 저장을 선택한 경우에는 실행 환경에 해당 버킷 쓰기 권한이 있는 AWS 자격 증명을 제공해야 합니다. 로컬 저장소를 사용할 때에는 API와 작업자가 같은 `STORAGE_DIR`을 공유해야 합니다.
+
+매입 공제 분석은 `app.analysis.contract.PurchaseAnalyzer` 계약 뒤에 어댑터를 연결합니다. 어댑터는 거래 분류·근거·설명만 반환하며 세액 금액을 반환하지 않습니다. 자세한 입출력 필드와 판정 매핑은 `api-spec.md` §5.2를 참고하세요.
+
+OCR도 `app.ocr_pipeline.contract.OcrPipeline` 계약 뒤에서 교체할 수 있습니다. 현재 기본 어댑터는 기존 CLOVA 추출기를 유지하며, 동료 파이프라인을 연결할 때는 `OCR_PIPELINE=모듈경로:팩토리함수`를 지정합니다. 공통 인터페이스와 진행 단계는 [docs/ocr-pipeline-adapter.md](docs/ocr-pipeline-adapter.md)에 있습니다.
+
+작업자 실행 예시는 개발용 단일 프로세스 기준입니다. 운영 배포에서는 작업자 프로세스의 재시작 정책과 로그 수집을 별도로 설정하세요.
 
 ### 4.2 백엔드 테스트
 

@@ -11,11 +11,22 @@ class RegisterRequest(BaseModel):
     name: str
     business_name: str
     business_number: str
+    terms_accepted: bool
+    privacy_accepted: bool
+    marketing_accepted: bool = False
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class EmailAvailabilityRequest(BaseModel):
+    email: EmailStr
+
+
+class EmailAvailabilityResponse(BaseModel):
+    available: bool
 
 
 class UserOut(BaseModel):

@@ -29,6 +29,13 @@ export interface RegisterRequest {
   name: string;
   business_name: string;
   business_number: string;
+  terms_accepted: boolean;
+  privacy_accepted: boolean;
+  marketing_accepted: boolean;
+}
+
+export interface EmailAvailabilityResponse {
+  available: boolean;
 }
 
 export interface AuthResponse {
@@ -42,6 +49,12 @@ export function login(email: string, password: string) {
 
 export function register(data: RegisterRequest) {
   return apiClient.post<AuthResponse>("/auth/register", data).then((res) => res.data);
+}
+
+export function checkEmailAvailability(email: string) {
+  return apiClient
+    .post<EmailAvailabilityResponse>("/auth/email-availability", { email })
+    .then((res) => res.data);
 }
 
 export function getMe() {

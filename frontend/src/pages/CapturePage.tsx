@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { isAxiosError } from "axios";
 import { useNavigate } from "react-router-dom";
-import { uploadReceipt } from "../api/receipts";
+import { enqueueReceiptOcr } from "../api/receipts";
 
 export function CapturePage() {
   const navigate = useNavigate();
@@ -55,8 +55,8 @@ export function CapturePage() {
     setError("");
     setIsUploading(true);
     try {
-      const receipt = await uploadReceipt(file);
-      navigate(`/receipts/${receipt.id}/processing`, { replace: true });
+      const receipt = await enqueueReceiptOcr(file);
+      navigate(`/receipts/${receipt.receipt_id}/processing`, { replace: true });
     } catch (requestError) {
       const message = isAxiosError(requestError)
         ? requestError.response?.data?.error?.message
