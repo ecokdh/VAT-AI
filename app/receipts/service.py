@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.receipts import ocr_client
 from app.receipts.models import Receipt
 from app.receipts.schemas import ReceiptOut, ReceiptSummary
-from app.receipts.storage import FileStorage, LocalFileStorage
+from app.receipts.storage import FileStorage, LocalFileStorage, S3FileStorage
 
 
 def detect_image_type(file_bytes: bytes) -> tuple[str, str] | None:
@@ -91,13 +91,17 @@ def validate_image(file_bytes: bytes, content_type: Optional[str]) -> tuple[str,
     return detected_type, extension
 
 
-storage: FileStorage = LocalFileStorage(settings.STORAGE_DIR)
+storage: FileStorage = (
+    S3FileStorage(settings.S3_BUCKET, settings.AWS_REGION)
+    if settings.S3_BUCKET
+    else LocalFileStorage(settings.STORAGE_DIR)
+)
 
 
 def _delete_after_failure(key: str) -> None:
     try:
         storage.delete(key)
-    except OSError:
+    except Exception:
         # 원래 오류를 보존한다. 저장소 정리는 best effort이다.
         pass
 

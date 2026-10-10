@@ -41,7 +41,8 @@ def auth_headers(client, email="owner@example.com"):
     response = client.post(
         "/auth/register",
         json={"email": email, "password": "correct-password", "name": email,
-              "business_name": "Test Store", "business_number": "123-45-67890"},
+              "business_name": "Test Store", "business_number": "123-45-67890",
+              "terms_accepted": True, "privacy_accepted": True, "marketing_accepted": False},
     )
     assert response.status_code == 201
     return {"Authorization": f"Bearer {response.json()['access_token']}"}

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # A트랙 계약명에 맞춘 JWT 만료 시간 설정.
     JWT_EXPIRE_MINUTES: int = 60 * 24
     OPENAI_API_KEY: str = ""
+    DEDUCTION_ANALYZER: str = ""
     NTS_BUSINESS_API_KEY: str = ""
     NTS_BUSINESS_API_URL: str = "https://api.odcloud.kr/api/nts-businessman/v1/status"
     NTS_BUSINESS_TIMEOUT_SECONDS: float = 10.0
@@ -28,8 +29,12 @@ class Settings(BaseSettings):
     CLOVA_API_KEY: str = ""
     CLOVA_OCR_API_URL: str = ""
     CLOVA_OCR_SECRET_KEY: str = ""
+    OCR_PIPELINE: str = ""
 
     STORAGE_DIR: str = "storage"
+    S3_BUCKET: str = ""
+    AWS_REGION: str = "ap-northeast-2"
+    PDFKIT_WKHTMLTOPDF_PATH: str = ""
     MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024
     MAX_IMAGE_PIXELS: int = 25_000_000
     CLOVA_TIMEOUT_SECONDS: float = 10.0

@@ -1,20 +1,26 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { mockReport } from "../mocks/report";
 import { purchaseTotals, salesTotals } from "../mocks/receipts";
 import { useMaskedFormat } from "../hooks/useMaskedFormat";
 import { AmountVisibilityToggle } from "../components/AmountVisibilityToggle";
 import { getMe, type AuthUser } from "../api/auth";
+import { listTransactions } from "../api/transactions";
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const fmt = useMaskedFormat();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [staleCount, setStaleCount] = useState(0);
 
   useEffect(() => {
     if (!localStorage.getItem("access_token")) return;
     getMe()
       .then(setAuthUser)
+      .catch(() => {});
+    listTransactions("purchase")
+      .then((transactions) => setStaleCount(transactions.filter((item) => item.review_status === "stale").length))
       .catch(() => {});
   }, []);
 
@@ -34,6 +40,12 @@ export function DashboardPage() {
       </header>
 
       <div className="page__body">
+        {location.state?.transactionSaved && <div className="banner banner--info" role="status" style={{ marginBottom: 16 }}>
+          거래를 보관함에 저장했습니다. 공제 분석은 매입 보관함에서 직접 시작할 수 있습니다.
+        </div>}
+        {staleCount > 0 && <button className="banner banner--warning" role="status" style={{ width: "100%", marginBottom: 16, textAlign: "left", cursor: "pointer" }} onClick={() => navigate("/storage/purchase")}>
+          재분석이 필요한 거래가 {staleCount}건 있어요. 매입 보관함에서 선택해 분석해 주세요.
+        </button>}
         <div className="card" style={{ background: "var(--color-surface)", padding: 24 }}>
           <div className="muted" style={{ fontSize: 13 }}>
             2024년 1기 부가가치세 확정 신고 대상

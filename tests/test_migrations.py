@@ -6,7 +6,7 @@ import sys
 from sqlalchemy import create_engine, inspect, text
 
 
-def test_alembic_upgrade_head_creates_a_base_schema(tmp_path: Path):
+def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
     database_path = tmp_path / "migration.db"
     database_url = f"sqlite:///{database_path.as_posix()}"
     environment = os.environ.copy()
@@ -31,7 +31,24 @@ def test_alembic_upgrade_head_creates_a_base_schema(tmp_path: Path):
             "receipts",
             "deductions",
             "business_profiles",
+            "transactions",
+            "transaction_revisions",
+            "analysis_runs",
+            "tax_profiles_v2",
+            "async_jobs",
+            "consent_records",
         }
+        consent_columns = {
+            column["name"] for column in inspect(connection).get_columns("consent_records")
+        }
+        assert consent_columns == {
+            "id", "user_id", "consent_type", "accepted", "document_version", "recorded_at",
+        }
+        receipt_columns = {column["name"] for column in inspect(connection).get_columns("receipts")}
+        assert {
+            "processing_stage", "processing_progress", "stage_statuses_json",
+            "ocr_warnings_json", "ocr_pipeline_name", "ocr_pipeline_version",
+        }.issubset(receipt_columns)
         columns = {column["name"]: column for column in inspect(connection).get_columns("business_profiles")}
         assert set(columns) == {
             "id", "user_id", "business_number", "business_name", "business_status",
@@ -57,4 +74,4 @@ def test_alembic_upgrade_head_creates_a_base_schema(tmp_path: Path):
         revision = connection.execute(
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
-        assert revision == "015d7b1f7bdb"
+        assert revision == "8a4c1d6e2f90"

@@ -32,4 +32,5 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
         yield test_client
 
     app.dependency_overrides.clear()
+    engine.dispose()
 

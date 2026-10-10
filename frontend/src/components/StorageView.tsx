@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "./PageHeader";
 import { SummaryCard } from "./SummaryCard";
 import { FilterChips } from "./FilterChips";
@@ -42,6 +43,7 @@ export function StorageView({
 }: StorageViewProps) {
   const [activeMonth, setActiveMonth] = useState("전체");
   const fmt = useMaskedFormat();
+  const navigate = useNavigate();
 
   const filtered = useMemo(
     () => (activeMonth === "전체" ? receipts : receipts.filter((r) => monthOf(r.issuedAt) === activeMonth)),
@@ -78,6 +80,9 @@ export function StorageView({
 
         <div className="btn-row">
           <button className={`btn ${ctaClass}`}>{ctaLabel}</button>
+          {variant === "primary" && (
+            <button className={`btn ${secondaryClass}`} onClick={() => navigate("/storage/trash")}>휴지통</button>
+          )}
           <button className={`btn ${secondaryClass}`} onClick={onRefresh} disabled={loading}>
             {loading ? "불러오는 중" : "새로고침"}
           </button>
