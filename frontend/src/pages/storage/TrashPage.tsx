@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { isAxiosError } from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { listTrash, requestPermanentDelete, restoreTransaction, type TransactionApi } from "../../api/transactions";
 import { PageHeader } from "../../components/PageHeader";
 
@@ -9,6 +9,10 @@ export function TrashPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const direction = params.get("direction") === "sales" ? "sales" : "purchase";
+  const vaultLabel = direction === "sales" ? "매출" : "매입";
+  const [restoring, setRestoring] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -25,12 +29,17 @@ export function TrashPage() {
   useEffect(() => { void refresh(); }, [refresh]);
 
   async function restore(id: number) {
+    if (restoring) return;
+    setRestoring(true);
     try {
-      await restoreTransaction(id);
+      const restored = await restoreTransaction(id);
+      setParams({ direction: restored.direction }, { replace: true });
       await refresh();
-      setMessage("거래를 복원했습니다. 매입 거래는 예상 세액에 다시 반영하기 전에 재분석이 필요합니다.");
+      setMessage(restored.direction === "sales" ? "매출 거래를 복원했습니다. 매출 보관함에서 확인할 수 있어요." : "매입 거래를 복원했습니다. 예상 세액에 다시 반영하기 전에 재분석이 필요합니다.");
     } catch {
       setMessage("거래를 복원하지 못했습니다.");
+    } finally {
+      setRestoring(false);
     }
   }
 
@@ -46,7 +55,7 @@ export function TrashPage() {
 
   return (
     <div className="page">
-      <PageHeader title="휴지통" />
+      <PageHeader title="휴지통" onBack={() => navigate(`/storage/${direction}`)} />
       <div className="page__body">
         <p>삭제한 거래는 예상 세액에서 제외됩니다. 복원한 매입 거래는 다시 분석해야 공제액에 반영됩니다.</p>
         {message && <div className="banner" role="status">{message}</div>}
@@ -61,14 +70,14 @@ export function TrashPage() {
               <div className="muted">보존 상태: {item.retention_status === "required" ? "법정 보존 기간 중" : item.retention_status === "not_required" ? "영구 삭제 요청 가능" : "보존 의무 확인 필요"}</div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button className="btn btn--secondary" onClick={() => void restore(item.id)}>복원</button>
+              <button className="btn btn--secondary" disabled={restoring} onClick={() => void restore(item.id)}>복원</button>
               <button className="btn btn--secondary" onClick={() => void askPermanentDelete(item.id)}>
                 {item.permanent_delete_requested_at ? "요청 기록됨" : "영구 삭제 요청"}
               </button>
             </div>
           </article>
         ))}
-        <button className="btn btn--secondary" style={{ marginTop: 16 }} onClick={() => navigate("/storage/purchase")}>매입 보관함으로</button>
+        <button className="btn btn--secondary" style={{ marginTop: 16 }} onClick={() => navigate(`/storage/${direction}`)}>{vaultLabel} 보관함으로 이동</button>
       </div>
     </div>
   );

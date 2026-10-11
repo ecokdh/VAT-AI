@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { isAxiosError } from "axios";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "../../components/PageHeader";
+import { Icon } from "../../components/Icon";
 import { checkEmailAvailability, register } from "../../api/auth";
 import { verifyBusiness, type BusinessVerificationResponse } from "../../api/business";
 
@@ -229,7 +230,7 @@ export function SignupPage() {
             <label className="form-field__label" htmlFor="signup-password">비밀번호</label>
             <div className="form-field__input-row">
               <input id="signup-password" className="input" type={showPassword ? "text" : "password"} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-              <button type="button" className="btn btn--secondary btn--sm" style={{ width: 72, flexShrink: 0 }} onClick={() => setShowPassword((shown) => !shown)} aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}>{showPassword ? "숨기기" : "보기"}</button>
+              <button type="button" className="btn btn--secondary btn--sm" style={{ width: 52, flexShrink: 0 }} onClick={() => setShowPassword((shown) => !shown)} aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"} aria-pressed={showPassword}><Icon name={showPassword ? "eyeOff" : "eye"} /></button>
             </div>
             {password.length > 0 && (passwordTooLong
               ? <div className="form-field__hint form-field__hint--error" role="alert">비밀번호가 너무 깁니다. 더 짧게 입력해 주세요.</div>
@@ -243,7 +244,7 @@ export function SignupPage() {
             <label className="form-field__label" htmlFor="signup-password-confirmation">비밀번호 확인</label>
             <div className="form-field__input-row">
               <input id="signup-password-confirmation" className="input" type={showPasswordConfirmation ? "text" : "password"} autoComplete="new-password" value={passwordConfirmation} onChange={(e) => setPasswordConfirmation(e.target.value)} />
-              <button type="button" className="btn btn--secondary btn--sm" style={{ width: 72, flexShrink: 0 }} onClick={() => setShowPasswordConfirmation((shown) => !shown)} aria-label={showPasswordConfirmation ? "비밀번호 확인 숨기기" : "비밀번호 확인 보기"}>{showPasswordConfirmation ? "숨기기" : "보기"}</button>
+              <button type="button" className="btn btn--secondary btn--sm" style={{ width: 52, flexShrink: 0 }} onClick={() => setShowPasswordConfirmation((shown) => !shown)} aria-label={showPasswordConfirmation ? "비밀번호 확인 숨기기" : "비밀번호 확인 보기"} aria-pressed={showPasswordConfirmation}><Icon name={showPasswordConfirmation ? "eyeOff" : "eye"} /></button>
             </div>
             {passwordConfirmation && passwordConfirmation !== password && <div className="form-field__hint form-field__hint--error" role="alert">비밀번호가 일치하지 않습니다.</div>}
           </div>

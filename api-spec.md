@@ -305,3 +305,11 @@ Track C backend endpoint는 구현되어 있다. 현재 Track D의 분석·리�
 ### 5.3 현재 구현 경계
 
 위 계약과 작업 저장소는 v2 구현 기준이다. v1 영수증 OCR은 기존 동기 경로를 유지하고, `POST /v2/receipt-jobs`는 OCR 작업을 비동기로 접수한다. `POST /v2/pdf-jobs?period=...`는 검토 보류·미계산 거래가 있어도 현재 예상치와 주의사항을 담아 PDF 작업을 생성하며, `GET /v2/jobs/{id}`로 작업 상태를 조회한다. 완료된 PDF는 `GET /v2/pdf-jobs/{id}/download`로 소유자만 내려받을 수 있다. 워커는 별도 프로세스로 실행한다. 운영 PDF 생성에는 `pdfkit`, `wkhtmltopdf` 실행 파일 및 한글 글꼴 설정이 필요하고, `S3_BUCKET` 설정 시 업로드 파일과 PDF를 S3에 저장한다. 저장소 설정이 없으면 로컬 파일 저장소를 사용한다.
+
+## 2026-10-11 로컬 QA 호환 확장
+
+- `POST /v2/receipt-jobs`: multipart 필드 `direction` 추가. `purchase` / `sales` 중 하나이며, 생략 시 기존 클라이언트 호환을 위해 `purchase`.
+- `ReceiptProcessingOut` (`GET /v2/receipts/{id}`, inbox, extraction confirmation): `direction` 추가. OCR 진입에서 선택한 보관함을 추출 확인·거래 생성까지 유지한다.
+- `GET /v2/receipts/{id}/image`: 인증된 소유자에게 원본 JPG/PNG를 반환. 다른 사용자는 404, 미인증은 401. 응답은 `Cache-Control: private, no-store`.
+- 분석 작업 `result_json`의 완료된 거래 결과에 `description`, `vendor`, `transaction_date` 스냅샷 추가. 프론트는 기존 결과에 이 필드가 없으면 거래 목록으로 보완한다.
+- DB migration `9b2d5e7f1031`은 기존 영수증 방향을 `purchase`로 유지한다.

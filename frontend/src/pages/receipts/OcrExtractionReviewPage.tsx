@@ -3,6 +3,7 @@ import { isAxiosError } from "axios";
 import { useNavigate, useParams } from "react-router-dom";
 import { confirmReceiptExtraction, getReceipt, type ReceiptProcessingApi } from "../../api/receipts";
 import { PageHeader } from "../../components/PageHeader";
+import { ReceiptPreview } from "../../components/ReceiptPreview";
 
 const fieldLabels: Record<string, string> = {
   vendor: "거래처",
@@ -44,7 +45,7 @@ export function OcrExtractionReviewPage() {
     setError("");
     try {
       await confirmReceiptExtraction(Number(id), { vendor: vendor.trim(), amount: Math.round(Number(amount)), date });
-      navigate("/storage/purchase", { replace: true });
+      navigate(`/storage/${receipt?.direction ?? "purchase"}`, { replace: true });
     } catch (cause) {
       setError(isAxiosError(cause) ? cause.response?.data?.error?.message ?? "추출 결과를 저장하지 못했습니다." : "추출 결과를 저장하지 못했습니다.");
     } finally {
@@ -57,10 +58,11 @@ export function OcrExtractionReviewPage() {
       <PageHeader title="추출 결과 확인" showAmountToggle />
       <div className="page__body">
         <div className="banner banner--info" style={{ marginBottom: 16 }}>
-          인식한 내용을 원본 증빙과 대조해 주세요. 확인을 누르면 매입 보관함으로 이동하며, 거래 확정과 공제 분석은 별도로 진행됩니다.
+          인식한 내용을 원본 증빙과 대조해 주세요. 확인 후 선택한 보관함으로 이동하며, 거래 확정과 공제 분석은 별도로 진행됩니다.
         </div>
         {error && <div className="banner banner--error" role="alert">{error}</div>}
         {loading ? <div className="center-note">추출 결과를 불러오는 중입니다.</div> : receipt && <>
+          <ReceiptPreview id={receipt.id} />
           {receipt.ocr_missing_fields.length > 0 && <div className="banner banner--warning" style={{ marginBottom: 16 }}>
             확인하거나 입력할 항목: {receipt.ocr_missing_fields.map((field) => fieldLabels[field] ?? field).join(", ")}
           </div>}
@@ -82,7 +84,7 @@ export function OcrExtractionReviewPage() {
             <input id="ocr-review-date" className="input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </div>
           <button className="btn btn--primary" style={{ width: "100%", marginTop: 20 }} disabled={saving} onClick={() => void confirmAndOpenVault()}>
-            {saving ? "확인 내용을 저장 중" : "확인하고 매입 보관함으로"}
+            {saving ? "확인 내용을 저장 중" : "확인 후 보관함으로 이동"}
           </button>
         </>}
       </div>

@@ -8,6 +8,7 @@ import { PageHeader } from "../../components/PageHeader";
 export function OcrResultEditPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [direction, setDirection] = useState<"purchase" | "sales">("purchase");
   const [vendor, setVendor] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -27,7 +28,7 @@ export function OcrResultEditPage() {
       .then((receipt) => {
         if (receipt.status !== "done") throw new Error("OCR에 성공한 영수증만 거래로 확정할 수 있습니다.");
         setVendor(receipt.vendor ?? "");
-        setDescription(receipt.ocr_raw ?? "");
+        setDirection(receipt.direction);
         setAmount(receipt.amount == null ? "" : String(Math.round(receipt.amount)));
         setTransactionDate(receipt.date ?? "");
       })
@@ -47,7 +48,7 @@ export function OcrResultEditPage() {
       const supply = taxTreatment === "exempt" ? total : Math.round(total / 1.1);
       const vat = taxTreatment === "exempt" ? 0 : total - supply;
       const transaction = await createTransactionFromReceipt(Number(id), {
-        direction: "purchase",
+        direction,
         transaction_date: transactionDate,
         vendor: vendor.trim(),
         description,
@@ -62,7 +63,7 @@ export function OcrResultEditPage() {
         tax_treatment: taxTreatment,
       });
       await confirmTransaction(transaction.id);
-      navigate("/dashboard", { state: { transactionSaved: true } });
+      navigate(`/storage/${direction}`, { replace: true, state: { transactionSaved: true } });
     } catch (cause) {
       setError(isAxiosError(cause) ? cause.response?.data?.error?.message ?? "거래를 저장하지 못했습니다." : "거래를 저장하지 못했습니다.");
     } finally {
@@ -86,7 +87,7 @@ export function OcrResultEditPage() {
               <input id="transaction-vendor" className="input" value={vendor} onChange={(e) => setVendor(e.target.value)} />
             </div>
             <div className="form-field">
-              <label className="form-field__label" htmlFor="transaction-description">거래 내용</label>
+              <label className="form-field__label" htmlFor="transaction-description">거래 메모 (예: 26/09/11 불고기)</label>
               <input id="transaction-description" className="input" value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
             <div className="form-field">
@@ -110,24 +111,24 @@ export function OcrResultEditPage() {
                 <option value="unknown">증빙 유형 확인 필요</option><option value="tax_invoice">세금계산서</option><option value="card_receipt">사업용 신용카드</option><option value="cash_receipt">현금영수증</option><option value="tax_free_receipt">면세 계산서·영수증</option>
               </select>
             </div>
-            <div className="form-field">
+            {direction === "purchase" && <div className="form-field">
               <label className="form-field__label" htmlFor="business-related">사업 관련 지출인가요?</label>
               <select id="business-related" className="input" value={businessRelated} onChange={(e) => setBusinessRelated(e.target.value as "yes" | "no" | "unknown")}>
                 <option value="unknown">아직 확인하지 않음</option>
                 <option value="yes">예</option>
                 <option value="no">아니요</option>
               </select>
-            </div>
-            {taxTreatment === "exempt" && <section className="card" style={{ marginTop: 12 }}>
+            </div>}
+            {direction === "purchase" && taxTreatment === "exempt" && <section className="card" style={{ marginTop: 12 }}>
               <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}><input type="checkbox" checked={deemedInput} onChange={(e) => setDeemedInput(e.target.checked)} /><span>면세 농·축·수산물 등을 과세사업에 사용했고, 의제매입세액공제 대상 사실을 확인했습니다.</span></label>
               {deemedInput && <div className="form-field" style={{ marginTop: 12 }}><label className="form-field__label" htmlFor="deemed-document">구비 증빙 유형</label><select id="deemed-document" className="input" value={deemedDocument} onChange={(e) => setDeemedDocument(e.target.value as typeof deemedDocument)}><option value="farmer_direct">생산자 직접 구입 증빙</option><option value="purchase_invoice">매입처별 계산서 합계표 등</option><option value="card_statement">카드·현금영수증 등 매입 증빙</option><option value="import_declaration">수입 신고 증빙</option></select><p className="muted">이 선택만으로 공제가 확정되지는 않습니다. 분석 및 업종·한도 확인 전까지 예상 공제액에서 제외됩니다.</p></div>}
             </section>}
-            <p>저장한 매입 거래는 보관함에서 선택해 분석할 수 있습니다. 정보가 부족한 거래는 공제액 계산에서 제외됩니다.</p>
+            <p>저장한 거래는 선택한 보관함에서 확인할 수 있습니다. 매입 거래는 별도로 공제 분석을 요청할 수 있습니다. 정보가 부족한 거래는 공제액 계산에서 제외됩니다.</p>
             <div className="stack-gap-sm" style={{ marginTop: 24 }}>
               <button className="btn btn--primary" disabled={saving} onClick={() => void saveConfirmedTransaction()}>
                 {saving ? "저장 중" : "거래 확정 및 보관함에 저장"}
               </button>
-              <button className="btn btn--secondary" onClick={() => navigate("/capture")}>다시 촬영하기</button>
+              <button className="btn btn--secondary" onClick={() => navigate(`/capture?direction=${direction}`)}>다시 촬영하기</button>
             </div>
           </>
         )}

@@ -445,3 +445,69 @@
   color: var(--color-text-muted);
   margin-top: 16px;
 }
+
+/* QA flow: shared navigation, vaults and analysis */
+.page:has(+ .bottom-nav) { padding-bottom: 86px; }
+.screen-title { font-size: 25px; line-height: 1.4; letter-spacing: -.7px; margin: 12px 0 24px; }
+.bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: var(--page-max-width); display: flex; background: rgba(255,255,255,.97); border-top: 1px solid var(--color-border); padding: 12px 10px max(12px, env(safe-area-inset-bottom)); z-index: 20; }
+.bottom-nav a { flex: 1; display: flex; align-items: center; flex-direction: column; gap: 5px; font-size: 12px; color: #727889; }
+.bottom-nav a.active { color: var(--color-primary); font-weight: 700; }
+.account-menu { position: relative; }
+.menu-backdrop { position: fixed; inset: 0; z-index: 29; cursor: default; }
+.account-menu__items { position: absolute; top: 42px; left: 0; width: 200px; border: 1px solid var(--color-border); border-radius: 18px; padding: 8px; background: white; box-shadow: var(--shadow-elevated); z-index: 30; }
+.account-menu__items button { width: 100%; display: flex; gap: 12px; padding: 14px; text-align: left; border-radius: 10px; }
+.account-menu__items button:hover { background: var(--color-primary-light); }
+.vault-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.vault-card { display: flex; flex-direction: column; gap: 12px; text-align: left; min-width: 0; }
+.vault-card svg, .capture-choice svg { color: var(--color-primary); flex-shrink: 0; }
+.capture-choice { display: flex; gap: 16px; align-items: center; text-align: left; }
+.capture-choice > span:first-of-type { flex: 1; }
+.capture-choice small { display: block; color: #727889; margin-top: 7px; }
+.receipt-preview { margin: 24px auto; width: 100%; max-width: 280px; height: 250px; border-radius: 20px; border: 1px solid var(--color-border); background: var(--color-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; padding: 14px; gap: 8px; }
+.receipt-preview img { width: 100%; height: 195px; object-fit: contain; }
+.receipt-preview figcaption { font-size: 12px; color: #727889; }
+.receipt-preview--wide { max-width: none; height: auto; aspect-ratio: 4 / 3; margin: 20px 0 0; padding: 0; border-radius: 16px; }
+.receipt-preview--wide img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.receipt-preview--wide > .muted { padding: 20px; text-align: center; font-size: 13px; }
+.ocr-loading-spinner { width: 38px; height: 38px; margin: 20px auto 0; border: 4px solid #c5d7ff; border-top-color: #3478ff; border-right-color: #3478ff; border-radius: 50%; animation: spin 1s linear infinite; }
+.password-field { position: relative; }
+.password-field .input { padding-right: 52px; }
+.password-field button { position: absolute; right: 8px; top: 4px; width: 44px; height: 44px; display: grid; place-items: center; color: #727889; }
+.vault-tabs { display: flex; background: var(--color-bg); border-radius: 14px; padding: 4px; margin: 0 0 20px; }
+.vault-tabs a { flex: 1; padding: 12px; text-align: center; color: #727889; font-weight: 700; border-radius: 11px; }
+.vault-tabs a.active { background: white; color: var(--color-primary); box-shadow: var(--shadow-card); }
+.vault-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; }
+.vault-filters label { font-size: 13px; min-width: 0; }
+.vault-filters .input { margin-top: 8px; min-width: 0; }
+.transaction-row { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.transaction-row input[type=checkbox] { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--color-primary); }
+.transaction-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; overflow-wrap: anywhere; }
+.transaction-row__body .muted { font-size: 13px; }
+.transaction-row__body .pill { align-self: flex-start; }
+.row-delete { flex-shrink: 0; padding: 8px; color: #727889; font-size: 12px; }
+.btn-row { flex-wrap: wrap; }
+.btn-row > .btn { min-width: 110px; flex: 1; }
+.analysis-loading { text-align: center; padding: 48px 0 16px; }
+.analysis-spinner { width: 64px; height: 64px; border: 5px solid var(--color-primary-light); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 32px; }
+.analysis-loading ol { text-align: left; padding: 24px 40px; line-height: 2.5; background: var(--color-bg); border-radius: 20px; }
+.result-group { margin: 24px 0; padding: 16px; border: 1px solid var(--color-border); border-radius: 20px; }
+.result-group h2 { font-size: 17px; display: flex; justify-content: space-between; }
+.result-group--possible h2 { color: var(--color-sales-dark); }
+.result-group--review h2 { color: #92720b; }
+.result-group--impossible h2 { color: #ba3439; }
+.result-row { padding: 16px 0; border-top: 1px solid var(--color-divider); overflow-wrap: anywhere; }
+.result-row button { display: flex; justify-content: space-between; gap: 12px; text-align: left; width: 100%; font: inherit; color: inherit; }
+.analysis-peek { position: fixed; inset: 0 0 0 auto; margin: 0; width: 50vw; max-width: 680px; min-width: 320px; height: 100dvh; max-height: 100dvh; padding: 24px; border: 0; border-radius: 22px 0 0 22px; color: var(--color-text); overflow-wrap: anywhere; }
+.analysis-peek::backdrop { background: rgba(20,25,40,.3); }
+.peek-header { display: flex; justify-content: space-between; align-items: center; }
+.source-link { color: var(--color-primary); text-decoration: underline; }
+.delete-confirmation { width: min(400px, calc(100vw - 40px)); padding: 24px; border: 0; border-radius: 22px; color: var(--color-text); box-shadow: var(--shadow-elevated); }
+.delete-confirmation::backdrop { background: rgba(20,25,40,.4); }
+.delete-confirmation h2 { font-size: 21px; margin: 0 0 16px; }
+.delete-confirmation__name { font-weight: 700; overflow-wrap: anywhere; }
+.delete-confirmation p { line-height: 1.6; }
+.delete-confirmation .btn-row { margin-top: 24px; }
+.delete-confirmation__submit { background: var(--color-danger); color: white; }
+:focus-visible { outline: 3px solid #a5b4fc; outline-offset: 3px; }
+@media (max-width: 600px) { .analysis-peek { inset: auto 0 0; width: 100%; min-width: 0; max-width: none; height: 60dvh; border-radius: 22px 22px 0 0; } }
+@media (prefers-reduced-motion: reduce) { .analysis-spinner, .ocr-loading-spinner { animation: none; } }

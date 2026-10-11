@@ -1,172 +1,55 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { mockReport } from "../mocks/report";
-import { purchaseTotals, salesTotals } from "../mocks/receipts";
+import { useNavigate } from "react-router-dom";
 import { useMaskedFormat } from "../hooks/useMaskedFormat";
 import { AmountVisibilityToggle } from "../components/AmountVisibilityToggle";
+import { AccountMenu } from "../components/AccountMenu";
+import { Icon } from "../components/Icon";
 import { getMe, type AuthUser } from "../api/auth";
-import { listTransactions } from "../api/transactions";
+import { getTaxEstimate, listTransactions, type TaxEstimateApi, type TransactionApi } from "../api/transactions";
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const location = useLocation();
   const fmt = useMaskedFormat();
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [staleCount, setStaleCount] = useState(0);
-
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [purchases, setPurchases] = useState<TransactionApi[]>([]);
+  const [sales, setSales] = useState<TransactionApi[]>([]);
+  const [estimate, setEstimate] = useState<TaxEstimateApi | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) return;
-    getMe()
-      .then(setAuthUser)
-      .catch(() => {});
-    listTransactions("purchase")
-      .then((transactions) => setStaleCount(transactions.filter((item) => item.review_status === "stale").length))
-      .catch(() => {});
+    let active = true;
+    async function load() {
+      try {
+        const [account, purchaseRows, salesRows] = await Promise.all([getMe(), listTransactions("purchase"), listTransactions("sales")]);
+        if (!active) return;
+        setUser(account); setPurchases(purchaseRows); setSales(salesRows);
+        const period = account.business?.tax_type_code === "02" ? "2026-YEAR" : new Date().getMonth() < 6 ? "2026-H1" : "2026-H2";
+        if (["01", "02"].includes(account.business?.tax_type_code ?? "")) {
+          const result = await getTaxEstimate(period);
+          if (active) setEstimate(result);
+        }
+      } catch { if (active) setError("정보를 불러오지 못했습니다. 로그인 상태와 서버 연결을 확인해 주세요."); }
+      finally { if (active) setLoading(false); }
+    }
+    void load();
+    return () => { active = false; };
   }, []);
-
-  return (
-    <div className="page">
-      <header className="page-header">
-        <div>
-          <div className="muted" style={{ fontSize: 13 }}>
-            {authUser?.business?.business_name ?? "사업자정보 미확인"}
-          </div>
-          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2 }}>{authUser?.name ?? "사용자"}님, 반갑습니다 👋</div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <AmountVisibilityToggle />
-          <span className="pill pill--primary">{authUser?.business?.tax_type ?? "과세유형 미확인"}</span>
-        </div>
-      </header>
-
-      <div className="page__body">
-        {location.state?.transactionSaved && <div className="banner banner--info" role="status" style={{ marginBottom: 16 }}>
-          거래를 보관함에 저장했습니다. 공제 분석은 매입 보관함에서 직접 시작할 수 있습니다.
-        </div>}
-        {staleCount > 0 && <button className="banner banner--warning" role="status" style={{ width: "100%", marginBottom: 16, textAlign: "left", cursor: "pointer" }} onClick={() => navigate("/storage/purchase")}>
-          재분석이 필요한 거래가 {staleCount}건 있어요. 매입 보관함에서 선택해 분석해 주세요.
-        </button>}
-        <div className="card" style={{ background: "var(--color-surface)", padding: 24 }}>
-          <div className="muted" style={{ fontSize: 13 }}>
-            2024년 1기 부가가치세 확정 신고 대상
-          </div>
-          <div style={{ fontWeight: 700, marginTop: 4 }}>예상 납부(환급) 세액</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: "var(--color-primary)", marginTop: 8 }}>
-            {fmt.wonSpaced(mockReport.finalTax)}
-          </div>
-          <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            매출세액에서 매입세액을 공제한 최종 예상 세액
-          </div>
-
-          <hr className="summary-card__divider" style={{ borderTopColor: "var(--color-divider)", margin: "18px 0 10px" }} />
-
-          <div className="field-row">
-            <span className="field-row__label">🔵 누적 매출세액 (+)</span>
-            <span className="field-row__value">{fmt.won(mockReport.salesTax)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">🔴 누적 매입세액 (-)</span>
-            <span className="field-row__value">{fmt.won(mockReport.purchaseTaxTotal)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">누적 총 공급가액</span>
-            <span className="field-row__value">{fmt.won(mockReport.taxBase)}</span>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
-          <QuickAction icon="📷" title="계산서 촬영 (OCR)" subtitle="영수증/계산서 찍어 올리기" onClick={() => navigate("/capture")} />
-          <QuickAction icon="💬" title="ChatGPT 세액 상담" subtitle="AI와 실시간 세액 계산법" onClick={() => navigate("/receipts/p_new/analysis")} />
-          <QuickAction
-            icon="🗂️"
-            title="매입 보관함"
-            subtitle={`${purchaseTotals.count}건 · ${fmt.won(purchaseTotals.supplyAmount)}`}
-            tag="매입"
-            onClick={() => navigate("/storage/purchase")}
-          />
-          <QuickAction
-            icon="🗂️"
-            title="매출 보관함"
-            subtitle={`${salesTotals.thisMonthCount}건 · ${fmt.won(salesTotals.thisMonthSupplyAmount)}`}
-            tag="매출"
-            onClick={() => navigate("/storage/sales")}
-          />
-        </div>
-
-        <button
-          className="card"
-          style={{
-            width: "100%",
-            marginTop: 16,
-            background: "var(--color-primary-light)",
-            border: "none",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            textAlign: "left",
-          }}
-          onClick={() => navigate("/reports")}
-        >
-          <div>
-            <div style={{ color: "var(--color-primary)", fontWeight: 700, fontSize: 13 }}>신고 기한 임박</div>
-            <div style={{ fontWeight: 700, marginTop: 4 }}>클릭 한 번으로 부가가치세 신고서 생성</div>
-          </div>
-          <span
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: "50%",
-              background: "var(--color-primary)",
-              color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            →
-          </span>
-        </button>
-      </div>
+  const stale = purchases.filter((row) => row.review_status === "stale").length;
+  return <div className="page"><header className="page-header"><AccountMenu /><strong>VAT-AI</strong><AmountVisibilityToggle /></header>
+    <div className="page__body">
+      <p className="muted">{user?.business?.business_name ?? "내 사업장"}</p>
+      <h1 className="screen-title">{user?.name ?? "사용자"}님,<br />오늘의 거래를 정리해 볼까요?</h1>
+      {error && <p className="banner banner--error" role="alert">{error}</p>}
+      <section className="summary-card summary-card--primary">
+        <div className="summary-card__eyebrow">{estimate?.period ?? "현재 신고 기간"} 예상 납부세액</div>
+        <div style={{ fontSize: 32, fontWeight: 800, margin: "12px 0" }}>{loading ? "불러오는 중" : estimate?.payable_estimate == null ? "확인 필요" : fmt.won(estimate.payable_estimate)}</div>
+        <p style={{ fontSize: 13, margin: 0 }}>{estimate ? "확인된 거래 기준의 예상 금액입니다." : "사업자 정보와 거래를 확인하면 예상 세액을 볼 수 있어요."}</p>
+      </section>
+      {stale > 0 && <button className="banner banner--warning" style={{ width: "100%", marginTop: 16 }} onClick={() => navigate("/storage/purchase")}>다시 분석할 거래 {stale}건을 확인해 주세요 ›</button>}
+      <button className="card capture-choice" style={{ width: "100%", marginTop: 20 }} onClick={() => navigate("/capture")}><Icon name="camera" size={30} /><span><strong>계산서 촬영 (OCR)</strong><small>매입·매출 선택 후 증빙 등록</small></span><span>›</span></button>
+      <h2 style={{ fontSize: 18, marginTop: 28 }}>내 보관함</h2>
+      <div className="vault-grid">{([['purchase', '매입', purchases], ['sales', '매출', sales]] as const).map(([direction, label, rows]) => <button key={direction} className="card vault-card" onClick={() => navigate(`/storage/${direction}`)}><Icon name="folder" /><strong>{label} 보관함</strong><span className="muted">{rows.length}건</span><strong>{fmt.won(rows.reduce((sum, row) => sum + row.total_amount, 0))}</strong></button>)}</div>
+      <button className="btn btn--secondary" style={{ marginTop: 20 }} onClick={() => navigate("/reports")}>신고 전 검토 · 리포트</button>
     </div>
-  );
-}
-
-interface QuickActionProps {
-  icon: string;
-  title: string;
-  subtitle: string;
-  tag?: string;
-  onClick: () => void;
-}
-
-function QuickAction({ icon, title, subtitle, tag, onClick }: QuickActionProps) {
-  return (
-    <button className="card" style={{ textAlign: "left", position: "relative" }} onClick={onClick}>
-      {tag && (
-        <span className="pill pill--muted" style={{ position: "absolute", top: 14, right: 14 }}>
-          {tag}
-        </span>
-      )}
-      <div
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 12,
-          background: "var(--color-primary-light)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 18,
-          marginBottom: 12,
-        }}
-      >
-        {icon}
-      </div>
-      <div style={{ fontWeight: 700, fontSize: 15 }}>{title}</div>
-      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-        {subtitle}
-      </div>
-    </button>
-  );
+  </div>;
 }

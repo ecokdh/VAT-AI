@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { isAxiosError } from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { PageHeader } from "../components/PageHeader";
+import { Icon } from "../components/Icon";
 import { enqueueReceiptOcr } from "../api/receipts";
 
 export function CapturePage() {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const direction = params.get("direction");
+  const hasDirection = direction === "purchase" || direction === "sales";
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -17,6 +22,7 @@ export function CapturePage() {
 
   // 카메라 스트림 시작/정리 — facingMode가 바뀔 때마다 재실행됨
   useEffect(() => {
+    if (!hasDirection) return;
     let cancelled = false;
 
     async function startCamera() {
@@ -49,13 +55,14 @@ export function CapturePage() {
       cancelled = true;
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [facingMode]);
+  }, [facingMode, hasDirection]);
 
   async function uploadAndNavigate(file: File) {
+    if (direction !== "purchase" && direction !== "sales") return;
     setError("");
     setIsUploading(true);
     try {
-      const receipt = await enqueueReceiptOcr(file);
+      const receipt = await enqueueReceiptOcr(file, direction);
       navigate(`/receipts/${receipt.receipt_id}/processing`, { replace: true });
     } catch (requestError) {
       const message = isAxiosError(requestError)
@@ -109,6 +116,11 @@ export function CapturePage() {
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
   }
 
+  if (!hasDirection) return <div className="page"><PageHeader title="증빙 등록" /><div className="page__body">
+    <h1 className="screen-title">어떤 거래의 증빙인가요?</h1><p className="muted">보관할 곳을 선택한 뒤 촬영하거나 파일을 올려주세요.</p>
+    <div className="stack-gap-sm" style={{ marginTop: 28 }}>{(["purchase", "sales"] as const).map((value) => <button className="card capture-choice" key={value} onClick={() => setParams({ direction: value })}><Icon name="folder" size={30} /><span><strong>{value === "purchase" ? "매입" : "매출"}</strong><small>{value === "purchase" ? "사업을 위해 지출한 거래" : "고객에게 판매한 거래"}</small></span><span>›</span></button>)}</div>
+  </div></div>;
+
   return (
     <div className="page" style={{ background: "#0c0c10" }}>
       <header className="page-header" style={{ background: "transparent" }}>
@@ -116,7 +128,7 @@ export function CapturePage() {
           ‹
         </button>
         <span className="page-header__title" style={{ color: "#fff" }}>
-          세금계산서 / 영수증 촬영
+          {direction === "purchase" ? "매입" : "매출"} 증빙 촬영
         </span>
         <span className="icon-btn" style={{ color: "#fff" }}>
           ⚡
@@ -190,7 +202,7 @@ export function CapturePage() {
       )}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", padding: "28px 20px 40px" }}>
-        <CaptureControl icon="🖼️" label="앨범에서 선택" onClick={openFilePicker} disabled={isUploading} />
+        <CaptureControl icon="▧" label="앨범 및 파일 선택" onClick={openFilePicker} disabled={isUploading} />
         <button
           onClick={captureFromVideo}
           disabled={isUploading || !cameraReady}

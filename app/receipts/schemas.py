@@ -37,6 +37,7 @@ class ReceiptSummary(BaseModel):
 class ReceiptProcessingOut(ReceiptOut):
     """v2-only receipt details with replaceable OCR pipeline progress."""
 
+    direction: Literal["purchase", "sales"]
     processing_stage: Optional[str]
     processing_progress: int
     stage_statuses: dict[str, str]

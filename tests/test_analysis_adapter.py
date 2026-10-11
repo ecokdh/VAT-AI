@@ -1,4 +1,5 @@
 from datetime import date
+import json
 
 import pytest
 from pydantic import ValidationError
@@ -84,6 +85,10 @@ def test_adapter_decision_maps_to_tax_engine_without_model_amounts(
     assert item.review_status == review_status
     assert item.risk_level == risk_level
     assert item.deductible_vat == 0
+    result = json.loads(run.result_json)[0]
+    assert result["description"] == "업무용 소모품"
+    assert result["vendor"] == "문구점"
+    assert result["transaction_date"] == "2026-03-02"
     estimate = service.calculate_period_estimate(session, user, "2026-H1", None)
     assert estimate["eligible_input_vat"] == expected_input_vat
     assert estimate["uncalculated_transaction_count"] == expected_uncalculated

@@ -1,39 +1,51 @@
 import { useCallback, useEffect, useState } from "react";
 import { isAxiosError } from "axios";
-import { useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { getMe } from "../../api/auth";
-import { createAnalysisRun, getAnalysisRun, getTaxEstimate, getTaxProfile, listTransactions, moveTransactionToTrash, saveTaxProfile, type AnalysisRunApi, type TaxEstimateApi, type TaxProfileApi, type TaxProfileInput, type TransactionApi } from "../../api/transactions";
+import { createAnalysisRun, getTaxEstimate, getTaxProfile, listTransactions, moveTransactionToTrash, saveTaxProfile, type TaxEstimateApi, type TaxProfileApi, type TaxProfileInput, type TransactionApi } from "../../api/transactions";
+import { useMaskedFormat } from "../../hooks/useMaskedFormat";
 import { PageHeader } from "../../components/PageHeader";
+import { DeleteConfirmation } from "../../components/DeleteConfirmation";
 import { listReceiptInbox, type ReceiptProcessingApi } from "../../api/receipts";
 
 const won = (value: number | null) => value == null ? "확인 필요" : `${value.toLocaleString()}원`;
 
-export function PurchaseTransactionStoragePage() {
+export function PurchaseTransactionStoragePage({ direction = "purchase" }: { direction?: "purchase" | "sales" }) {
+  const location = useLocation();
+  const fmt = useMaskedFormat();
+  const [month, setMonth] = useState("");
+  const [order, setOrder] = useState("newest");
+  const [status, setStatus] = useState("all");
+  const purchase = direction === "purchase";
   const [transactions, setTransactions] = useState<TransactionApi[]>([]);
   const [receiptInbox, setReceiptInbox] = useState<ReceiptProcessingApi[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
   const [estimate, setEstimate] = useState<TaxEstimateApi | null>(null);
   const [period, setPeriod] = useState("2026-H1");
   const [taxType, setTaxType] = useState<string | null>(null);
-  const [run, setRun] = useState<AnalysisRunApi | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [taxProfile, setTaxProfile] = useState<TaxProfileApi | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const navigate = useNavigate();
+  const [deleteTarget, setDeleteTarget] = useState<TransactionApi | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await listTransactions("purchase");
+      const rows = await listTransactions(direction);
       setTransactions(rows);
-      setReceiptInbox(await listReceiptInbox());
+      setSelected((ids) => ids.filter((id) => rows.some((row) => row.id === id)));
+      setReceiptInbox((await listReceiptInbox()).filter((receipt) => receipt.direction === direction));
+      if (!purchase) return;
       setTaxProfile(await getTaxProfile());
       const user = await getMe();
       const simplified = user.business?.tax_type_code === "02";
       setTaxType(simplified ? "simplified" : user.business?.tax_type_code === "01" ? "general" : null);
-      const nextPeriod = simplified ? "2026-YEAR" : "2026-H1";
+      const nextPeriod = simplified ? "2026-YEAR" : new Date().getMonth() < 6 ? "2026-H1" : "2026-H2";
       setPeriod(nextPeriod);
       if (user.business?.tax_type_code === "01" || simplified) {
         setEstimate(await getTaxEstimate(nextPeriod));
@@ -43,7 +55,7 @@ export function PurchaseTransactionStoragePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [direction, purchase]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -52,22 +64,8 @@ export function PurchaseTransactionStoragePage() {
     setBusy(true);
     setMessage("");
     try {
-      let current = await createAnalysisRun(selected);
-      setRun(current);
-      for (let attempt = 0; attempt < 60 && (current.status === "PENDING" || current.status === "PROCESSING"); attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        current = await getAnalysisRun(current.id);
-        setRun(current);
-      }
-      if (current.status === "COMPLETED") {
-        setMessage("선택한 거래의 분석 작업이 끝났습니다. 검토 보류 거래는 예상 공제액에 포함되지 않습니다.");
-        setSelected([]);
-        await refresh();
-      } else if (current.status === "FAILED") {
-        setMessage(current.error_message ?? "분석에 실패했습니다. 잠시 뒤 다시 시도해 주세요.");
-      } else {
-        setMessage("분석은 계속 진행 중입니다. 이 화면을 새로고침해 상태를 확인할 수 있습니다.");
-      }
+      const current = await createAnalysisRun(selected);
+      navigate(`/analysis/${current.id}`);
     } catch (error) {
       setMessage(isAxiosError(error) ? error.response?.data?.error?.message ?? "분석 작업을 시작하지 못했습니다." : "분석 작업을 시작하지 못했습니다.");
     } finally {
@@ -76,13 +74,19 @@ export function PurchaseTransactionStoragePage() {
   }
 
   async function removeTransaction(id: number) {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError("");
     try {
       await moveTransactionToTrash(id);
+      setDeleteTarget(null);
       setSelected((current) => current.filter((selectedId) => selectedId !== id));
       await refresh();
       setMessage("거래를 휴지통으로 옮겼습니다. 예상 세액 집계에서 제외했습니다.");
     } catch {
-      setMessage("거래를 휴지통으로 옮기지 못했습니다.");
+      setDeleteError("거래를 휴지통으로 옮기지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -114,11 +118,18 @@ export function PurchaseTransactionStoragePage() {
     setTaxProfile((current) => current ? { ...current, [key]: value, confirmed: false } : current);
   }
 
+  const statusLabels: Record<string, string> = { pending: "분석 전", not_analyzed: "분석 전", analyzed: "공제 가능", caution: "애매 · 검토 필요", insufficient_info: "정보 부족", excluded: "공제 불가능", stale: "재분석 필요" };
+  const filtered = transactions.filter((item) => (!month || item.transaction_date.startsWith(month)) && (status === "all" || item.review_status === status)).sort((a, b) => order === "amount" ? b.total_amount - a.total_amount : order === "oldest" ? a.transaction_date.localeCompare(b.transaction_date) : b.transaction_date.localeCompare(a.transaction_date));
+
   return (
     <div className="page">
-      <PageHeader title="매입 거래 보관함" showAmountToggle />
+      <PageHeader title="거래 보관함" showAmountToggle />
       <div className="page__body">
-        {estimate && (
+        <nav className="vault-tabs" aria-label="보관함 종류"><NavLink to="/storage/purchase">매입</NavLink><NavLink to="/storage/sales">매출</NavLink></nav>
+        {location.state?.transactionSaved && <p className="banner banner--info" role="status">거래를 보관함에 저장했습니다.</p>}
+        <section className={`summary-card ${purchase ? "summary-card--primary" : "summary-card--sales"}`}><div>{purchase ? "매입" : "매출"} 거래 총액</div><h2>{fmt.won(transactions.reduce((sum, row) => sum + row.total_amount, 0))}</h2><span>{transactions.length}건의 거래</span></section>
+        <button className="btn btn--secondary" style={{ margin: "16px 0" }} onClick={() => navigate(`/capture?direction=${direction}`)}>증빙 추가하기</button>
+        {purchase && estimate && (
           <section className="card" style={{ marginBottom: 16 }}>
             <label className="form-field__label" htmlFor="tax-period">2026 신고 기간</label>
             <select id="tax-period" className="input" value={period} onChange={(event) => void changePeriod(event.target.value)}>
@@ -130,8 +141,8 @@ export function PurchaseTransactionStoragePage() {
             {estimate.notes.map((note) => <p key={note} className="muted">{note}</p>)}
           </section>
         )}
-        {!estimate && !loading && <div className="banner banner--warning">사업자의 국세청 과세유형을 확인해야 예상 세액을 계산할 수 있습니다.</div>}
-        {taxProfile && (
+        {purchase && !estimate && !loading && <div className="banner banner--warning">사업자의 국세청 과세유형을 확인해야 예상 세액을 계산할 수 있습니다.</div>}
+        {purchase && taxProfile && (
           <details className="card" style={{ marginBottom: 16 }}>
             <summary style={{ cursor: "pointer", fontWeight: 600 }}>2026 사업자·과세기간 정보 {taxProfile.confirmed ? "(확인 완료)" : "(확인 필요)"}</summary>
             <p className="muted">입력한 값은 확인 완료 후 계산에 사용됩니다. 불명확한 거래는 자동으로 추정하지 않습니다.</p>
@@ -159,7 +170,7 @@ export function PurchaseTransactionStoragePage() {
         {message && <div className="banner banner--info" role="status" style={{ marginBottom: 12 }}>{message}</div>}
         {receiptInbox.length > 0 && (
           <section style={{ marginBottom: 20 }}>
-            <h2 style={{ fontSize: 18 }}>추출 결과 확인이 필요해요</h2>
+            <h2 style={{ fontSize: 18 }}>거래 정보 확인이 필요해요</h2>
             <p className="muted">추출 결과 확인은 끝났습니다. 보관함에서 거래 정보를 검토·저장한 뒤 별도로 분석할 수 있습니다.</p>
             {receiptInbox.map((receipt) => (
               <article key={receipt.id} className="card" style={{ marginBottom: 10 }}>
@@ -174,33 +185,37 @@ export function PurchaseTransactionStoragePage() {
           </section>
         )}
         <div className="btn-row" style={{ marginBottom: 16 }}>
-          <button className="btn btn--primary" disabled={busy || selected.length === 0} onClick={() => void analyzeSelected()}>
-            {busy ? `분석 ${run?.status ?? "PENDING"}` : `선택 거래 분석하기 (${selected.length})`}
-          </button>
-          <button className="btn btn--secondary" onClick={() => navigate("/storage/trash")}>휴지통</button>
+          {purchase && <button className="btn btn--primary" disabled={busy || selected.length === 0} onClick={() => void analyzeSelected()}>
+            {busy ? "분석 준비 중" : `선택 거래 분석하기 (${selected.length})`}
+          </button>}
+          <button className="btn btn--secondary" onClick={() => navigate(`/storage/trash?direction=${direction}`)}>휴지통</button>
           <button className="btn btn--secondary" onClick={() => void refresh()} disabled={loading}>새로고침</button>
         </div>
+        <div className="vault-filters"><label>거래 월<input className="input" type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><label>정렬<select className="input" value={order} onChange={(event) => setOrder(event.target.value)}><option value="newest">최신순</option><option value="oldest">오래된순</option><option value="amount">금액순</option></select></label></div>
+        {purchase && <label className="form-field">분석 상태<select className="input" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">전체</option>{Object.entries(statusLabels).filter(([key]) => key !== "pending").map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>}
+        <div className="field-row"><span className="muted">{filtered.length}건</span><button onClick={() => { setMonth(""); setStatus("all"); }}>필터 초기화</button></div>
         {loading && <div className="center-note">거래를 불러오는 중입니다.</div>}
-        {!loading && transactions.length === 0 && <div className="center-note">확정된 매입 거래가 없습니다. OCR 결과를 확인하고 저장해 주세요.</div>}
-        {transactions.map((item) => (
-          <article key={item.id} className="card" style={{ marginBottom: 10, display: "flex", gap: 12, alignItems: "flex-start" }}>
-            <input
+        {!loading && filtered.length === 0 && <div className="center-note">표시할 거래가 없습니다. 증빙을 등록하거나 필터를 변경해 주세요.</div>}
+        {filtered.map((item) => (
+          <article key={item.id} className="card transaction-row">
+            {purchase && <input
               type="checkbox"
               aria-label={`${item.vendor} 분석 선택`}
               checked={selected.includes(item.id)}
               disabled={item.state !== "confirmed" || item.review_status === "analyzed"}
               onChange={(event) => setSelected((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))}
-            />
-            <div style={{ flex: 1 }}>
-              <strong>{item.vendor}</strong>
-              <div className="muted">{item.transaction_date} · {item.total_amount.toLocaleString()}원 · {item.state}</div>
-              <div>{item.description}</div>
-              <div className="muted">분석 상태: {item.review_status === "stale" ? "수정되어 재분석 필요" : item.review_status}</div>
+            />}
+            <div className="transaction-row__body">
+              <strong>{item.description || item.vendor}</strong>
+              <div className="muted">{item.transaction_date} · {item.vendor}</div>
+              <strong>{fmt.won(item.total_amount)}</strong>
+              <div className="pill pill--muted">{purchase ? statusLabels[item.review_status] ?? "확인 필요" : item.state === "confirmed" ? "확인 완료" : "확인 전"}</div>
             </div>
-            <button className="btn btn--secondary" onClick={() => void removeTransaction(item.id)}>삭제</button>
+            <button className="row-delete" onClick={() => { setDeleteError(""); setDeleteTarget(item); }}>삭제</button>
           </article>
         ))}
       </div>
+      {deleteTarget && <DeleteConfirmation name={deleteTarget.description || deleteTarget.vendor} busy={deleting} error={deleteError} onCancel={() => setDeleteTarget(null)} onConfirm={() => void removeTransaction(deleteTarget.id)} />}
     </div>
   );
 }

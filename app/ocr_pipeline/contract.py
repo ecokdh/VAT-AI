@@ -77,8 +77,9 @@ class ClovaPipelineAdapter:
         from app.receipts.ocr_client import extract_receipt_sync
 
         result = extract_receipt_sync(request.image_bytes, request.content_type)
-        report_progress(OcrStageUpdate(stage=OcrStage.TEXT_RECOGNITION, status=OcrStageStatus.COMPLETED,
-                                       progress_percent=60, message="글자 인식이 끝났습니다."))
+        report_progress(OcrStageUpdate(stage=OcrStage.TEXT_RECOGNITION,
+                                       status=OcrStageStatus.COMPLETED if result else OcrStageStatus.FAILED,
+                                       progress_percent=60, message="글자 인식이 끝났습니다." if result else "글자 인식 결과를 얻지 못했습니다."))
         report_progress(OcrStageUpdate(stage=OcrStage.TRANSACTION_EXTRACTION, status=OcrStageStatus.PROCESSING,
                                        progress_percent=65, message="거래 정보와 금액을 정리하고 있습니다."))
         report_progress(OcrStageUpdate(stage=OcrStage.TRANSACTION_EXTRACTION,
@@ -105,7 +106,8 @@ class ClovaPipelineAdapter:
             transaction_date=result.date if result else None,
             raw_text=result.ocr_raw if result else None,
             missing_fields=missing,
-            warnings=["일부 항목을 직접 확인하거나 입력해 주세요."] if missing else [],
+            warnings=(["자동 인식 결과를 얻지 못했습니다. 원본을 보고 모든 항목을 직접 입력해 주세요."]
+                      if result is None else ["일부 항목을 직접 확인하거나 입력해 주세요."] if missing else []),
             retention_status="under_review",
             pipeline_name="clova_compat",
             pipeline_version="1",
