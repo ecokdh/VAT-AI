@@ -1,40 +1,21 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { isAxiosError } from "axios";
-import { getMe } from "../../api/auth";
-import { createPdfJob, downloadPdfJob, getAsyncJob, getTaxEstimate, type TaxEstimateApi } from "../../api/transactions";
+import { createPdfJob, downloadPdfJob, getAsyncJob } from "../../api/transactions";
 import { PageHeader } from "../../components/PageHeader";
-
-const won = (value: number | null) => value == null ? "확인 필요" : `${value.toLocaleString()}원`;
+import { useReviewOverview, periodLabel } from "../../hooks/useReviewOverview";
+import { useMaskedFormat } from "../../hooks/useMaskedFormat";
 
 export function ReportPage() {
-  const [estimate, setEstimate] = useState<TaxEstimateApi | null>(null);
-  const [period, setPeriod] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [pdfBusy, setPdfBusy] = useState(false);
-  const [pdfMessage, setPdfMessage] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    async function load() {
-      try {
-        const user = await getMe();
-        const taxType = user.business?.tax_type_code === "01" ? "general" : user.business?.tax_type_code === "02" ? "simplified" : null;
-        if (!taxType) throw new Error("국세청 과세유형 확인이 필요합니다.");
-        const nextPeriod = taxType === "simplified" ? "2026-YEAR" : "2026-H1";
-        const result = await getTaxEstimate(nextPeriod);
-        if (active) { setPeriod(nextPeriod); setEstimate(result); }
-      } catch (cause) {
-        if (!active) return;
-        const message = isAxiosError(cause) ? cause.response?.data?.error?.message : undefined;
-        setError(message ?? (cause instanceof Error ? cause.message : "예상 세액을 불러오지 못했습니다."));
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    void load();
-    return () => { active = false; };
-  }, []);
+  const view=useReviewOverview();
+  const {period,estimate}=view;
+  const navigate=useNavigate();
+  const go = (path: string) => navigate(`${path}${path.includes("?") ? "&" : "?"}period=${period}`);
+  const fmt=useMaskedFormat();
+  const [error,setError]=useState("");
+  const [pdfBusy,setPdfBusy]=useState(false);
+  const [pdfMessage,setPdfMessage]=useState("");
+  const [reviewed,setReviewed]=useState(false);
 
   async function createReviewPdf() {
     if (!period || pdfBusy) return;
@@ -69,36 +50,17 @@ export function ReportPage() {
     }
   }
 
-  return (
-    <div className="page">
-      <PageHeader title="신고 전 검토 자료" showAmountToggle />
-      <div className="page__body">
-        <div className="banner banner--warning" style={{ marginBottom: 16 }}>
-          <span>안내</span><div>이 자료는 사업자의 검토를 위한 예상치이며 세무 신고서가 아닙니다. VAT-AI는 홈택스에 신고하거나 제출하지 않습니다.</div>
-        </div>
-        {error && <div className="banner banner--error" role="alert">{error}</div>}
-        {loading && <div className="center-note">2026년 거래를 계산하고 있습니다.</div>}
-        {estimate && <>
-          <section className="summary-card summary-card--primary" style={{ marginBottom: 16 }}>
-            <div className="summary-card__eyebrow">{estimate.tax_type === "general" ? "일반과세자" : "간이과세자"} · {period === "2026-YEAR" ? "2026년 연간" : period === "2026-H1" ? "2026년 1기" : "2026년 2기"}</div>
-            <div style={{ fontWeight: 800, fontSize: 18, marginTop: 4 }}>예상 납부세액 {won(estimate.payable_estimate)}</div>
-            <div style={{ marginTop: 8 }}>계산 상태: {estimate.status} · 검토 {estimate.caution_transaction_count}건 · 미계산 {estimate.uncalculated_transaction_count}건</div>
-          </section>
-          <section className="card">
-            <div className="card__title">2026년 예상 세액</div>
-            <div className="field-row"><span className="field-row__label">매출세액</span><span className="field-row__value">{won(estimate.output_vat)}</span></div>
-            <div className="field-row"><span className="field-row__label">일반 매입 공제액</span><span className="field-row__value">{won(estimate.eligible_input_vat)}</span></div>
-            <div className="field-row"><span className="field-row__label">의제매입세액공제</span><span className="field-row__value">{won(estimate.deemed_input_vat)}</span></div>
-            <div className="field-row"><strong>예상 납부세액</strong><strong>{won(estimate.payable_estimate)}</strong></div>
-          </section>
-          <section className="card" style={{ marginTop: 12 }}>
-            <div className="card__title">검토할 내용</div>
-            {estimate.notes.length ? estimate.notes.map((note) => <p key={note}>{note}</p>) : <p>현재 계산에 포함되지 않은 안내가 없습니다.</p>}
-          </section>
-          <button className="btn btn--primary" style={{ marginTop: 16 }} disabled={pdfBusy} onClick={() => void createReviewPdf()}>{pdfBusy ? "PDF 생성 중…" : "검토용 PDF 만들기"}</button>
-          {pdfMessage && <p className="muted" role="status">{pdfMessage}</p>}
-        </>}
-      </div>
-    </div>
-  );
+
+  return <div className="page qa-page"><PageHeader title="신고 전 검토" showAmountToggle/><main className="page__body">
+    <p className="eyebrow muted">부가가치세 신고 준비</p><h1 className="screen-title">신고할 내용을 확인하세요</h1><p className="muted">확정 거래와 공제 분석을 바탕으로 신고 전 확인사항을 정리했어요.</p>
+    <label className="form-field"><span className="form-field__label">신고 대상 기간</span><select className="input" value={period} onChange={e=>{view.setPeriod(e.target.value);setReviewed(false);}}>{(view.user?.business?.tax_type_code==="02"?["2026-YEAR"]:["2026-H1","2026-H2"]).map(p=><option key={p} value={p}>{periodLabel(p)}</option>)}</select></label>
+    {(error || view.error) && <p className="banner banner--error" role="alert">{error || view.error}</p>}
+    {view.loading && <p role="status">신고 준비 상태를 불러오는 중입니다.</p>}
+    <section className="report-total"><small className="muted">예상 납부세액</small><strong>{estimate?.payable_estimate==null?"확인 필요":fmt.won(estimate.payable_estimate)}</strong><p className="muted">확정 거래 기준 · 검토를 위한 참고용 추정치</p></section>
+    {estimate ? <details className="card"><summary>계산 내역 자세히 보기</summary>{[["매출세액",estimate.output_vat],["일반 매입 공제액",estimate.eligible_input_vat],["의제매입 공제액",estimate.deemed_input_vat]].map(([label,value])=><div className="field-row" key={String(label)}><span>{label}</span><strong>{value==null?"확인 필요":fmt.won(Number(value))}</strong></div>)}{estimate.notes.map(note=><p className="muted" key={note}>{note}</p>)}</details> : <button className="banner banner--warning" onClick={()=>navigate("/account")}>사업자 과세유형 및 설정을 확인해 주세요 ›</button>}
+    <section className="card overview-card"><h2 className="section-title">신고 준비 현황</h2><div className="stat-grid">{[["전체 거래",view.total],["확인 필요",view.unconfirmed],["공제 검토",view.pending]].map(([label,count])=><div key={label}><strong>{count}</strong><small>{label}</small></div>)}</div><div className="action-list"><button onClick={()=>go(`/storage/${view.firstDirection}?status=review`)}><span><strong>미확정 거래 {view.unconfirmed}건</strong><small>OCR 결과와 거래 정보를 확인해요</small></span><span>›</span></button><button onClick={()=>go("/storage/purchase?status=review")}><span><strong>공제 분석 확인 {view.pending}건</strong><small>분석 전·판단 보류 거래를 확인해요</small></span><span>›</span></button></div></section>
+    <section className="card review-checklist"><h2 className="section-title">신고 전 체크리스트</h2><p>{estimate ? "✓" : "○"} 사업자정보·과세유형 확인</p><p>{!view.loading && view.total>0 && view.unconfirmed===0?"✓":"○"} 매입·매출 거래 확정</p><p>{!view.loading && view.total>0 && view.pending===0?"✓":"○"} 공제 보류 거래 확인</p><label><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> 예상세액 및 계산 근거 검토</label></section>
+    <button className="btn btn--primary" disabled={pdfBusy || !estimate} onClick={()=>void createReviewPdf()}>{pdfBusy?"PDF 생성 중…":"신고 지원용 PDF 생성"}</button>{pdfMessage && <p role="status">{pdfMessage}</p>}
+    <p className="footnote">이 자료는 세무 신고서가 아닙니다. 실제 제출 전 내용을 검토해 주세요.</p>
+  </main></div>;
 }

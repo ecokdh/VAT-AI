@@ -12,6 +12,8 @@ export interface TransactionApi {
   vat_amount: number | null;
   state: string;
   review_status: string;
+  analysis_reason: string | null;
+  legal_references_json: string;
   deleted_at: string | null;
   permanent_delete_requested_at: string | null;
   retention_status: "required" | "not_required" | "under_review";

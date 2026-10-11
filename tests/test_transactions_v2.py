@@ -12,6 +12,7 @@ from app.transactions import service
 from app.transactions.models import AnalysisRun, Transaction, TransactionRevision
 from app.transactions.schemas import AnalysisRunCreate, TransactionCreate, TransactionUpdate
 from app.jobs.worker import process_analysis_run
+from app.receipts.models import Receipt
 
 
 def setup_session():
@@ -149,3 +150,37 @@ def test_tax_profile_draft_can_be_saved_without_being_used_for_rates():
 
     assert profile.entity_type == "individual"
     assert profile.confirmed_at is None
+
+
+def test_ocr_values_enter_estimate_only_after_transaction_confirmation():
+    session, user = setup_session()
+    session.add(BusinessProfile(user_id=user.id, business_number="1234567890", tax_type_code="01"))
+    receipts = [Receipt(user_id=user.id, image_url="qa.png", direction=direction,
+                        status="done", vendor="문구점", amount=1100,
+                        date=date(2026, 3, 2), extraction_confirmed=True)
+                for direction in ("purchase", "sales")]
+    session.add_all(receipts)
+    session.commit()
+    assert service.calculate_period_estimate(session, user, "2026-H1", None)["output_vat"] == 0
+
+    items = [service.create_from_receipt(
+        session, user.id, receipt.id,
+        purchase_data().model_copy(update={"direction": receipt.direction}),
+    ) for receipt in receipts]
+    estimate = service.calculate_period_estimate(session, user, "2026-H1", None)
+    assert estimate["output_vat"] == 0
+    assert estimate["eligible_input_vat"] == 0
+    assert estimate["included_transaction_count"] == 0
+
+    for item in items:
+        service.confirm_transaction(session, user.id, item.id)
+    estimate = service.calculate_period_estimate(session, user, "2026-H1", None)
+    assert estimate["output_vat"] == 100
+    assert estimate["eligible_input_vat"] == 0
+
+    purchase = items[0]
+    purchase.review_status = "analyzed"
+    purchase.risk_level = "SAFE"
+    session.add(purchase)
+    session.commit()
+    assert service.calculate_period_estimate(session, user, "2026-H1", None)["eligible_input_vat"] == 100
