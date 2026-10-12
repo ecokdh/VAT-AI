@@ -15,6 +15,7 @@ export interface ReceiptApi {
 }
 
 export interface ReceiptProcessingApi extends ReceiptApi {
+  direction: "purchase" | "sales";
   processing_stage: string | null;
   processing_progress: number;
   stage_statuses: Record<string, "pending" | "processing" | "completed" | "failed" | "skipped">;
@@ -35,10 +36,16 @@ export function uploadReceipt(file: File) {
   return apiClient.post<ReceiptApi>("/receipts", formData).then((res) => res.data);
 }
 
-export async function enqueueReceiptOcr(file: File): Promise<{ job_id: string; receipt_id: number; status: "PENDING" }> {
+export async function enqueueReceiptOcr(file: File, direction: "purchase" | "sales"): Promise<{ job_id: string; receipt_id: number; status: "PENDING" }> {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("direction", direction);
   const { data } = await apiClient.post("/v2/receipt-jobs", formData);
+  return data;
+}
+
+export async function getReceiptImage(receiptId: number): Promise<Blob> {
+  const { data } = await apiClient.get<Blob>(`/v2/receipts/${receiptId}/image`, { responseType: "blob" });
   return data;
 }
 

@@ -1,172 +1,34 @@
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { mockReport } from "../mocks/report";
-import { purchaseTotals, salesTotals } from "../mocks/receipts";
+import { FilingPeriodSelect } from "../components/FilingPeriodSelect";
+import { useNavigate } from "react-router-dom";
 import { useMaskedFormat } from "../hooks/useMaskedFormat";
+import { useReviewOverview } from "../hooks/useReviewOverview";
 import { AmountVisibilityToggle } from "../components/AmountVisibilityToggle";
-import { getMe, type AuthUser } from "../api/auth";
-import { listTransactions } from "../api/transactions";
+import { AccountMenu } from "../components/AccountMenu";
+import { ProfileAvatar } from "../components/ProfileAvatar";
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const location = useLocation();
   const fmt = useMaskedFormat();
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [staleCount, setStaleCount] = useState(0);
-
-  useEffect(() => {
-    if (!localStorage.getItem("access_token")) return;
-    getMe()
-      .then(setAuthUser)
-      .catch(() => {});
-    listTransactions("purchase")
-      .then((transactions) => setStaleCount(transactions.filter((item) => item.review_status === "stale").length))
-      .catch(() => {});
-  }, []);
-
-  return (
-    <div className="page">
-      <header className="page-header">
-        <div>
-          <div className="muted" style={{ fontSize: 13 }}>
-            {authUser?.business?.business_name ?? "사업자정보 미확인"}
-          </div>
-          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2 }}>{authUser?.name ?? "사용자"}님, 반갑습니다 👋</div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <AmountVisibilityToggle />
-          <span className="pill pill--primary">{authUser?.business?.tax_type ?? "과세유형 미확인"}</span>
-        </div>
-      </header>
-
-      <div className="page__body">
-        {location.state?.transactionSaved && <div className="banner banner--info" role="status" style={{ marginBottom: 16 }}>
-          거래를 보관함에 저장했습니다. 공제 분석은 매입 보관함에서 직접 시작할 수 있습니다.
-        </div>}
-        {staleCount > 0 && <button className="banner banner--warning" role="status" style={{ width: "100%", marginBottom: 16, textAlign: "left", cursor: "pointer" }} onClick={() => navigate("/storage/purchase")}>
-          재분석이 필요한 거래가 {staleCount}건 있어요. 매입 보관함에서 선택해 분석해 주세요.
-        </button>}
-        <div className="card" style={{ background: "var(--color-surface)", padding: 24 }}>
-          <div className="muted" style={{ fontSize: 13 }}>
-            2024년 1기 부가가치세 확정 신고 대상
-          </div>
-          <div style={{ fontWeight: 700, marginTop: 4 }}>예상 납부(환급) 세액</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: "var(--color-primary)", marginTop: 8 }}>
-            {fmt.wonSpaced(mockReport.finalTax)}
-          </div>
-          <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            매출세액에서 매입세액을 공제한 최종 예상 세액
-          </div>
-
-          <hr className="summary-card__divider" style={{ borderTopColor: "var(--color-divider)", margin: "18px 0 10px" }} />
-
-          <div className="field-row">
-            <span className="field-row__label">🔵 누적 매출세액 (+)</span>
-            <span className="field-row__value">{fmt.won(mockReport.salesTax)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">🔴 누적 매입세액 (-)</span>
-            <span className="field-row__value">{fmt.won(mockReport.purchaseTaxTotal)}</span>
-          </div>
-          <div className="field-row">
-            <span className="field-row__label">누적 총 공급가액</span>
-            <span className="field-row__value">{fmt.won(mockReport.taxBase)}</span>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
-          <QuickAction icon="📷" title="계산서 촬영 (OCR)" subtitle="영수증/계산서 찍어 올리기" onClick={() => navigate("/capture")} />
-          <QuickAction icon="💬" title="ChatGPT 세액 상담" subtitle="AI와 실시간 세액 계산법" onClick={() => navigate("/receipts/p_new/analysis")} />
-          <QuickAction
-            icon="🗂️"
-            title="매입 보관함"
-            subtitle={`${purchaseTotals.count}건 · ${fmt.won(purchaseTotals.supplyAmount)}`}
-            tag="매입"
-            onClick={() => navigate("/storage/purchase")}
-          />
-          <QuickAction
-            icon="🗂️"
-            title="매출 보관함"
-            subtitle={`${salesTotals.thisMonthCount}건 · ${fmt.won(salesTotals.thisMonthSupplyAmount)}`}
-            tag="매출"
-            onClick={() => navigate("/storage/sales")}
-          />
-        </div>
-
-        <button
-          className="card"
-          style={{
-            width: "100%",
-            marginTop: 16,
-            background: "var(--color-primary-light)",
-            border: "none",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            textAlign: "left",
-          }}
-          onClick={() => navigate("/reports")}
-        >
-          <div>
-            <div style={{ color: "var(--color-primary)", fontWeight: 700, fontSize: 13 }}>신고 기한 임박</div>
-            <div style={{ fontWeight: 700, marginTop: 4 }}>클릭 한 번으로 부가가치세 신고서 생성</div>
-          </div>
-          <span
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: "50%",
-              background: "var(--color-primary)",
-              color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            →
-          </span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-interface QuickActionProps {
-  icon: string;
-  title: string;
-  subtitle: string;
-  tag?: string;
-  onClick: () => void;
-}
-
-function QuickAction({ icon, title, subtitle, tag, onClick }: QuickActionProps) {
-  return (
-    <button className="card" style={{ textAlign: "left", position: "relative" }} onClick={onClick}>
-      {tag && (
-        <span className="pill pill--muted" style={{ position: "absolute", top: 14, right: 14 }}>
-          {tag}
-        </span>
-      )}
-      <div
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 12,
-          background: "var(--color-primary-light)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 18,
-          marginBottom: 12,
-        }}
-      >
-        {icon}
-      </div>
-      <div style={{ fontWeight: 700, fontSize: 15 }}>{title}</div>
-      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-        {subtitle}
-      </div>
-    </button>
-  );
+  const view = useReviewOverview();
+  const need = view.unconfirmed + view.pending;
+  const go = (path: string) => navigate(`${path}${path.includes("?") ? "&" : "?"}period=${view.period}`);
+  return <div className="page qa-page"><header className="page-header"><AccountMenu /><strong>VAT-AI</strong><button className="icon-btn" aria-label="마이페이지" onClick={() => navigate("/account")}><ProfileAvatar userId={view.user?.id} /></button></header>
+    <main className="page__body">
+      <p className="muted eyebrow">{view.user?.business?.business_name ?? view.user?.name ?? "내 사업장"}</p>
+      <h1 className="screen-title">신고 준비 현황을 확인하세요</h1><p className="muted">확인이 필요한 거래부터 차근차근 정리해요.</p>
+      {view.error && <p className="banner banner--error" role="alert">{view.error}</p>}
+      <FilingPeriodSelect {...view}/>
+      <section className="summary-card summary-card--primary review-hero">
+        <div className="section-heading"><span>예상 납부세액</span><AmountVisibilityToggle /></div>
+        <strong className="hero-amount">{view.loading ? "불러오는 중" : view.estimate?.payable_estimate == null ? "확인 필요" : fmt.won(view.estimate.payable_estimate)}</strong>
+        <p className="hero-caption">{view.estimate ? "확정 거래 기준 · 참고용 추정치" : "사업자 과세유형을 확인하면 예상 세액을 볼 수 있어요."}</p>
+        {view.period && <div className="readiness"><div className="section-heading"><span>신고 준비 상태</span><strong>확인 필요 {need}건</strong></div><div className="readiness-track" role="progressbar" aria-label="확인이 필요한 거래 비율" aria-valuemin={0} aria-valuemax={100} aria-valuenow={view.total ? Math.round(need / view.total * 100) : 0}><span style={{ width: `${view.total ? need / view.total * 100 : 0}%` }} /></div><p>{view.loading ? "거래를 확인하고 있어요" : view.total ? `${view.total}건 중 ${need}건이 확인 필요해요` : "증빙을 등록해 신고 준비를 시작해 보세요"}</p></div>}
+      </section>
+      {view.period ? <><h2 className="section-title">지금 확인할 항목</h2><section className="card action-list">
+        <button onClick={() => go(`/storage/${view.firstDirection}?status=review`)}><span><strong>거래 정보 확인 {view.unconfirmed}건</strong><small>매입·매출 보관함에서 확인하고 저장해요</small></span><span>›</span></button>
+        <button onClick={() => go("/storage/purchase?status=review")}><span><strong>공제 분석 확인 {view.pending}건</strong><small>분석 대기와 추가 확인이 필요한 거래예요</small></span><span>›</span></button>
+      </section>
+      <section className="card overview-card"><div className="section-heading"><h2 className="section-title">신고 준비 요약</h2><button className="text-link" onClick={() => go("/reports")}>자세히 ›</button></div><div className="stat-grid">{[["전체 거래",view.total],["준비 완료",view.ready],["확인 필요",need]].map(([label,count]) => <div key={label}><strong>{count}</strong><small>{label}</small></div>)}</div></section>
+      <button className="btn btn--primary" onClick={() => go("/reports")}>신고 전 검토하기 →</button></> : <p className="banner banner--info">사업자정보를 입력하면 신고기간별 거래 건수와 준비 상태가 표시됩니다.</p>}<p className="footnote">VAT-AI는 신고를 지원하며 홈택스에 직접 제출하지 않습니다.</p>
+    </main></div>;
 }

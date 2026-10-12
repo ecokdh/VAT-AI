@@ -30,6 +30,7 @@ class TaxProfileV2(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", unique=True, nullable=False, index=True)
     entity_type: Optional[str] = Field(default=None)  # individual | corporation
+    tax_type: Optional[str] = Field(default=None)  # User-declared; does not overwrite NTS verification.
     industry_category: Optional[str] = Field(default=None)  # food_service | manufacturing | other
     industry_subtype: Optional[str] = Field(default=None)
     is_sme: Optional[bool] = Field(default=None)

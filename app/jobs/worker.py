@@ -123,6 +123,9 @@ def process_analysis_run(session: Session, run: AnalysisRun) -> None:
         session.add(transaction)
         results.append({
             "transaction_id": transaction.id,
+            "description": transaction.description,
+            "vendor": transaction.vendor,
+            "transaction_date": transaction.transaction_date.isoformat(),
             "revision": transaction.revision,
             "status": decision.disposition,
             "reason": decision.reason,

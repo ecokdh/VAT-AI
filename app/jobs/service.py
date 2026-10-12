@@ -18,7 +18,7 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-async def enqueue_receipt_ocr(session: Session, user_id: uuid.UUID, content: bytes, content_type: str | None):
+async def enqueue_receipt_ocr(session: Session, user_id: uuid.UUID, content: bytes, content_type: str | None, direction: str = "purchase"):
     media_type, extension = receipt_service.validate_image(content, content_type)
     try:
         stored = receipt_service.storage.save(user_id, content, media_type, extension)
@@ -33,6 +33,7 @@ async def enqueue_receipt_ocr(session: Session, user_id: uuid.UUID, content: byt
     receipt = Receipt(
         user_id=user_id,
         image_url=stored.key,
+        direction=direction,
         status="processing",
         processing_stage="text_recognition",
         processing_progress=20,

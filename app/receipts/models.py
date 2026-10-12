@@ -14,6 +14,7 @@ class Receipt(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False, index=True)
     image_url: str = Field(nullable=False)
+    direction: str = Field(default="purchase", nullable=False)
     ocr_raw: Optional[str] = Field(default=None)
     vendor: Optional[str] = Field(default=None)
     amount: Optional[float] = Field(default=None)

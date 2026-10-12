@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { AmountVisibilityToggle } from "./AmountVisibilityToggle";
+import { AccountMenu } from "./AccountMenu";
 
 interface PageHeaderProps {
   title: string;
@@ -23,9 +24,7 @@ export function PageHeader({ title, onBack, showBack = true, showAmountToggle = 
       <span className="page-header__title">{title}</span>
       <div style={{ display: "flex", gap: 4 }}>
         {showAmountToggle && <AmountVisibilityToggle />}
-        <button className="icon-btn" aria-label="알림">
-          🔔
-        </button>
+        <AccountMenu />
       </div>
     </header>
   );

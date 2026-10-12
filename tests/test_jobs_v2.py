@@ -95,6 +95,19 @@ def test_partial_ocr_is_done_for_user_correction(monkeypatch, tmp_path):
     assert receipt.stage_statuses["missing_field_check"] == "failed"
 
 
+def test_missing_ocr_result_is_not_reported_as_recognition_success(monkeypatch):
+    from app.ocr_pipeline.contract import ClovaPipelineAdapter, OcrPipelineInput
+    monkeypatch.setattr("app.receipts.ocr_client.extract_receipt_sync", lambda *_: None)
+    stages = []
+    result = ClovaPipelineAdapter().process(
+        OcrPipelineInput(receipt_id=1, content_type="image/png", image_bytes=b"fixture"), stages.append,
+    )
+    assert result.status == "PARTIAL"  # Keep the manual correction path.
+    assert "자동 인식 결과를 얻지 못했습니다" in result.warnings[0]
+    recognition = [stage for stage in stages if stage.stage == OcrStage.TEXT_RECOGNITION]
+    assert recognition[-1].status == OcrStageStatus.FAILED
+
+
 def test_receipt_inbox_lists_extraction_confirmed_receipts_without_transactions():
     session, user = setup_session()
     pending_review = Receipt(user_id=user.id, image_url="pending.jpg", status="done")

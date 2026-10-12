@@ -4,6 +4,7 @@ import { useLocation, useNavigate, Link } from "react-router-dom";
 import { PageHeader } from "../../components/PageHeader";
 import { mockUser } from "../../mocks/user";
 import { login } from "../../api/auth";
+import { Icon } from "../../components/Icon";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export function LoginPage() {
   const passwordInput = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState(routeState?.signupEmail ?? mockUser.email);
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberEmail, setRememberEmail] = useState(true);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,12 +64,12 @@ export function LoginPage() {
         </div>
 
         <div className="form-field">
-          <label className="form-field__label">대표자 이메일</label>
-          <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <label className="form-field__label" htmlFor="login-email">대표자 이메일</label>
+          <input id="login-email" className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div className="form-field">
-          <label className="form-field__label">비밀번호</label>
-          <input ref={passwordInput} className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <label className="form-field__label" htmlFor="login-password">비밀번호</label>
+          <div className="password-field"><input id="login-password" ref={passwordInput} className="input" type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /><button type="button" aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}><Icon name={showPassword ? "eyeOff" : "eye"} /></button></div>
         </div>
 
         {routeState?.signupComplete && <div className="banner" style={{ marginBottom: 16 }} role="status">가입이 완료되었습니다. 이메일과 비밀번호로 로그인해 주세요.</div>}

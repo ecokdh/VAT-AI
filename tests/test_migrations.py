@@ -74,4 +74,6 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
         revision = connection.execute(
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
-        assert revision == "8a4c1d6e2f90"
+        assert "direction" in receipt_columns
+        assert "tax_type" in {column["name"] for column in inspect(connection).get_columns("tax_profiles_v2")}
+        assert revision == "a61d28c7e940"

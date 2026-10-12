@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { isAxiosError } from "axios";
 import { getReceipt, retryReceiptOcr, type ReceiptProcessingApi } from "../../api/receipts";
+import { ReceiptPreview } from "../../components/ReceiptPreview";
 
 const stages = [
   ["photo_quality", "사진 품질 확인"],
@@ -81,15 +82,17 @@ export function OcrProcessingPage() {
       <div className="page__body" style={{ paddingTop: 36 }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "var(--color-primary)" }}>증빙 분석</div>
+          {!failed && !complete && <div className="ocr-loading-spinner" aria-label="분석 진행 중" />}
           <div style={{ fontSize: 24, fontWeight: 800, marginTop: 20 }}>
-            {failed ? "증빙 분석을 마치지 못했어요" : complete ? "증빙 분석이 끝났어요" : "증빙 분석 중"}
+            {failed ? "증빙 분석을 마치지 못했어요" : complete ? receipt.ocr_missing_fields.length ? "직접 확인할 항목이 있어요" : "증빙 분석이 끝났어요" : "증빙 분석 중"}
           </div>
           <div className="muted" style={{ fontSize: 14, marginTop: 8 }}>
             {failed ? "원본 증빙과 함께 추출 결과를 확인해 주세요." : "증빙의 거래 정보와 금액을 읽고 있어요."}
           </div>
         </div>
 
-        <div className="card" style={{ marginTop: 26, padding: 18 }}>
+        {id && <ReceiptPreview key={id} id={Number(id)} wide />}
+        <div className="card" style={{ marginTop: 16, padding: 18 }}>
           {stages.map(([key, label]) => {
             const status = receipt?.stage_statuses[key] ?? "pending";
             return (
@@ -133,11 +136,11 @@ export function OcrProcessingPage() {
               {retrying ? "재분석 준비 중" : "같은 사진으로 한 번 더 분석"}
             </button>
           ) : (
-            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate("/capture", { replace: true })}>
+            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}`, { replace: true })}>
               새로 촬영하기
             </button>
           )}
-          <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate("/storage/purchase")}>
+          <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/storage/${receipt?.direction ?? "purchase"}`)}>
             보관함으로 돌아가기
           </button>
         </div>}

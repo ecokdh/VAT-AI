@@ -1,7 +1,8 @@
 import json
 from uuid import UUID
+from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from sqlmodel import Session, select
 
@@ -67,12 +68,28 @@ def retry_receipt_ocr(
 @router.post("/receipt-jobs", response_model=ReceiptJobAccepted, status_code=202)
 async def create_receipt_job(
     file: UploadFile = File(...),
+    direction: Literal["purchase", "sales"] = Form("purchase"),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     content = await file.read(settings.MAX_UPLOAD_SIZE_BYTES + 1)
-    job, receipt = await service.enqueue_receipt_ocr(session, user.id, content, file.content_type)
+    job, receipt = await service.enqueue_receipt_ocr(session, user.id, content, file.content_type, direction)
     return ReceiptJobAccepted(job_id=job.id, receipt_id=receipt.id, status="PENDING")
+
+
+@router.get("/receipts/{receipt_id}/image")
+def get_receipt_image(
+    receipt_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    receipt = get_receipt_with_processing(receipt_id, user, session)
+    try:
+        content = receipt_service.storage.read(receipt.image_url)
+    except OSError as exc:
+        raise AppException(404, "NOT_FOUND", "원본 증빙을 찾을 수 없습니다.") from exc
+    media_type = "image/png" if content.startswith(b"\x89PNG") else "image/jpeg"
+    return Response(content=content, media_type=media_type, headers={"Cache-Control": "private, no-store"})
 
 
 @router.post("/pdf-jobs", response_model=AsyncJobOut, status_code=202)
