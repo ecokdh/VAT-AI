@@ -43,6 +43,7 @@ export interface TaxEstimateApi {
 }
 
 export interface TaxProfileApi {
+  tax_type: "general" | "simplified" | null;
   entity_type: "individual" | "corporation" | null;
   industry_category: "food_service" | "manufacturing" | "other" | null;
   industry_subtype: "restaurant" | "taxable_entertainment" | "specified_mill" | "other" | null;

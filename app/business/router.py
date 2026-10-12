@@ -30,6 +30,7 @@ def _profile_out(item: TaxProfileV2 | None):
             changed_to_tax_type=None, confirmed=False, confirmed_at=None,
         )
     return TaxProfileOut(
+        tax_type=item.tax_type,
         entity_type=item.entity_type, industry_category=item.industry_category,
         industry_subtype=item.industry_subtype, is_sme=item.is_sme, simplified_industry_rate=item.simplified_industry_rate,
         taxable_sales_h1=item.taxable_sales_h1, taxable_sales_h2=item.taxable_sales_h2,

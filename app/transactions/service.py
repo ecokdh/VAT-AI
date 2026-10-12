@@ -281,9 +281,17 @@ def calculate_period_estimate(
         raise AppException(409, "TAX_TYPE_UNAVAILABLE", "국세청 과세유형 조회가 필요합니다.")
     tax_type = "general" if tax_type_code == "01" else "simplified"
     tax_profile = session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id == user.id)).first()
+    if tax_profile and tax_profile.tax_type and tax_profile.tax_type != tax_type:
+        raise AppException(409, "TAX_TYPE_MISMATCH", "입력한 과세유형과 국세청 조회 결과가 다릅니다. 사업자정보를 확인해 주세요.")
+    if period in {"2026-Q1", "2026-Q3"} and (not tax_profile or tax_profile.entity_type != "corporation"):
+        raise AppException(409, "FILING_PROFILE_REQUIRED", "법인 사업자정보를 먼저 입력해 주세요.")
     if tax_profile and tax_profile.tax_type_change_date:
         change_date = tax_profile.tax_type_change_date
-        if period == "2026-H1":
+        if period == "2026-Q1":
+            range_start, range_end = date(2026, 1, 1), date(2026, 4, 1)
+        elif period == "2026-Q3":
+            range_start, range_end = date(2026, 7, 1), date(2026, 10, 1)
+        elif period == "2026-H1":
             range_start, range_end = date(2026, 1, 1), date(2026, 7, 1)
         elif period == "2026-H2":
             range_start, range_end = date(2026, 7, 1), date(2027, 1, 1)
@@ -364,6 +372,9 @@ def calculate_period_estimate(
         ],
     )
     notes = list(estimate.notes)
+    if tax_profile and tax_profile.entity_type == "corporation":
+        notes.append("예정신고 대상 여부는 홈택스에서 확인하세요. 소규모 법인은 예정고지 대상일 수 있습니다.")
+    notes.append("거래 기준 추정치이며 예정신고·예정고지 기납부세액은 차감하지 않았습니다.")
     if tax_profile and tax_profile.confirmed_at and tax_profile.suspension_periods_json != "[]":
         suspensions = json.loads(tax_profile.suspension_periods_json)
         if any(

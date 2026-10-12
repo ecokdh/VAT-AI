@@ -597,3 +597,17 @@
 .review-checklist label { display:flex; gap:8px; align-items:center; }
 .qa-page .page__body { padding-bottom:100px; }
 @media (max-width:380px) { .ledger-head { flex-wrap:wrap; } .hero-amount {font-size:28px;} .qa-page .page__body {padding-left:16px;padding-right:16px;} }
+
+/* OCR quick chooser: the trigger remains tappable while the panel is open. */
+.bottom-nav > .bottom-nav__ocr { flex:1; display:flex; align-items:center; flex-direction:column; gap:5px; border:0; background:none; color:#727889; font:inherit; font-size:12px; cursor:pointer; }
+.bottom-nav > .bottom-nav__ocr.active { color:var(--color-primary); font-weight:700; }
+.ocr-picker { position:absolute; left:12px; bottom:calc(100% + 12px); display:grid; grid-template-columns:1fr 1fr; gap:8px; width:min(300px,calc(100vw - 24px)); padding:10px; border:1px solid #e5e9f5; border-radius:22px; background:#fff; box-shadow:0 14px 44px #25355a24,0 3px 10px #25355a0a; opacity:0; visibility:hidden; transform:translateY(12px) scale(.94); transform-origin:20% bottom; transition:opacity 180ms ease,transform 240ms cubic-bezier(.2,.8,.2,1),visibility 240ms; pointer-events:none; }
+.ocr-picker--open { opacity:1; visibility:visible; transform:translateY(0) scale(1); pointer-events:auto; }
+.ocr-picker::after { content:""; position:absolute; bottom:-6px; left:calc(16.67% - 6px); width:12px; height:12px; background:white; border-right:1px solid #e5e9f5; border-bottom:1px solid #e5e9f5; transform:rotate(45deg); }
+.ocr-picker button { display:flex; flex-direction:column; align-items:flex-start; gap:7px; padding:16px; border:0; border-radius:14px; background:#f3f5ff; color:#303651; cursor:pointer; font:inherit; text-align:left; transition:background 150ms,transform 150ms; }
+.ocr-picker button:hover { background:#e9edff; transform:translateY(-2px); }
+.ocr-picker button:active { transform:scale(.97); }
+.ocr-picker button svg { color:var(--color-primary); }
+.ocr-picker small { color:#737b8c; font-size:12px; }
+@media (prefers-reduced-motion:reduce) { .ocr-picker,.ocr-picker button { transition:none; transform:none; } }
+.filing-period { margin-bottom:20px; } .filing-period__details { margin-top:-4px; padding:12px 14px; background:#f6f8fc; border-radius:12px; font-size:12px; color:#68758a; line-height:1.6; } .filing-period__details strong {color:#374766;} .filing-period__details p {margin:6px 0;} .filing-period__details summary {cursor:pointer;} .filing-period__details a {color:var(--color-primary);}

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
-import { getMe } from "../../api/auth";
+import { useFilingPeriod } from "../../hooks/useFilingPeriod";
+import { FilingPeriodSelect } from "../../components/FilingPeriodSelect";
 import { confirmTransaction, createAnalysisRun, listTransactions, moveTransactionToTrash, type TransactionApi } from "../../api/transactions";
 import { listReceiptInbox, type ReceiptProcessingApi } from "../../api/receipts";
 import { useMaskedFormat } from "../../hooks/useMaskedFormat";
-import { inPeriod, needsReview, periodLabel } from "../../hooks/useReviewOverview";
+import { inPeriod, needsReview } from "../../hooks/useReviewOverview";
 import { PageHeader } from "../../components/PageHeader";
 import { DeleteConfirmation } from "../../components/DeleteConfirmation";
 import { ReceiptPreview } from "../../components/ReceiptPreview";
@@ -18,8 +19,8 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   const purchase = direction === "purchase";
   const [transactions, setTransactions] = useState<TransactionApi[]>([]);
   const [inbox, setInbox] = useState<ReceiptProcessingApi[]>([]);
-  const [period, setPeriod] = useState(() => ["2026-H1","2026-H2","2026-YEAR"].includes(params.get("period") ?? "") ? params.get("period")! : new Date().getMonth() < 6 ? "2026-H1" : "2026-H2");
-  const [simplified, setSimplified] = useState(false);
+  const filing = useFilingPeriod();
+  const {period} = filing;
   const [month, setMonth] = useState("");
   const [order, setOrder] = useState("newest");
   const [selected, setSelected] = useState<number[]>([]);
@@ -42,11 +43,10 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
     finally { setLoading(false); }
   }, [direction]);
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { getMe().then(user => { if(user.business?.tax_type_code === "02") { setSimplified(true); setPeriod("2026-YEAR"); } }).catch(() => {}); }, []);
   useEffect(() => { const scroll = () => setScrolled(window.scrollY > 300); window.addEventListener("scroll", scroll); return () => window.removeEventListener("scroll", scroll); }, []);
   useEffect(() => { if(detail) dialog.current?.showModal(); }, [detail]);
   const periodRows = transactions.filter(r => inPeriod(r.transaction_date, period));
-  const periodInbox = inbox.filter(r => !r.date || inPeriod(r.date, period));
+  const periodInbox = !period ? [] : inbox.filter(r => !r.date || inPeriod(r.date, period));
   const review = periodRows.filter(needsReview).length + periodInbox.length;
   const total = periodRows.length + periodInbox.length;
   const filterStatus = (row: TransactionApi) => status === "all" || (status === "review" ? needsReview(row) : !needsReview(row));
@@ -80,15 +80,15 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   return <div className="page qa-page"><PageHeader title={purchase ? "매입 보관함" : "매출 보관함"} showAmountToggle /><main className="page__body">
     <p className="eyebrow muted">{purchase ? "매입 증빙 및 공제 분석" : "매출 증빙 및 거래 관리"}</p><h1 className="screen-title">{purchase ? "내 매입 거래를 관리하세요" : "내 매출 내역을 확인하세요"}</h1>
     <nav className="vault-tabs" aria-label="보관함 종류"><NavLink to={`/storage/purchase?period=${period}`}>매입</NavLink><NavLink to={`/storage/sales?period=${period}`}>매출</NavLink></nav>
-    <select className="input" aria-label="신고 기간" value={period} onChange={e => {setPeriod(e.target.value); setParams({period:e.target.value,status},{replace:true}); setSelected([]);}}>{(simplified ? ["2026-YEAR"] : ["2026-H1","2026-H2"]).map(p => <option key={p} value={p}>{periodLabel(p)} · {simplified ? "간이과세" : "일반과세 기간"}</option>)}</select>
-    <div className="stat-grid stat-filters">{[["all","전체 거래",total],["review","확인 필요",review],["done",purchase ? "분석 완료" : "확정 거래",total-review]].map(([key,label,count]) => <button key={key} aria-pressed={status === key} onClick={() => filter(String(key))}><small>{label}</small><strong>{count}건</strong></button>)}</div>
-    {!purchase && <section className="sales-total"><small className="muted">확정 매출 합계</small><strong>{fmt.won(periodRows.filter(r=>r.state === "confirmed").reduce((sum,r)=>sum+r.total_amount,0))}</strong><small className="muted">확정 거래 기준 · 공급대가 합계</small></section>}
+    <FilingPeriodSelect {...filing} setPeriod={value => {filing.setPeriod(value); setMonth(""); setSelected([]);}}/>
+    {period && <div className="stat-grid stat-filters">{[["all","전체 거래",total],["review","확인 필요",review],["done",purchase ? "분석 완료" : "확정 거래",total-review]].map(([key,label,count]) => <button key={key} aria-pressed={status === key} onClick={() => filter(String(key))}><small>{label}</small><strong>{count}건</strong></button>)}</div>}
+    {!purchase && period && <section className="sales-total"><small className="muted">확정 매출 합계</small><strong>{fmt.won(periodRows.filter(r=>r.state === "confirmed").reduce((sum,r)=>sum+r.total_amount,0))}</strong><small className="muted">확정 거래 기준 · 공급대가 합계</small></section>}
     {message && <p className="banner banner--info" role="status">{message}</p>}
     <div className="section-heading"><h2 className="section-title">거래 목록</h2><select className="sort-select" aria-label="거래 정렬" value={order} onChange={e=>setOrder(e.target.value)}><option value="newest">최신순</option><option value="oldest">오래된순</option><option value="amount">금액순</option></select></div>
     <div className="month-filter" aria-label="거래 월"><button aria-pressed={!month} onClick={()=>{setMonth("");setSelected([]);}}>전체</button>{Array.from({length:12},(_,i)=>String(i+1)).map(m=><button key={m} aria-pressed={month===m} onClick={()=>{setMonth(m);setSelected([]);}}>{m}월</button>)}</div>
     <div className="status-tabs">{[["all","전체"],["review","확인 필요"],["done",purchase?"분석 완료":"확정"]].map(([key,label])=><button key={key} aria-pressed={status===key} onClick={()=>filter(key)}>{label}</button>)}</div>
     {loading ? <p className="center-note" role="status">거래를 불러오는 중입니다.</p> : <>
-      {!filtered.length && !receipts.length && <div className="empty-card"><strong>표시할 거래가 없어요</strong><p className="muted">신고 기간·월·상태를 바꾸거나 증빙을 추가해 주세요.</p></div>}
+      {!filtered.length && !receipts.length && <div className="empty-card"><strong>{period ? "표시할 거래가 없어요" : "신고기간을 선택해 주세요"}</strong><p className="muted">{period ? "신고 기간·월·상태를 바꾸거나 증빙을 추가해 주세요." : "사업자정보를 입력하면 거래를 기간별로 볼 수 있어요."}</p></div>}
       {receipts.map(r=><article className="card ledger-card" key={`receipt-${r.id}`}><div className="ledger-head"><div><strong>{r.vendor || "거래처 확인 필요"}</strong><small>{r.date ?? "거래일 확인 필요"}</small></div><strong>{r.amount == null ? "금액 확인 필요" : fmt.won(r.amount)}</strong></div><p className="status-label status-label--review">◷ 거래 확인 필요</p><button className="btn btn--primary btn--sm" onClick={()=>navigate(`/receipts/${r.id}/edit`)}>거래 정보 확인·저장</button></article>)}
       {filtered.map(item=><article key={item.id} className="card ledger-card"><div className="ledger-head">{purchase && <input type="checkbox" aria-label={`${item.description || item.vendor} 분석 선택`} checked={visibleSelected.includes(item.id)} disabled={item.state!=="confirmed" || item.review_status==="analyzed"} onChange={e=>setSelected(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<div><strong>{item.description || item.vendor}</strong><small>{item.transaction_date}</small></div><strong>{fmt.won(item.total_amount)}</strong></div>
       <div className={`status-label ${needsReview(item) ? "status-label--review" : "status-label--done"}`}>{purchase ? labels[item.review_status] ?? "확인 필요" : item.state==="confirmed" ? "✓ 확정" : "◷ 확인 필요"}</div>

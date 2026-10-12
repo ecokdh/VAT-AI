@@ -39,6 +39,7 @@ class SuspensionPeriod(BaseModel):
 
 
 class TaxProfileUpdate(BaseModel):
+    tax_type: Optional[Literal["general", "simplified"]] = None
     entity_type: Optional[Literal["individual", "corporation"]] = None
     industry_category: Optional[Literal["food_service", "manufacturing", "other"]] = None
     industry_subtype: Optional[Literal["restaurant", "taxable_entertainment", "specified_mill", "other"]] = None
@@ -57,6 +58,7 @@ class TaxProfileUpdate(BaseModel):
 
 
 class TaxProfileOut(BaseModel):
+    tax_type: Optional[str] = None
     entity_type: Optional[str]
     industry_category: Optional[str]
     industry_subtype: Optional[str]

@@ -40,6 +40,10 @@ class TaxEstimate:
 
 
 def period_bounds(period: str, tax_type: str) -> tuple[date, date]:
+    if period == "2026-Q1" and tax_type == "general":
+        return date(2026, 1, 1), date(2026, 4, 1)
+    if period == "2026-Q3" and tax_type == "general":
+        return date(2026, 7, 1), date(2026, 10, 1)
     if period == "2026-H1" and tax_type == "general":
         return date(2026, 1, 1), date(2026, 7, 1)
     if period == "2026-H2" and tax_type == "general":

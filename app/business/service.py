@@ -43,6 +43,8 @@ def save_tax_profile(session: Session, user_id, data: TaxProfileUpdate) -> TaxPr
         item = TaxProfileV2(user_id=user_id)
     for key, value in payload.items():
         setattr(item, key, value)
+    if item.entity_type == "corporation" and item.tax_type == "simplified":
+        raise AppException(400, "INVALID_TAX_TYPE", "법인은 일반과세 유형을 선택해 주세요.")
     if suspension_periods is not None:
         normalized = [period.model_dump(mode="json") for period in data.suspension_periods or []]
         for period in data.suspension_periods or []:

@@ -13,6 +13,7 @@ from app.transactions.models import AnalysisRun, Transaction, TransactionRevisio
 from app.transactions.schemas import AnalysisRunCreate, TransactionCreate, TransactionUpdate
 from app.jobs.worker import process_analysis_run
 from app.receipts.models import Receipt
+import pytest
 
 
 def setup_session():
@@ -184,3 +185,37 @@ def test_ocr_values_enter_estimate_only_after_transaction_confirmation():
     session.add(purchase)
     session.commit()
     assert service.calculate_period_estimate(session, user, "2026-H1", None)["eligible_input_vat"] == 100
+
+
+def test_corporate_preliminary_period_excludes_next_quarter():
+    session, user = setup_session()
+    session.add(BusinessProfile(user_id=user.id, business_number="1234567890", tax_type_code="01"))
+    session.add(TaxProfileV2(user_id=user.id, entity_type="corporation", tax_type="general"))
+    session.commit()
+    for day in (date(2026, 3, 31), date(2026, 4, 1)):
+        item = service.create_transaction(session, user.id, purchase_data().model_copy(update={"direction":"sales", "transaction_date":day}))
+        service.confirm_transaction(session, user.id, item.id)
+    assert service.calculate_period_estimate(session, user, "2026-Q1", None)["output_vat"] == 100
+    assert service.calculate_period_estimate(session, user, "2026-H1", None)["output_vat"] == 200
+
+
+def test_declared_tax_type_does_not_override_nts_or_allow_simplified_corporation():
+    session, user = setup_session()
+    session.add(BusinessProfile(user_id=user.id, business_number="1234567890", tax_type_code="01"))
+    session.commit()
+    business_service.save_tax_profile(session, user.id, TaxProfileUpdate(entity_type="individual", tax_type="simplified"))
+    with pytest.raises(AppException) as caught:
+        service.calculate_period_estimate(session, user, "2026-YEAR", None)
+    assert caught.value.code == "TAX_TYPE_MISMATCH"
+    with pytest.raises(AppException) as caught:
+        business_service.save_tax_profile(session, user.id, TaxProfileUpdate(entity_type="corporation", tax_type="simplified"))
+    assert caught.value.code == "INVALID_TAX_TYPE"
+
+
+def test_preliminary_period_requires_corporate_profile():
+    session, user = setup_session()
+    session.add(BusinessProfile(user_id=user.id, business_number="1234567890", tax_type_code="01"))
+    session.commit()
+    with pytest.raises(AppException) as caught:
+        service.calculate_period_estimate(session, user, "2026-Q3", None)
+    assert caught.value.code == "FILING_PROFILE_REQUIRED"

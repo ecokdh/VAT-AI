@@ -75,4 +75,5 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
         assert "direction" in receipt_columns
-        assert revision == "9b2d5e7f1031"
+        assert "tax_type" in {column["name"] for column in inspect(connection).get_columns("tax_profiles_v2")}
+        assert revision == "a61d28c7e940"
