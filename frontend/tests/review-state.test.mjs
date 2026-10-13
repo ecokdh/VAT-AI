@@ -7,6 +7,11 @@ test("신고 기간의 경계와 다른 연도를 구분한다", () => {
   assert.equal(inPeriod("2026-07-01","2026-H1"),false);
   assert.equal(inPeriod("2026-07-01","2026-H2"),true);
   assert.equal(inPeriod("2025-09-11","2026-YEAR"),false);
+  assert.equal(inPeriod("2026-03-31","2026-Q1"),true);
+  assert.equal(inPeriod("2026-04-01","2026-Q1"),false);
+  assert.equal(inPeriod("2026-06-30","2026-Q3"),false);
+  assert.equal(inPeriod("2026-09-30","2026-Q3"),true);
+  assert.equal(inPeriod("2026-10-01","2026-Q3"),false);
 });
 test("확정 매출에는 매입 공제 분석을 요구하지 않는다", () => {
   assert.equal(needsReview(row({direction:"sales",review_status:"not_analyzed"})),false);

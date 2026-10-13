@@ -39,14 +39,23 @@ class TaxEstimate:
     notes: tuple[str, ...]
 
 
+# 신고 기간별 [시작일, 종료일). 일반과세자는 1~3·1~6·7~9·7~12월, 간이과세자는 연간.
+PERIODS = {
+    "2026-Q1": (date(2026, 1, 1), date(2026, 4, 1)),
+    "2026-H1": (date(2026, 1, 1), date(2026, 7, 1)),
+    "2026-Q3": (date(2026, 7, 1), date(2026, 10, 1)),
+    "2026-H2": (date(2026, 7, 1), date(2027, 1, 1)),
+    "2026-YEAR": (date(2026, 1, 1), date(2027, 1, 1)),
+}
+FIRST_HALF_PERIODS = {"2026-Q1", "2026-H1"}
+SECOND_HALF_PERIODS = {"2026-Q3", "2026-H2"}
+
+
 def period_bounds(period: str, tax_type: str) -> tuple[date, date]:
-    if period == "2026-H1" and tax_type == "general":
-        return date(2026, 1, 1), date(2026, 7, 1)
-    if period == "2026-H2" and tax_type == "general":
-        return date(2026, 7, 1), date(2027, 1, 1)
-    if period == "2026-YEAR" and tax_type == "simplified":
-        return date(2026, 1, 1), date(2027, 1, 1)
-    raise ValueError("과세유형과 신고기간 조합을 지원하지 않습니다.")
+    allowed = period == "2026-YEAR" if tax_type == "simplified" else period in FIRST_HALF_PERIODS | SECOND_HALF_PERIODS
+    if not allowed:
+        raise ValueError("과세유형과 신고기간 조합을 지원하지 않습니다.")
+    return PERIODS[period]
 
 
 def _standard_output_vat(line: TaxLine) -> int | None:

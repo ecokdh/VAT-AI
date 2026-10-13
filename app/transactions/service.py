@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlmodel import Session, select
@@ -10,7 +10,15 @@ from app.business.models import BusinessProfile, TaxProfileV2
 from app.common.exceptions import AppException
 from app.deduction.schemas import ReportItem, ReportOut
 from app.receipts.models import Receipt
-from app.tax_engine.engine import TaxLine, calculate_estimate, period_bounds, RULE_VERSION
+from app.tax_engine.engine import (
+    FIRST_HALF_PERIODS,
+    PERIODS,
+    RULE_VERSION,
+    SECOND_HALF_PERIODS,
+    TaxLine,
+    calculate_estimate,
+    period_bounds,
+)
 from app.transactions.models import AnalysisRun, Transaction, TransactionRevision
 from app.transactions.schemas import AnalysisRunCreate, TransactionCreate, TransactionUpdate
 
@@ -283,14 +291,9 @@ def calculate_period_estimate(
     tax_profile = session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id == user.id)).first()
     if tax_profile and tax_profile.tax_type_change_date:
         change_date = tax_profile.tax_type_change_date
-        if period == "2026-H1":
-            range_start, range_end = date(2026, 1, 1), date(2026, 7, 1)
-        elif period == "2026-H2":
-            range_start, range_end = date(2026, 7, 1), date(2027, 1, 1)
-        elif period == "2026-YEAR":
-            range_start, range_end = date(2026, 1, 1), date(2027, 1, 1)
-        else:
+        if period not in PERIODS:
             raise AppException(400, "UNSUPPORTED_TAX_PERIOD", "2026년 신고 기간만 지원합니다.")
+        range_start, range_end = PERIODS[period]
         if range_start < change_date < range_end:
             return {
                 "period": period,
@@ -331,7 +334,7 @@ def calculate_period_estimate(
         rows = [row for row in rows if row.transaction_date <= tax_profile.business_end_date]
     deemed_sales_fact = None
     if tax_profile and tax_profile.confirmed_at:
-        deemed_sales_fact = tax_profile.deemed_related_taxable_sales_h1 if period == "2026-H1" else tax_profile.deemed_related_taxable_sales_h2 if period == "2026-H2" else None
+        deemed_sales_fact = tax_profile.deemed_related_taxable_sales_h1 if period in FIRST_HALF_PERIODS else tax_profile.deemed_related_taxable_sales_h2 if period in SECOND_HALF_PERIODS else None
     if tax_type == "simplified" and tax_profile:
         simplified_industry_rate = tax_profile.simplified_industry_rate
     estimate = calculate_estimate(

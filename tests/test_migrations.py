@@ -37,6 +37,7 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
             "tax_profiles_v2",
             "async_jobs",
             "consent_records",
+            "law_embeddings",
         }
         consent_columns = {
             column["name"] for column in inspect(connection).get_columns("consent_records")
@@ -75,4 +76,4 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
         assert "direction" in receipt_columns
-        assert revision == "9b2d5e7f1031"
+        assert revision == "a3f1c2d4e5b6"

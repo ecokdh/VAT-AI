@@ -184,3 +184,5 @@ def test_ocr_values_enter_estimate_only_after_transaction_confirmation():
     session.add(purchase)
     session.commit()
     assert service.calculate_period_estimate(session, user, "2026-H1", None)["eligible_input_vat"] == 100
+    assert service.calculate_period_estimate(session, user, "2026-Q1", None)["eligible_input_vat"] == 100
+    assert service.calculate_period_estimate(session, user, "2026-Q3", None)["included_transaction_count"] == 0

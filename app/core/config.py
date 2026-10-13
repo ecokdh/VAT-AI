@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # A트랙 계약명에 맞춘 JWT 만료 시간 설정.
     JWT_EXPIRE_MINUTES: int = 60 * 24
     OPENAI_API_KEY: str = ""
+    # RAG 법령 임베딩. 차원(1536)은 law_embeddings.embedding 컬럼과 맞춰야 한다.
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    # 비어 있으면 /rag/embed 관리자 라우트가 모든 요청을 거부한다.
+    ADMIN_API_KEY: str = ""
+    # 국가법령정보 공동활용 API 인증키(OC). 법령 수집 스크립트(app.deduction.rag.fetch_laws)가 쓴다.
+    LAW_OC: str = ""
     DEDUCTION_ANALYZER: str = ""
     NTS_BUSINESS_API_KEY: str = ""
     NTS_BUSINESS_API_URL: str = "https://api.odcloud.kr/api/nts-businessman/v1/status"

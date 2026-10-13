@@ -23,11 +23,15 @@ def line(**overrides):
 
 
 def test_2026_tax_periods_are_limited_by_tax_type():
+    assert period_bounds("2026-Q1", "general") == (date(2026, 1, 1), date(2026, 4, 1))
     assert period_bounds("2026-H1", "general") == (date(2026, 1, 1), date(2026, 7, 1))
+    assert period_bounds("2026-Q3", "general") == (date(2026, 7, 1), date(2026, 10, 1))
     assert period_bounds("2026-H2", "general") == (date(2026, 7, 1), date(2027, 1, 1))
     assert period_bounds("2026-YEAR", "simplified") == (date(2026, 1, 1), date(2027, 1, 1))
     with pytest.raises(ValueError):
         period_bounds("2026-YEAR", "general")
+    with pytest.raises(ValueError):
+        period_bounds("2026-Q1", "simplified")
 
 
 def test_general_estimate_excludes_caution_and_stale_purchase_vat():

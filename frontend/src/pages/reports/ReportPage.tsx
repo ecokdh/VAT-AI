@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { isAxiosError } from "axios";
 import { createPdfJob, downloadPdfJob, getAsyncJob } from "../../api/transactions";
 import { PageHeader } from "../../components/PageHeader";
-import { useReviewOverview, periodLabel } from "../../hooks/useReviewOverview";
+import { useReviewOverview, periodLabel, periodOptions } from "../../hooks/useReviewOverview";
 import { useMaskedFormat } from "../../hooks/useMaskedFormat";
 
 export function ReportPage() {
@@ -53,7 +53,7 @@ export function ReportPage() {
 
   return <div className="page qa-page"><PageHeader title="신고 전 검토" showAmountToggle/><main className="page__body">
     <p className="eyebrow muted">부가가치세 신고 준비</p><h1 className="screen-title">신고할 내용을 확인하세요</h1><p className="muted">확정 거래와 공제 분석을 바탕으로 신고 전 확인사항을 정리했어요.</p>
-    <label className="form-field"><span className="form-field__label">신고 대상 기간</span><select className="input" value={period} onChange={e=>{view.setPeriod(e.target.value);setReviewed(false);}}>{(view.user?.business?.tax_type_code==="02"?["2026-YEAR"]:["2026-H1","2026-H2"]).map(p=><option key={p} value={p}>{periodLabel(p)}</option>)}</select></label>
+    <label className="form-field"><span className="form-field__label">신고 대상 기간</span><select className="input" value={period} onChange={e=>{view.setPeriod(e.target.value);setReviewed(false);}}>{periodOptions(view.user?.business?.tax_type_code==="02").map(p=><option key={p} value={p}>{periodLabel(p)}</option>)}</select></label>
     {(error || view.error) && <p className="banner banner--error" role="alert">{error || view.error}</p>}
     {view.loading && <p role="status">신고 준비 상태를 불러오는 중입니다.</p>}
     <section className="report-total"><small className="muted">예상 납부세액</small><strong>{estimate?.payable_estimate==null?"확인 필요":fmt.won(estimate.payable_estimate)}</strong><p className="muted">확정 거래 기준 · 검토를 위한 참고용 추정치</p></section>

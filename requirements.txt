@@ -14,6 +14,7 @@ Pillow==12.3.0
 boto3==1.43.95
 pdfkit==1.0.0
 openai==3.14.1
+langgraph==1.2.14
 httpx==0.28.1
 pgvector==0.5.0
 python-dotenv==1.2.3

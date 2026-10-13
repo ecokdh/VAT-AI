@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useMaskedFormat } from "../hooks/useMaskedFormat";
-import { useReviewOverview, periodLabel } from "../hooks/useReviewOverview";
+import { useReviewOverview, periodLabel, periodOptions } from "../hooks/useReviewOverview";
 import { AmountVisibilityToggle } from "../components/AmountVisibilityToggle";
 import { AccountMenu } from "../components/AccountMenu";
 import { ProfileAvatar } from "../components/ProfileAvatar";
@@ -16,7 +16,7 @@ export function DashboardPage() {
       <p className="muted eyebrow">{view.user?.business?.business_name ?? view.user?.name ?? "내 사업장"}</p>
       <h1 className="screen-title">신고 준비 현황을 확인하세요</h1><p className="muted">확인이 필요한 거래부터 차근차근 정리해요.</p>
       {view.error && <p className="banner banner--error" role="alert">{view.error}</p>}
-      <label className="form-field"><span className="form-field__label">신고 대상 기간</span><select className="input" value={view.period} onChange={e => view.setPeriod(e.target.value)}>{(view.user?.business?.tax_type_code === "02" ? ["2026-YEAR"] : ["2026-H1", "2026-H2"]).map(p => <option key={p} value={p}>{periodLabel(p)}</option>)}</select></label>
+      <label className="form-field"><span className="form-field__label">신고 대상 기간</span><select className="input" value={view.period} onChange={e => view.setPeriod(e.target.value)}>{periodOptions(view.user?.business?.tax_type_code === "02").map(p => <option key={p} value={p}>{periodLabel(p)}</option>)}</select></label>
       <section className="summary-card summary-card--primary review-hero">
         <div className="section-heading"><span>예상 납부세액</span><AmountVisibilityToggle /></div>
         <strong className="hero-amount">{view.loading ? "불러오는 중" : view.estimate?.payable_estimate == null ? "확인 필요" : fmt.won(view.estimate.payable_estimate)}</strong>

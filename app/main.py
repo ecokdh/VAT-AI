@@ -8,6 +8,7 @@ from app.auth.router import router as auth_router
 from app.business.router import router as business_router, v2_router as business_v2_router
 from app.common.exceptions import register_exception_handlers
 from app.core.database import get_session
+from app.deduction.rag.router import router as rag_router
 from app.deduction.router import router as deduction_router
 from app.receipts.router import router as receipts_router
 from app.transactions.router import router as transactions_v2_router
@@ -32,6 +33,7 @@ app.include_router(receipts_router)
 app.include_router(deduction_router)
 app.include_router(transactions_v2_router)
 app.include_router(jobs_v2_router)
+app.include_router(rag_router)
 
 @app.get("/health", tags=["health"])
 def health_check(db: Session = Depends(get_session)):

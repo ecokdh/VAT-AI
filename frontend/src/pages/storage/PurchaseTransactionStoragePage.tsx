@@ -4,7 +4,7 @@ import { getMe } from "../../api/auth";
 import { confirmTransaction, createAnalysisRun, listTransactions, moveTransactionToTrash, type TransactionApi } from "../../api/transactions";
 import { listReceiptInbox, type ReceiptProcessingApi } from "../../api/receipts";
 import { useMaskedFormat } from "../../hooks/useMaskedFormat";
-import { inPeriod, needsReview, periodLabel } from "../../hooks/useReviewOverview";
+import { defaultPeriod, inPeriod, isPeriod, needsReview, periodLabel, periodOptions } from "../../hooks/useReviewOverview";
 import { PageHeader } from "../../components/PageHeader";
 import { DeleteConfirmation } from "../../components/DeleteConfirmation";
 import { ReceiptPreview } from "../../components/ReceiptPreview";
@@ -18,7 +18,7 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   const purchase = direction === "purchase";
   const [transactions, setTransactions] = useState<TransactionApi[]>([]);
   const [inbox, setInbox] = useState<ReceiptProcessingApi[]>([]);
-  const [period, setPeriod] = useState(() => ["2026-H1","2026-H2","2026-YEAR"].includes(params.get("period") ?? "") ? params.get("period")! : new Date().getMonth() < 6 ? "2026-H1" : "2026-H2");
+  const [period, setPeriod] = useState(() => { const value = params.get("period"); return isPeriod(value) ? value : defaultPeriod(); });
   const [simplified, setSimplified] = useState(false);
   const [month, setMonth] = useState("");
   const [order, setOrder] = useState("newest");
@@ -80,7 +80,7 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   return <div className="page qa-page"><PageHeader title={purchase ? "매입 보관함" : "매출 보관함"} showAmountToggle /><main className="page__body">
     <p className="eyebrow muted">{purchase ? "매입 증빙 및 공제 분석" : "매출 증빙 및 거래 관리"}</p><h1 className="screen-title">{purchase ? "내 매입 거래를 관리하세요" : "내 매출 내역을 확인하세요"}</h1>
     <nav className="vault-tabs" aria-label="보관함 종류"><NavLink to={`/storage/purchase?period=${period}`}>매입</NavLink><NavLink to={`/storage/sales?period=${period}`}>매출</NavLink></nav>
-    <select className="input" aria-label="신고 기간" value={period} onChange={e => {setPeriod(e.target.value); setParams({period:e.target.value,status},{replace:true}); setSelected([]);}}>{(simplified ? ["2026-YEAR"] : ["2026-H1","2026-H2"]).map(p => <option key={p} value={p}>{periodLabel(p)} · {simplified ? "간이과세" : "일반과세 기간"}</option>)}</select>
+    <select className="input" aria-label="신고 기간" value={period} onChange={e => {setPeriod(e.target.value); setParams({period:e.target.value,status},{replace:true}); setSelected([]);}}>{periodOptions(simplified).map(p => <option key={p} value={p}>{periodLabel(p)} · {simplified ? "간이과세" : "일반과세 기간"}</option>)}</select>
     <div className="stat-grid stat-filters">{[["all","전체 거래",total],["review","확인 필요",review],["done",purchase ? "분석 완료" : "확정 거래",total-review]].map(([key,label,count]) => <button key={key} aria-pressed={status === key} onClick={() => filter(String(key))}><small>{label}</small><strong>{count}건</strong></button>)}</div>
     {!purchase && <section className="sales-total"><small className="muted">확정 매출 합계</small><strong>{fmt.won(periodRows.filter(r=>r.state === "confirmed").reduce((sum,r)=>sum+r.total_amount,0))}</strong><small className="muted">확정 거래 기준 · 공급대가 합계</small></section>}
     {message && <p className="banner banner--info" role="status">{message}</p>}

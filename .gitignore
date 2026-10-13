@@ -35,3 +35,6 @@ Thumbs.db
 
 # Local Python virtual environment
 venv/
+
+# 웹 수집 영수증 평가 데이터 (이용 조건 미확인, 로컬 검토용)
+data/receipts/

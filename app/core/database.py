@@ -8,6 +8,7 @@ from app.auth.models import ConsentRecord, User  # noqa: F401
 from app.business.models import BusinessProfile, TaxProfileV2  # noqa: F401
 from app.receipts.models import Receipt  # noqa: F401
 from app.deduction.models import Deduction  # noqa: F401
+from app.deduction.rag.models import LawEmbedding  # noqa: F401
 from app.transactions.models import Transaction, TransactionRevision, AnalysisRun  # noqa: F401
 from app.jobs.models import AsyncJob  # noqa: F401
 

@@ -29,6 +29,7 @@
 | `Pillow` | 12.3.0 | 이미지 디코딩·손상/픽셀 수 검증 |
 | `boto3` | 1.43.95 | AWS S3 업로드 |
 | `openai` | 3.14.1 | `app/deduction/ai_client.py`의 OpenAI Responses API 기반 공제 판별 호출 |
+| `langgraph` | 1.2.14 | 공제 분류 그래프 (`app/deduction/graph/`) — 규칙·RAG·LLM 판정·검증 노드 오케스트레이션 |
 | `httpx` | 0.28.1 | CLOVA OCR / 국세청(NTS) API 호출 |
 | `pgvector` | 0.5.0 | pgvector 컬럼 타입 (SQLAlchemy/SQLModel 연동) |
 | `python-dotenv` | 1.2.3 | 로컬 `.env` 로드 |
@@ -50,5 +51,5 @@
 
 ## 검증 방법
 
-- Backend: 위 17개 패키지를 한 번에 `pip install --dry-run`으로 설치 시도 → resolver 에러 없이 전체 설치 계획 산출 확인.
+- Backend: 위 18개 패키지를 한 번에 `pip install --dry-run`으로 설치 시도 → resolver 에러 없이 전체 설치 계획 산출 확인.
 - Frontend: 위 10개 패키지를 한 번에 `npm install --dry-run`으로 설치 시도 → peer dependency 경고/에러 없이 57개 패키지 설치 계획 산출 확인.
