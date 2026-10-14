@@ -7,6 +7,7 @@ export interface TransactionApi {
   transaction_date: string;
   vendor: string;
   description: string;
+  purpose: string | null;
   total_amount: number;
   supply_amount: number | null;
   vat_amount: number | null;
@@ -78,6 +79,7 @@ export interface TransactionInput {
   transaction_date: string;
   vendor: string;
   description: string;
+  purpose?: string | null;
   evidence_type: "tax_invoice" | "card_receipt" | "cash_receipt" | "tax_free_receipt" | "manual" | "unknown";
   business_related: boolean | null;
   total_amount: number;

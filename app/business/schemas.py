@@ -73,3 +73,12 @@ class TaxProfileOut(BaseModel):
     changed_to_tax_type: Optional[str]
     confirmed: bool
     confirmed_at: Optional[datetime]
+
+
+class OperatingProfileUpdate(BaseModel):
+    business_name: str | None = PydanticField(default=None, max_length=255)
+    declared_tax_type: Literal['general','simplified','exempt'] | None = None
+    entity_type: Literal['individual','corporation'] | None = None
+    operating_industry: Literal['food_service','cafe','retail','manufacturing','service','other'] | None = None
+    business_description: str | None = PydanticField(default=None, max_length=1000)
+    has_employees: bool | None = None

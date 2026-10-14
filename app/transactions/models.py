@@ -18,6 +18,8 @@ class Transaction(SQLModel, table=True):
     vendor: str = Field(nullable=False, max_length=255)
     description: str = Field(default="", nullable=False)
     purpose: Optional[str] = Field(default=None)
+    question_answers_json: str = Field(default="{}", nullable=False)
+    question_rule_version: Optional[str] = Field(default=None)
     evidence_type: str = Field(default="unknown", nullable=False)
     business_related: Optional[bool] = Field(default=None)
     total_amount: int = Field(nullable=False, ge=0)

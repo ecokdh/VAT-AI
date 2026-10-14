@@ -1,6 +1,7 @@
 """Track B: 파일 검증·저장, CLOVA OCR, Receipt CRUD."""
 
 from io import BytesIO
+import json
 import uuid
 import warnings
 from typing import Optional
@@ -144,7 +145,42 @@ async def upload_receipt(
         _delete_after_failure(stored.key)
         raise
 
-    if _ocr_is_complete(ocr_result):
+    if isinstance(ocr_result, ocr_client.OcrResult) and ocr_result.engine == 'luna_low':
+        details=json.loads(ocr_result.ocr_raw)
+        doc=details.get('document') or {}
+        classification=doc.get('classification') or {}
+        final_status=classification.get('final_status')
+        if details.get('error_code'):
+            status = 'failed'
+        elif final_status in ('unsupported', 'retake'):
+            status = final_status
+        elif final_status == 'needs_edit':
+            status = 'needs_edit'
+        else:
+            status = 'done'
+        missing=[k for k,v in [('vendor',ocr_result.vendor),('amount',ocr_result.amount),('transaction_date',ocr_result.date)] if v is None or v=='']
+        receipt=Receipt(
+            user_id=user_id,
+            image_url=stored.key,
+            ocr_raw=ocr_result.ocr_raw,
+            vendor=ocr_result.vendor or None,
+            amount=ocr_result.amount,
+            date=ocr_result.date,
+            status=status,
+            ocr_pipeline_name='luna_low',
+            ocr_pipeline_version='optimized-v2',
+            ocr_missing_fields_json=json.dumps(missing),
+            ocr_warnings_json=json.dumps([classification.get('guide_message')] if classification.get('guide_message') else ['일부 항목을 원본과 대조해 주세요.'] if ocr_result.review_required else [],ensure_ascii=False),
+            doc_type=classification.get('doc_type'),
+            support_status=classification.get('support_status'),
+            readability_issues_json=json.dumps(classification.get('issues', []), ensure_ascii=False),
+            affected_regions_json=json.dumps(classification.get('affected_regions', []), ensure_ascii=False),
+            issue_code=classification.get('issue_code') or details.get('error_code'),
+            guide_message=classification.get('guide_message'),
+            classification_version='v2' if classification.get('doc_type') not in (None, 'uninspected') else None,
+            extraction_confirmed=False
+        )
+    elif _ocr_is_complete(ocr_result):
         receipt = Receipt(
             user_id=user_id,
             image_url=stored.key,

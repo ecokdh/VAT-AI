@@ -29,6 +29,11 @@ class TaxProfileV2(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", unique=True, nullable=False, index=True)
+    tax_type: Optional[str] = Field(default=None)  # User declared; separate from verified BusinessProfile.
+    business_description: Optional[str] = Field(default=None)
+    operating_industry: Optional[str] = Field(default=None)
+    has_employees: Optional[bool] = Field(default=None)
+    onboarding_completed: bool = Field(default=False, nullable=False)
     entity_type: Optional[str] = Field(default=None)  # individual | corporation
     industry_category: Optional[str] = Field(default=None)  # food_service | manufacturing | other
     industry_subtype: Optional[str] = Field(default=None)

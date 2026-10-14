@@ -73,6 +73,8 @@ class TransactionOut(BaseModel):
     risk_level: Optional[str]
     deductible_vat: int
     analysis_reason: Optional[str]
+    question_answers_json: str
+    question_rule_version: str | None
     legal_references_json: str
     retention_status: str
     deleted_at: Optional[datetime]

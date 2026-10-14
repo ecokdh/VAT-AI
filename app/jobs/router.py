@@ -131,6 +131,15 @@ def download_pdf(
     )
 
 
+@router.post('/receipts/{receipt_id}/questions')
+def receipt_questions(receipt_id:int,answers:dict[str,str],user:User=Depends(get_current_user),session:Session=Depends(get_session)):
+    from app.receipts.questions import questions,receipt_document,VERSION,canonical_answers,incomplete
+    from app.business.models import TaxProfileV2
+    receipt=session.exec(select(Receipt).where(Receipt.id==receipt_id,Receipt.user_id==user.id)).first()
+    if receipt is None:raise AppException(404,'NOT_FOUND','영수증을 찾을 수 없습니다.')
+    profile=session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id==user.id)).first()
+    doc=receipt_document(receipt)
+    return {'version':VERSION,'answers':canonical_answers(doc,answers,receipt.direction),'questions':questions(doc,answers,receipt.direction,profile),'profile_complete':bool(profile and profile.onboarding_completed),'missing':incomplete(doc,answers,profile) if receipt.direction=='purchase' else []}
 @router.get("/filing-readiness")
 def get_filing_readiness(period: str, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
     from app.jobs.readiness import filing_readiness

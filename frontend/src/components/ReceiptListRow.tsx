@@ -11,7 +11,15 @@ export function ReceiptListRow({ receipt }: ReceiptListRowProps) {
   const fmt = useMaskedFormat();
   const displayAmount = receipt.amount ?? receipt.supplyAmount;
   const amountLabel = receipt.amount !== undefined ? "인식 금액" : "공급가액";
-  const statusLabel = receipt.status === "failed" ? "OCR 실패" : receipt.isExempt ? "면세" : receipt.type;
+  const statusLabel =
+    receipt.status === "failed" ? "분석 실패" :
+    receipt.status === "unsupported" ? "미지원 문서" :
+    receipt.status === "retake" ? "재촬영 필요" :
+    receipt.status === "needs_edit" ? "확인 필요" :
+    receipt.isExempt ? "면세" : receipt.type;
+  const pillVariant =
+    (receipt.status === "failed" || receipt.status === "unsupported") ? "muted" :
+    (receipt.status === "retake" || receipt.status === "needs_edit") ? "warning" : variant;
   return (
     <div className="list-row">
       <div className="list-row__top">
@@ -20,7 +28,7 @@ export function ReceiptListRow({ receipt }: ReceiptListRowProps) {
           <div className="list-row__name">{receipt.supplierName}</div>
           <div className="list-row__memo">{receipt.itemSummary}</div>
         </div>
-        <span className={`pill pill--${receipt.status === "failed" ? "muted" : variant}`}>{statusLabel}</span>
+        <span className={`pill pill--${pillVariant}`}>{statusLabel}</span>
       </div>
       <div className="list-row__amounts">
         <div className="list-row__amount-line">

@@ -35,6 +35,27 @@ class Receipt(SQLModel, table=True):
     ocr_user_attempts: int = Field(default=1, nullable=False)
     retention_status: str = Field(default="under_review", nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    doc_type: Optional[str] = Field(default=None)
+    support_status: Optional[str] = Field(default=None)
+    readability_issues_json: str = Field(default="[]", nullable=False)
+    affected_regions_json: str = Field(default="[]", nullable=False)
+    issue_code: Optional[str] = Field(default=None)
+    guide_message: Optional[str] = Field(default=None)
+    classification_version: Optional[str] = Field(default=None)
+
+    @property
+    def readability_issues(self) -> list[str]:
+        try:
+            return json.loads(self.readability_issues_json)
+        except (TypeError, json.JSONDecodeError):
+            return []
+
+    @property
+    def affected_regions(self) -> list[str]:
+        try:
+            return json.loads(self.affected_regions_json)
+        except (TypeError, json.JSONDecodeError):
+            return []
 
     @property
     def stage_statuses(self) -> dict[str, str]:

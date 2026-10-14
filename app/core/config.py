@@ -27,12 +27,15 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
     OPENAI_API_KEY: str = ""
-    # RAG 법령 임베딩. 차원(1536)은 law_embeddings.embedding 컬럼과 맞춰야 한다.
     EMBEDDING_MODEL: str = "text-embedding-3-small"
-    # 비어 있으면 /rag/embed 관리자 라우트가 모든 요청을 거부한다.
     ADMIN_API_KEY: str = ""
-    # 국가법령정보 공동활용 API 인증키(OC). 법령 수집 스크립트(app.deduction.rag.fetch_laws)가 쓴다.
     LAW_OC: str = ""
+    RECEIPT_RECOGNITION_BACKEND: str = "clova"
+    LUNA_API_KEY_FILE: str = ""
+    LUNA_TIMEOUT_SECONDS: float = 180.0
+    LUNA_BUDGET_KRW: float = 2000.0
+    LUNA_BUDGET_LEDGER_FILE: str = "storage/luna_budget.json"
+    LOCAL_FRONTEND_ORIGIN: str = ""
     DEDUCTION_ANALYZER: str = ""
     NTS_BUSINESS_API_KEY: str = ""
     NTS_BUSINESS_API_URL: str = "https://api.odcloud.kr/api/nts-businessman/v1/status"

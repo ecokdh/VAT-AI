@@ -72,6 +72,10 @@ def save_tax_profile(session: Session, user_id, data: TaxProfileUpdate, *, commi
     elif data.model_fields_set - {"confirmed"}:
         item.confirmed_at = None
     item.updated_at = datetime.now(timezone.utc)
+    if data.model_fields_set:
+        from app.transactions.models import Transaction
+        for t in session.exec(select(Transaction).where(Transaction.user_id==user_id,Transaction.direction=='purchase',Transaction.deleted_at.is_(None))).all():
+            t.review_status='stale';t.deductible_vat=0;t.risk_level=None;t.revision+=1;t.analysis_reason='사업 정보 변경으로 다시 분석해야 합니다.';session.add(t)
     session.add(item)
     if commit:
         session.commit()

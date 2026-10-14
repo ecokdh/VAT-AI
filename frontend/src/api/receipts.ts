@@ -1,6 +1,29 @@
 import { apiClient } from "./client";
 
-export type ReceiptApiStatus = "processing" | "done" | "failed";
+export type ReceiptApiStatus = "processing" | "done" | "needs_edit" | "unsupported" | "retake" | "failed";
+
+export interface ReceiptRecognition {
+  engine: string;
+  original_document?: {items: ReviewedItem[]};
+  error_code?: string;
+  value_source?: string;
+  document?: {
+    fields: Record<string, string | number | null>;
+    items: Array<{name: string; raw_name?: string | null; source_row?: number | null; quantity: number | null; unit_price: number | null; line_amount: number | null; row_type: string; parent_row: number | null}>;
+    conflicts: string[];
+    uncertain: string[];
+  };
+}
+
+export type ReviewedItem = NonNullable<ReceiptRecognition['document']>['items'][number];
+export interface ReceiptReview {
+  document: { fields: Record<string, string | number | null>; items: ReviewedItem[] };
+  question_answers?: Record<string,string>;
+  purpose: string | null;
+  evidence_type: 'tax_invoice' | 'card_receipt' | 'cash_receipt' | 'tax_free_receipt' | 'manual' | 'unknown';
+  business_related: boolean | null;
+  tax_treatment: 'standard' | 'zero' | 'exempt' | 'unknown';
+}
 
 export interface ReceiptApi {
   id: number;
@@ -12,6 +35,15 @@ export interface ReceiptApi {
   date: string | null;
   status: ReceiptApiStatus;
   created_at: string;
+  recognition?: ReceiptRecognition | null;
+  review?: ReceiptReview | null;
+  doc_type?: string | null;
+  support_status?: string | null;
+  readability_issues?: string[];
+  affected_regions?: string[];
+  issue_code?: string | null;
+  guide_message?: string | null;
+  classification_version?: string | null;
 }
 
 export interface ReceiptLineItem {name:string;quantity:number|null;unit_price:number|null;amount:number|null;}
@@ -35,7 +67,16 @@ export interface ReceiptProcessingApi extends ReceiptApi {
   retention_status: string;
 }
 
-export interface ReceiptExtractionInput { vendor: string; amount: number; date: string; details?: ReceiptDetails; }
+export interface ReceiptExtractionInput {
+  vendor: string; amount: number; date: string;
+  details?: ReceiptDetails;
+  document?: ReceiptReview['document'];
+  question_answers?: Record<string,string>;
+  purpose?: string | null;
+  evidence_type?: ReceiptReview['evidence_type'];
+  business_related?: boolean | null;
+  tax_treatment?: ReceiptReview['tax_treatment'];
+}
 
 export function uploadReceipt(file: File) {
   const formData = new FormData();

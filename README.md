@@ -789,3 +789,7 @@ git merge origin/main
 - 장애 발생 시 Log 확인 체계 점검
 
 Staging 구축 전까지 Local 개발 및 PR 검증은 Docker Compose + Alembic + GitHub Actions CI를 공통 기준으로 사용한다.
+
+## OCR 프로토타입
+
+Luna low 문서 인식, 거래 검토 화면, 사업 프로필·사용 목적 질문의 실행 방법은 [OCR 프로토타입 안내](docs/OCR_PROTOTYPE.md)를 참고하세요.

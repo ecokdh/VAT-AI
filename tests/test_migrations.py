@@ -77,6 +77,7 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
         assert "direction" in receipt_columns
-        assert revision == "b72c4e91f630"
-        assert "details_json" in receipt_columns
-        assert {"token_version", "ocr_guide_seen"} <= {column["name"] for column in inspect(connection).get_columns("users")}
+        assert {"doc_type", "support_status", "readability_issues_json", "affected_regions_json", "issue_code", "guide_message", "classification_version"}.issubset(receipt_columns)
+        assert revision == "e1a2b3c4d5e6"
+        assert {'business_description','operating_industry','has_employees','onboarding_completed','tax_type'} <= {c['name'] for c in inspect(connection).get_columns('tax_profiles_v2')}
+        assert {'question_answers_json','question_rule_version'} <= {c['name'] for c in inspect(connection).get_columns('transactions')}

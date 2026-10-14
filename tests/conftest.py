@@ -9,6 +9,12 @@ from app.core.database import get_session
 from app.main import app
 from app.receipts import service as receipt_service
 from app.receipts.storage import LocalFileStorage
+from app.core.config import settings
+
+@pytest.fixture(autouse=True)
+def isolate_live_configuration(monkeypatch):
+    monkeypatch.setattr(settings,'RECEIPT_RECOGNITION_BACKEND','clova')
+    monkeypatch.setattr(settings,'OCR_PIPELINE','')
 
 
 @pytest.fixture()

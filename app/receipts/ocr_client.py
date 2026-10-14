@@ -21,9 +21,11 @@ from app.core.config import settings
 @dataclass(frozen=True)
 class OcrResult:
     vendor: str
-    amount: float
-    date: date_
+    amount: float | None
+    date: date_ | None
     ocr_raw: str
+    review_required: bool = False
+    engine: str = "clova"
 
 
 VENDOR_FIELDS = ("상호명", "상호", "가맹점명", "상점명", "store_name")
@@ -245,6 +247,19 @@ Write-Output $b64
 async def extract_receipt(
     image_bytes: bytes, mime_type: str = "image/jpeg"
 ) -> Optional[OcrResult]:
+    if settings.RECEIPT_RECOGNITION_BACKEND == "luna_low":
+        from app.receipts.luna_client import recognize, LunaFailure
+        try:
+            response = await recognize(image_bytes, mime_type)
+            doc = response['document']; fields = doc['fields']
+            amount = fields.get('payment_amount')
+            if amount is None: amount = fields.get('printed_total_amount')
+            tx_date = _parse_date(fields.get('transaction_datetime'))
+            review = bool(doc.get('conflicts') or doc.get('uncertain') or not fields.get('vendor') or amount is None or tx_date is None)
+            return OcrResult(vendor=fields.get('vendor') or '',amount=amount,date=tx_date,ocr_raw=json.dumps(response,ensure_ascii=False),review_required=review,engine='luna_low')
+        except LunaFailure as exc:
+            return OcrResult(vendor='',amount=None,date=None,ocr_raw=json.dumps({'engine':'luna_low','error_code':exc.code,'confirmed':False}),review_required=True,engine='luna_low')
+    if settings.RECEIPT_RECOGNITION_BACKEND != "clova": raise ValueError('Unknown receipt recognition backend')
     api_url = settings.CLOVA_OCR_API_URL.strip()
     secret_key = (settings.CLOVA_OCR_SECRET_KEY or settings.CLOVA_API_KEY).strip()
     format_info = _format_for_mime_type(mime_type)
@@ -287,6 +302,9 @@ async def extract_receipt(
 
 def extract_receipt_sync(image_bytes: bytes, mime_type: str = "image/jpeg") -> Optional[OcrResult]:
     """Worker-safe synchronous OCR adapter; avoids nesting event loops in workers."""
+    if settings.RECEIPT_RECOGNITION_BACKEND == 'luna_low':
+        import asyncio
+        return asyncio.run(extract_receipt(image_bytes, mime_type))
     api_url = settings.CLOVA_OCR_API_URL.strip()
     secret_key = (settings.CLOVA_OCR_SECRET_KEY or settings.CLOVA_API_KEY).strip()
     format_info = _format_for_mime_type(mime_type)

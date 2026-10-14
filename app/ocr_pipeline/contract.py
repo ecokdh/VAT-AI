@@ -46,7 +46,7 @@ class OcrPipelineResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    status: Literal["COMPLETED", "PARTIAL", "FAILED"]
+    status: Literal["COMPLETED", "PARTIAL", "FAILED", "UNSUPPORTED", "RETAKE", "NEEDS_EDIT"]
     vendor: str | None = Field(default=None, max_length=255)
     amount: int | None = Field(default=None, ge=0)
     transaction_date: date | None = None
@@ -57,6 +57,12 @@ class OcrPipelineResult(BaseModel):
     retention_status: Literal["required", "not_required", "under_review"] = "under_review"
     pipeline_name: str = Field(min_length=1, max_length=100)
     pipeline_version: str = Field(min_length=1, max_length=100)
+    doc_type: str | None = Field(default=None, max_length=50)
+    support_status: str | None = Field(default=None, max_length=50)
+    issues: list[str] = Field(default_factory=list, max_length=20)
+    affected_regions: list[str] = Field(default_factory=list, max_length=20)
+    issue_code: str | None = Field(default=None, max_length=100)
+    guide_message: str | None = Field(default=None, max_length=500)
 
 
 ProgressCallback = Callable[[OcrStageUpdate], None]

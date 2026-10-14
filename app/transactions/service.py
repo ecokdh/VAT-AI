@@ -102,6 +102,12 @@ def create_from_receipt(
     item = Transaction(user_id=user_id, receipt_id=receipt_id)
     item.retention_status = receipt.retention_status
     _apply_create(item, data)
+    try: review=(json.loads(receipt.ocr_raw or '{}').get('review') or {})
+    except (ValueError,AttributeError): review={}
+    item.question_answers_json=json.dumps(review.get('question_answers') or {},ensure_ascii=False)
+    item.question_rule_version=review.get('question_version')
+    if review.get('question_answers'):
+        item.purpose=review.get('purpose');item.business_related=review.get('business_related')
     session.add(item)
     session.flush()
     _record_revision(session, item)

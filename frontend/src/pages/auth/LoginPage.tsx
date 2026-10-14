@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { isAxiosError } from "axios";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { PageHeader } from "../../components/PageHeader";
-
+import { apiClient } from "../../api/client";
 import { login } from "../../api/auth";
 import { Icon } from "../../components/Icon";
 
@@ -29,7 +29,7 @@ export function LoginPage() {
       const { access_token } = await login(email, password);
       localStorage.setItem("access_token", access_token);
       if (rememberEmail) localStorage.setItem("vat-ai-email", email.trim()); else localStorage.removeItem("vat-ai-email");
-      navigate("/dashboard");
+      try { const {data}=await apiClient.get("/v2/business/profile"); navigate(data.onboarding_completed?"/dashboard":"/account?setup=1"); } catch { navigate("/dashboard"); }
     } catch (e) {
       const message = isAxiosError(e) ? e.response?.data?.error?.message : undefined;
       setError(message ?? "로그인에 실패하였습니다.");
