@@ -42,11 +42,11 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str, email: str) -> str:
+def create_access_token(user_id: str, email: str, token_version: int = 0) -> str:
     expires_at = datetime.now(timezone.utc) + timedelta(
         minutes=settings.JWT_EXPIRE_MINUTES
     )
-    payload = {"sub": str(user_id), "email": email, "exp": expires_at}
+    payload = {"sub": str(user_id), "email": email, "exp": expires_at, "ver": token_version}
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 

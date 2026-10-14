@@ -6,6 +6,9 @@ import { Icon } from "../../components/Icon";
 import { checkEmailAvailability, register } from "../../api/auth";
 import { verifyBusiness, type BusinessVerificationResponse } from "../../api/business";
 
+import { TaxProfileFields, emptyTaxProfile } from "../../components/TaxProfileFields";
+import type { TaxProfileInput } from "../../api/transactions";
+
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const specialCharacterPattern = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/;
 
@@ -58,6 +61,8 @@ export function SignupPage() {
   const verificationRun = useRef(0);
   const emailAvailabilityRun = useRef(0);
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [taxProfile, setTaxProfile] = useState<TaxProfileInput>({...emptyTaxProfile});
+  function updateProfile<K extends keyof TaxProfileInput>(key: K, value: TaxProfileInput[K]) { setTaxProfile(current => ({...current, [key]:value, confirmed:false})); }
   const [name, setName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [businessNumber, setBusinessNumber] = useState("");
@@ -98,13 +103,20 @@ export function SignupPage() {
     && businessName.trim().length > 0
     && validBusinessNumber(businessNumber)
     && businessVerified
-    && !isVerifying;
+    && !isVerifying
+    && !!taxProfile.entity_type && !!taxProfile.industry_category && !!taxProfile.business_start_date
+    && taxProfile.taxable_sales_h1 != null && taxProfile.taxable_sales_h2 != null
+    && (taxProfile.industry_category === "other" || !!taxProfile.industry_subtype)
+    && (taxProfile.industry_category !== "manufacturing" || taxProfile.entity_type !== "corporation" || taxProfile.industry_subtype !== "other" || taxProfile.is_sme != null)
+    && (verification?.tax_type_code !== "02" || taxProfile.simplified_industry_rate != null)
+    && taxProfile.confirmed;
   const canSubmit = accountStepValid && businessStepValid && termsAccepted && privacyAccepted && !isSubmitting;
 
   function handleBusinessNumberChange(value: string) {
     verificationRun.current += 1;
     setBusinessNumber(formattedBusinessNumber(value));
     setVerification(null);
+    setTaxProfile(current => ({...current, confirmed:false}));
     setVerificationError("");
     setIsVerifying(false);
   }
@@ -142,6 +154,7 @@ export function SignupPage() {
     }
     const run = ++verificationRun.current;
     setVerification(null);
+    setTaxProfile(current => ({...current, confirmed:false}));
     setVerificationError("");
     setIsVerifying(true);
     try {
@@ -152,6 +165,7 @@ export function SignupPage() {
         return;
       }
       setVerification(result);
+      setTaxProfile(current => ({...current, confirmed:false}));
     } catch (requestError) {
       if (run === verificationRun.current) setVerificationError(businessError(requestError));
     } finally {
@@ -173,6 +187,7 @@ export function SignupPage() {
         terms_accepted: termsAccepted,
         privacy_accepted: privacyAccepted,
         marketing_accepted: marketingAccepted,
+        tax_profile: taxProfile,
       });
       // Registration creates the account; the user signs in explicitly afterward.
       navigate("/login", { state: { signupEmail: email.trim(), signupComplete: true } });
@@ -203,7 +218,7 @@ export function SignupPage() {
 
   return (
     <div className="page">
-      <PageHeader title="사업자 회원가입" onBack={() => step === 1 ? navigate("/login") : setStep((step - 1) as 1 | 2)} />
+      <PageHeader showMenu={false} title="사업자 회원가입" onBack={() => step === 1 ? navigate("/login") : setStep((step - 1) as 1 | 2)} />
       <div className="page__body">
         <div style={{ display: "flex", justifyContent: "space-between", margin: "8px 0 20px", fontSize: 13, color: "var(--color-primary)" }}>
           <span>{step} / 3</span>
@@ -212,7 +227,7 @@ export function SignupPage() {
 
         {step === 1 && <>
           <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.35, marginBottom: 20 }}>
-            부가가치세 신고,<br />TAX-AI와 시작해 보세요
+            부가가치세 신고,<br />VAT-AI와 시작해 보세요
           </div>
           <div className="form-field">
             <label className="form-field__label" htmlFor="signup-email">이메일</label>
@@ -276,6 +291,11 @@ export function SignupPage() {
           </div>
           {businessVerified && verification?.business_status_code === "02" && <div className="banner banner--warning" style={{ marginBottom: 16 }} role="status">현재 휴업 상태로 조회됩니다. 가입은 가능하지만 사업자 상태가 이후 세무 검토에 참고됩니다.</div>}
           {businessVerified && verification?.business_status_code === "03" && <div className="banner banner--error" style={{ marginBottom: 16 }} role="status">현재 폐업 상태로 조회됩니다. 가입은 가능하지만 사업자 상태가 이후 세무 검토에 참고됩니다.</div>}
+          {businessVerified && <section className="signup-tax-profile"><h2 className="section-title">사업자·과세기간 정보</h2>
+            <p className="banner banner--info">국세청 조회 과세유형: {verification?.tax_type}. 아래 정보를 확인하면 가입과 함께 저장됩니다.</p>
+            <TaxProfileFields taxProfile={taxProfile} taxType={verification?.tax_type_code === "02" ? "simplified" : "general"} updateProfile={updateProfile}/>
+            <label className="check-row"><input type="checkbox" checked={taxProfile.confirmed} onChange={e=>setTaxProfile(current=>({...current,confirmed:e.target.checked}))}/>입력한 사업자 정보를 확인했습니다.</label>
+          </section>}
           <button className="btn btn--primary" onClick={nextStep} disabled={!businessStepValid}>다음</button>
         </>}
 

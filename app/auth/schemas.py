@@ -1,8 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
-from app.business.schemas import BusinessProfileOut
+from app.business.schemas import BusinessProfileOut, TaxProfileUpdate
 
 
 class RegisterRequest(BaseModel):
@@ -14,6 +14,7 @@ class RegisterRequest(BaseModel):
     terms_accepted: bool
     privacy_accepted: bool
     marketing_accepted: bool = False
+    tax_profile: TaxProfileUpdate | None = None
 
 
 class LoginRequest(BaseModel):
@@ -35,8 +36,18 @@ class UserOut(BaseModel):
     name: str
     created_at: datetime
     business: BusinessProfileOut | None = None
+    ocr_guide_seen: bool = False
 
 
 class AuthResponse(BaseModel):
     access_token: str
     user: UserOut
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirmation(BaseModel):
+    token: str = Field(min_length=32, max_length=128)
+    password: str = Field(min_length=8, max_length=72)

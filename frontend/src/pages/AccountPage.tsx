@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getMe, type AuthUser } from "../api/auth";
 import { PageHeader } from "../components/PageHeader";
-import { ProfileAvatar } from "../components/ProfileAvatar";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ProfilePhoto } from "../components/ProfileAvatar";
 import { avatarKey } from "../hooks/avatarStorage";
 import { TaxProfileForm } from "../components/TaxProfileForm";
 
@@ -10,6 +11,7 @@ export function AccountPage() {
   const navigate = useNavigate();
   const [user,setUser] = useState<AuthUser | null>(null);
   const [photo,setPhoto] = useState<string | null>(null);
+  const [logoutOpen,setLogoutOpen] = useState(false);
   const [error,setError] = useState("");
   const input = useRef<HTMLInputElement>(null);
   useEffect(()=>{getMe().then(account=>{setUser(account);setPhoto(localStorage.getItem(avatarKey(account.id)));}).catch(()=>setError("내 정보를 불러오지 못했습니다."));},[]);
@@ -23,11 +25,12 @@ export function AccountPage() {
   }
   return <div className="page qa-page"><PageHeader title="마이페이지"/><main className="page__body">
     {error && <p className="banner banner--error" role="alert">{error}</p>}
-    <section className="profile-card"><button aria-label="프로필 사진 변경" onClick={()=>input.current?.click()}><ProfileAvatar src={photo}/></button><div><h1>{user?.name ?? "내 계정"}</h1><p className="muted">{user?.email}</p><button className="text-link" onClick={()=>input.current?.click()}>프로필 사진 변경</button></div></section>
+    <section className="profile-card"><ProfilePhoto src={photo}/><div><h1>{user?.name ?? "내 계정"}</h1><p className="muted">{user?.email}</p><button className="text-link" onClick={()=>input.current?.click()}>프로필 사진 변경</button></div></section>
     <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={e=>upload(e.target.files?.[0])}/>
     <p className="footnote">프로필 사진은 현재 브라우저에 저장되며 홈에서도 표시됩니다.</p>
     <h2 className="section-title">사업자정보 관리</h2><TaxProfileForm/>
-    <h2 className="section-title">계정</h2><button className="btn btn--ghost" onClick={()=>{localStorage.removeItem("access_token");navigate("/login",{replace:true});}}>로그아웃</button>
+    <h2 className="section-title">계정</h2><button className="btn btn--danger-outline" onClick={()=>setLogoutOpen(true)}>로그아웃</button>
+    <ConfirmDialog open={logoutOpen} title="로그아웃하시겠어요?" confirmLabel="로그아웃" onCancel={()=>setLogoutOpen(false)} onConfirm={()=>{localStorage.removeItem("access_token");navigate("/login",{replace:true});}}>다시 이용하려면 이메일과 비밀번호로 로그인해 주세요.</ConfirmDialog>
   </main></div>;
 }
 export function AboutPage() {

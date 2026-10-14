@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { isAxiosError } from "axios";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { PageHeader } from "../../components/PageHeader";
-import { mockUser } from "../../mocks/user";
+
 import { login } from "../../api/auth";
 import { Icon } from "../../components/Icon";
 
@@ -11,7 +11,7 @@ export function LoginPage() {
   const location = useLocation();
   const routeState = location.state as { signupEmail?: string; signupComplete?: boolean } | null;
   const passwordInput = useRef<HTMLInputElement>(null);
-  const [email, setEmail] = useState(routeState?.signupEmail ?? mockUser.email);
+  const [email, setEmail] = useState(routeState?.signupEmail ?? localStorage.getItem("vat-ai-email") ?? "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberEmail, setRememberEmail] = useState(true);
@@ -28,6 +28,7 @@ export function LoginPage() {
     try {
       const { access_token } = await login(email, password);
       localStorage.setItem("access_token", access_token);
+      if (rememberEmail) localStorage.setItem("vat-ai-email", email.trim()); else localStorage.removeItem("vat-ai-email");
       navigate("/dashboard");
     } catch (e) {
       const message = isAxiosError(e) ? e.response?.data?.error?.message : undefined;
@@ -39,7 +40,7 @@ export function LoginPage() {
 
   return (
     <div className="page">
-      <PageHeader title="로그인" showBack={false} />
+      <PageHeader title="로그인" showBack={false} showMenu={false} />
       <div className="page__body">
         <div style={{ textAlign: "center", padding: "24px 0 32px" }}>
           <div
@@ -57,7 +58,7 @@ export function LoginPage() {
           >
             💼
           </div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>TAX-AI</div>
+          <div style={{ fontSize: 26, fontWeight: 800 }}>VAT-AI</div>
           <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
             소상공인을 위한 스마트 부가가치세 비서
           </div>
@@ -79,7 +80,7 @@ export function LoginPage() {
             <input type="checkbox" checked={rememberEmail} onChange={(e) => setRememberEmail(e.target.checked)} />
             이메일 저장
           </label>
-          <span className="muted">비밀번호를 잊으셨나요?</span>
+          <Link className="text-link" to="/forgot-password">비밀번호를 잊으셨나요?</Link>
         </div>
 
         {error && (

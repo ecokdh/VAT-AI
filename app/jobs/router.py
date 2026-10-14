@@ -95,10 +95,11 @@ def get_receipt_image(
 @router.post("/pdf-jobs", response_model=AsyncJobOut, status_code=202)
 def create_pdf_job(
     period: str = Query(...),
+    reviewed: bool = Query(False),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    return service.enqueue_pdf(session, user, period)
+    return service.enqueue_pdf(session, user, period, reviewed)
 
 
 @router.get("/jobs/{job_id}", response_model=AsyncJobOut)
@@ -128,3 +129,16 @@ def download_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="vat-ai-review-{job_id}.pdf"'},
     )
+
+
+@router.get("/filing-readiness")
+def get_filing_readiness(period: str, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    from app.jobs.readiness import filing_readiness
+    from app.transactions.service import calculate_period_estimate
+    try:
+        estimate = calculate_period_estimate(session, user, period, None)
+    except AppException as error:
+        if error.code != "TAX_TYPE_UNAVAILABLE":
+            raise
+        estimate = {}
+    return filing_readiness(session, user, period, estimate)

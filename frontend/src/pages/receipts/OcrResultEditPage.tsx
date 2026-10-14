@@ -11,6 +11,8 @@ export function OcrResultEditPage() {
   const [direction, setDirection] = useState<"purchase" | "sales">("purchase");
   const [vendor, setVendor] = useState("");
   const [description, setDescription] = useState("");
+  const [supplyAmount,setSupplyAmount] = useState("");
+  const [vatAmount,setVatAmount] = useState("");
   const [amount, setAmount] = useState("");
   const [transactionDate, setTransactionDate] = useState("");
   const [taxTreatment, setTaxTreatment] = useState<"standard" | "exempt">("standard");
@@ -29,6 +31,9 @@ export function OcrResultEditPage() {
         if (receipt.status !== "done") throw new Error("OCR에 성공한 영수증만 거래로 확정할 수 있습니다.");
         setVendor(receipt.vendor ?? "");
         setDirection(receipt.direction);
+        setSupplyAmount(receipt.details?.supply_amount==null?"":String(receipt.details.supply_amount));
+        setVatAmount(receipt.details?.vat_amount==null?"":String(receipt.details.vat_amount));
+        setDescription(receipt.details?.items?.map(item=>item.name).join(", ")??"");
         setAmount(receipt.amount == null ? "" : String(Math.round(receipt.amount)));
         setTransactionDate(receipt.date ?? "");
       })
@@ -45,8 +50,8 @@ export function OcrResultEditPage() {
     setError("");
     try {
       const total = Math.round(Number(amount));
-      const supply = taxTreatment === "exempt" ? total : Math.round(total / 1.1);
-      const vat = taxTreatment === "exempt" ? 0 : total - supply;
+      const supply = taxTreatment === "exempt" ? total : supplyAmount === "" ? null : Number(supplyAmount);
+      const vat = taxTreatment === "exempt" ? 0 : vatAmount === "" ? null : Number(vatAmount);
       const transaction = await createTransactionFromReceipt(Number(id), {
         direction,
         transaction_date: transactionDate,
@@ -57,7 +62,7 @@ export function OcrResultEditPage() {
         total_amount: total,
         supply_amount: supply,
         vat_amount: vat,
-        deemed_input_supply: deemedInput ? supply : 0,
+        deemed_input_supply: deemedInput ? supply ?? 0 : 0,
         deemed_input_eligible: deemedInput,
         deemed_input_document_type: deemedInput ? deemedDocument : null,
         tax_treatment: taxTreatment,
@@ -73,7 +78,7 @@ export function OcrResultEditPage() {
 
   return (
     <div className="page">
-      <PageHeader title="추출 거래 확인" showAmountToggle />
+      <PageHeader title="추출 거래 확인" showAmountToggle onBack={() => navigate(`/storage/${direction}`)} />
       <div className="page__body">
         <div className="banner banner--warning" style={{ marginBottom: 20 }}>
           <span>⚠️</span>
@@ -94,6 +99,8 @@ export function OcrResultEditPage() {
               <label className="form-field__label" htmlFor="transaction-total">거래 총액 (원)</label>
               <input id="transaction-total" className="input" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))} />
             </div>
+            <div className="field-grid"><label className="form-field"><span className="form-field__label">공급가액 (원)</span><input className="input" inputMode="numeric" value={supplyAmount} onChange={e=>setSupplyAmount(e.target.value.replace(/[^0-9]/g,""))}/></label><label className="form-field"><span className="form-field__label">부가세 (원)</span><input className="input" inputMode="numeric" value={vatAmount} onChange={e=>setVatAmount(e.target.value.replace(/[^0-9]/g,""))}/></label></div>
+            <p className="footnote">원본에 표시된 값을 확인해 주세요. 빈 금액은 총액에서 임의로 추정하지 않습니다.</p>
             <div className="form-field">
               <label className="form-field__label" htmlFor="transaction-date">거래일</label>
               <input id="transaction-date" className="input" type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} />

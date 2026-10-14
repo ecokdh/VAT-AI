@@ -207,6 +207,8 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
         receipt.amount = result.amount
         receipt.date = result.transaction_date
         receipt.ocr_raw = result.raw_text
+        from app.receipts.details import extract_details
+        receipt.details_json = json.dumps(extract_details(result.raw_text), ensure_ascii=False)
         receipt.ocr_warnings_json = json.dumps(result.warnings, ensure_ascii=False)
         receipt.ocr_missing_fields_json = json.dumps(result.missing_fields, ensure_ascii=False)
         receipt.ocr_pipeline_name = result.pipeline_name
@@ -229,13 +231,16 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
     if job.job_type == "pdf":
         import pdfkit
 
-        config = pdfkit.configuration(wkhtmltopdf=settings.PDFKIT_WKHTMLTOPDF_PATH or None)
-        pdf_bytes = pdfkit.from_string(
-            _review_pdf_html(payload),
-            False,
-            options={"encoding": "UTF-8", "quiet": ""},
-            configuration=config,
-        )
+        try:
+            config = pdfkit.configuration(wkhtmltopdf=settings.PDFKIT_WKHTMLTOPDF_PATH or None)
+        except OSError:
+            from app.jobs.pdf_export import render_review_pdf
+            pdf_bytes = render_review_pdf(payload)
+        else:
+            pdf_bytes = pdfkit.from_string(
+                _review_pdf_html(payload), False,
+                options={"encoding": "UTF-8", "quiet": ""}, configuration=config,
+            )
         stored = receipt_service.storage.save(job.user_id, pdf_bytes, "application/pdf", "pdf")
         job.result_json = json.dumps({"file_key": stored.key}, ensure_ascii=False)
         return

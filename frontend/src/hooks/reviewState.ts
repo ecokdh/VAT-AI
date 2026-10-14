@@ -1,22 +1,18 @@
 import type { TransactionApi } from "../api/transactions";
 import type { ReceiptProcessingApi } from "../api/receipts";
-// 신고 기간: [시작 월, 끝 월, 표시 이름]
-const PERIODS: Record<string, [number, number, string]> = {
-  "2026-Q1": [1, 3, "2026년 1~3월"],
-  "2026-H1": [1, 6, "2026년 1~6월"],
-  "2026-Q3": [7, 9, "2026년 7~9월"],
-  "2026-H2": [7, 12, "2026년 7~12월"],
-  "2026-YEAR": [1, 12, "2026년 연간"],
+// Labels describe the actual tax interval; H1/H2 are half-year final filings.
+const INTERVALS: Record<string, [number, number, string]> = {
+ Q1:[1,3,"1분기 (1~3월)"], H1:[1,6,"1기 확정 (1~6월)"],
+ Q3:[7,9,"3분기 (7~9월)"], H2:[7,12,"2기 확정 (7~12월)"], YEAR:[1,12,"연간 (1~12월)"],
 };
-export const isPeriod = (value: string | null): value is string => !!value && value in PERIODS;
-export const periodOptions = (simplified: boolean) => simplified ? ["2026-YEAR"] : ["2026-Q1", "2026-H1", "2026-Q3", "2026-H2"];
+export const isPeriod = (value: string | null): value is string => !!value && /^(2025|2026)-(Q1|H1|Q3|H2|YEAR)$/.test(value);
+export const periodOptions = (simplified: boolean) => [2026,2025].flatMap(year => (simplified ? ["YEAR"] : ["Q1","H1","Q3","H2"]).map(part=>`${year}-${part}`));
 export const defaultPeriod = () => new Date().getMonth() < 6 ? "2026-H1" : "2026-H2";
-export const periodLabel = (period: string) => PERIODS[period]?.[2] ?? period;
+export const periodLabel = (period: string) => isPeriod(period) ? `${period.slice(0,4)}년 ${INTERVALS[period.slice(5)][2]}` : period;
 export const inPeriod = (date: string | null, period: string) => {
-  if (!date?.startsWith("2026-") || !isPeriod(period)) return false;
-  const [from, to] = PERIODS[period];
-  const month = Number(date.slice(5, 7));
-  return from <= month && month <= to;
+ if (!date || !isPeriod(period) || date.slice(0,4) !== period.slice(0,4)) return false;
+ const [from,to] = INTERVALS[period.slice(5)]; const month=Number(date.slice(5,7));
+ return from <= month && month <= to;
 };
 export const needsReview = (row: TransactionApi) => row.state !== "confirmed" || (row.direction === "purchase" && !["analyzed", "excluded"].includes(row.review_status));
 export function summarizeReview(rows: TransactionApi[], inbox: ReceiptProcessingApi[], period: string) {

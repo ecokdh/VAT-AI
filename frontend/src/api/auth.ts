@@ -1,10 +1,12 @@
 import { apiClient } from "./client";
+import type { TaxProfileInput } from "./transactions";
 
 export interface AuthUser {
   id: string;
   email: string;
   name: string;
   created_at: string;
+  ocr_guide_seen: boolean;
   business: BusinessProfile | null;
 }
 
@@ -32,6 +34,7 @@ export interface RegisterRequest {
   terms_accepted: boolean;
   privacy_accepted: boolean;
   marketing_accepted: boolean;
+  tax_profile?: TaxProfileInput;
 }
 
 export interface EmailAvailabilityResponse {
@@ -60,3 +63,7 @@ export function checkEmailAvailability(email: string) {
 export function getMe() {
   return apiClient.get<AuthUser>("/auth/me").then((res) => res.data);
 }
+
+export const requestPasswordReset = (email: string) => apiClient.post<{message: string}>("/auth/forgot-password", {email}).then(r => r.data);
+export const resetPassword = (token: string, password: string) => apiClient.post<{message: string}>("/auth/reset-password", {token, password}).then(r => r.data);
+export const markOcrGuideSeen = () => apiClient.post<AuthUser>("/auth/ocr-guide-seen").then(r => r.data);

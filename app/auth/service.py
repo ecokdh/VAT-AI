@@ -9,7 +9,7 @@ from app.auth.models import ConsentRecord, User
 from app.auth.schemas import AuthResponse, LoginRequest, RegisterRequest, UserOut
 from app.business.models import BusinessProfile
 from app.business.schemas import BusinessProfileOut
-from app.business.service import verify_business
+from app.business.service import verify_business, save_tax_profile
 from app.common.exceptions import AppException
 from app.core.security import create_access_token, hash_password, verify_password
 
@@ -38,6 +38,7 @@ def _to_user_out(user: User, profile: BusinessProfile | None = None) -> UserOut:
         name=user.name,
         created_at=user.created_at,
         business=_to_business_out(profile) if profile is not None else None,
+        ocr_guide_seen=user.ocr_guide_seen,
     )
 
 
@@ -92,6 +93,8 @@ def register_user(db: Session, data: RegisterRequest) -> AuthResponse:
             verified_at=datetime.utcnow(),
         )
         db.add(profile)
+        if data.tax_profile is not None:
+            save_tax_profile(db, user.id, data.tax_profile, commit=False)
         db.add_all([
             ConsentRecord(
                 user_id=user.id,
@@ -128,7 +131,7 @@ def register_user(db: Session, data: RegisterRequest) -> AuthResponse:
         raise
 
     return AuthResponse(
-        access_token=create_access_token(user.id, user.email),
+        access_token=create_access_token(user.id, user.email, user.token_version),
         user=_to_user_out(user, profile),
     )
 
@@ -139,6 +142,6 @@ def login_user(db: Session, data: LoginRequest) -> AuthResponse:
     if user is None or not verify_password(data.password, user.password_hash):
         raise AppException(401, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다.")
     return AuthResponse(
-        access_token=create_access_token(user.id, user.email),
+        access_token=create_access_token(user.id, user.email, user.token_version),
         user=get_user_out(db, user),
     )

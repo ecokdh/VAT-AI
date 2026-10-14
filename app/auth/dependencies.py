@@ -28,5 +28,7 @@ def get_current_user(
     user = db.get(User, user_id)
     if user is None:
         raise AppException(401, "UNAUTHORIZED", "존재하지 않는 사용자입니다.")
+    if payload.get("ver", 0) != user.token_version:
+        raise AppException(401, "UNAUTHORIZED", "다시 로그인해 주세요.")
     return user
 

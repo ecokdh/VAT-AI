@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { isAxiosError } from "axios";
 import { useNavigate, useParams } from "react-router-dom";
-import { confirmReceiptExtraction, getReceipt, type ReceiptProcessingApi } from "../../api/receipts";
+import { confirmReceiptExtraction, getReceipt, type ReceiptProcessingApi, type ReceiptDetails } from "../../api/receipts";
 import { PageHeader } from "../../components/PageHeader";
 import { ReceiptPreview } from "../../components/ReceiptPreview";
+
+import { ReceiptDetailsForm } from "../../components/ReceiptDetailsForm";
 
 const fieldLabels: Record<string, string> = {
   vendor: "거래처",
@@ -15,6 +17,7 @@ export function OcrExtractionReviewPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [receipt, setReceipt] = useState<ReceiptProcessingApi | null>(null);
+  const [details,setDetails] = useState<ReceiptDetails>({});
   const [vendor, setVendor] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
@@ -28,6 +31,7 @@ export function OcrExtractionReviewPage() {
       .then((result) => {
         if (result.status !== "done") throw new Error("OCR가 완료된 증빙만 확인할 수 있습니다.");
         setReceipt(result);
+        setDetails(result.details ?? {});
         setVendor(result.vendor ?? "");
         setAmount(result.amount == null ? "" : String(Math.round(result.amount)));
         setDate(result.date ?? "");
@@ -41,10 +45,21 @@ export function OcrExtractionReviewPage() {
       setError("거래처, 거래 금액, 거래일을 확인해 주세요.");
       return;
     }
+    if (details.items?.some(item => !item.name.trim()) || details.additional_fields?.some(item => !item.label.trim())) {
+      setError("추가한 품목명과 항목명을 입력해 주세요. 필요 없는 행은 삭제해 주세요.");
+      return;
+    }
+    const money = [details.supply_amount, details.vat_amount, details.tax_free_amount,
+      ...(details.items ?? []).flatMap(item => [item.unit_price, item.amount])];
+    if (money.some(value => value != null && (!Number.isSafeInteger(value) || value < 0)) ||
+      details.items?.some(item => item.quantity != null && (!Number.isFinite(item.quantity) || item.quantity < 0))) {
+      setError("금액은 0 이상의 정수, 수량은 0 이상의 숫자로 입력해 주세요.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
-      await confirmReceiptExtraction(Number(id), { vendor: vendor.trim(), amount: Math.round(Number(amount)), date });
+      await confirmReceiptExtraction(Number(id), { vendor: vendor.trim(), amount: Math.round(Number(amount)), date, details });
       navigate(destination === "home" ? "/dashboard" : destination === "capture" ? `/capture?direction=${receipt?.direction ?? "purchase"}` : `/storage/${receipt?.direction ?? "purchase"}`, { replace: true });
     } catch (cause) {
       setError(isAxiosError(cause) ? cause.response?.data?.error?.message ?? "추출 결과를 저장하지 못했습니다." : "추출 결과를 저장하지 못했습니다.");
@@ -62,7 +77,7 @@ export function OcrExtractionReviewPage() {
   const missingNames = missing.map(field => fieldLabels[field.key]).join(", ");
   return (
     <div className="page qa-page">
-      <PageHeader title="추출 결과 확인" showAmountToggle />
+      <PageHeader title="추출 결과 확인" showAmountToggle onBack={() => navigate(`/storage/${receipt?.direction ?? "purchase"}`)} />
       <div className="page__body">
         <div className="banner banner--info" style={{ marginBottom: 16 }}>
           인식한 내용을 원본 증빙과 대조해 주세요. 확인 후 선택한 보관함으로 이동하며, 거래 확정과 공제 분석은 별도로 진행됩니다.
@@ -89,6 +104,7 @@ export function OcrExtractionReviewPage() {
             <label className="form-field__label" htmlFor="ocr-review-date">거래일</label>
             <input id="ocr-review-date" className="input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </div>
+          <ReceiptDetailsForm value={details} original={receipt.details??{}} confirmed={receipt.extraction_confirmed} onChange={setDetails}/>
           <button className="btn btn--primary" style={{ width: "100%", marginTop: 20 }} disabled={saving} onClick={() => void confirmAndOpenVault()}>
             {saving ? "확인 내용을 저장 중" : "확인 후 보관함으로 이동"}
           </button>

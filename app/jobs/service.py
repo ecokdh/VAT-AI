@@ -64,8 +64,12 @@ async def enqueue_receipt_ocr(session: Session, user_id: uuid.UUID, content: byt
     return job, receipt
 
 
-def enqueue_pdf(session: Session, user: User, period: str) -> AsyncJob:
+def enqueue_pdf(session: Session, user: User, period: str, reviewed: bool = False) -> AsyncJob:
     estimate = calculate_period_estimate(session, user, period, None)
+    from app.jobs.readiness import filing_readiness
+    readiness = filing_readiness(session, user, period, estimate)
+    if not reviewed or not readiness["ready"]:
+        raise AppException(409, "FILING_NOT_READY", "사업자정보, 거래 확정, 공제 검토와 예상세액 검토를 모두 완료해 주세요.")
     job = AsyncJob(
         user_id=user.id,
         job_type="pdf",
@@ -110,6 +114,13 @@ def confirm_receipt_extraction(
         raise AppException(404, "NOT_FOUND", "영수증을 찾을 수 없습니다.")
     if receipt.status != "done":
         raise AppException(409, "OCR_NOT_COMPLETE", "OCR 완료 후 추출 결과를 확인해 주세요.")
+    if not data.vendor.strip():
+        raise AppException(400, "VALIDATION_ERROR", "거래처를 입력해 주세요.")
+    existing = session.exec(select(Transaction).where(Transaction.receipt_id == receipt.id)).first()
+    if existing is not None:
+        raise AppException(409, "TRANSACTION_ALREADY_CREATED", "이미 거래로 저장된 증빙입니다. 보관함에서 거래 정보를 확인해 주세요.")
+    if data.details is not None:
+        receipt.details_json = data.details.model_dump_json()
     receipt.vendor = data.vendor.strip()
     receipt.amount = data.amount
     receipt.date = data.date

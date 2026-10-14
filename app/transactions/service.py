@@ -288,6 +288,13 @@ def calculate_period_estimate(
     if tax_type_code not in {"01", "02"}:
         raise AppException(409, "TAX_TYPE_UNAVAILABLE", "국세청 과세유형 조회가 필요합니다.")
     tax_type = "general" if tax_type_code == "01" else "simplified"
+    if period.startswith("2025-"):
+        from app.jobs.readiness import filter_bounds
+        filter_bounds(period)
+        return {"period": period, "tax_type": tax_type, "status": "UNAVAILABLE", "output_vat": None,
+                "eligible_input_vat": None, "deemed_input_vat": None, "payable_estimate": None,
+                "included_transaction_count": 0, "caution_transaction_count": 0, "uncalculated_transaction_count": 0,
+                "rule_version": RULE_VERSION, "notes": ["2025년 거래를 조회할 수 있습니다. 현재 계산 규칙은 2026년 전용이므로 2025년 예상세액과 PDF 생성은 제공하지 않습니다."]}
     tax_profile = session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id == user.id)).first()
     if tax_profile and tax_profile.tax_type_change_date:
         change_date = tax_profile.tax_type_change_date

@@ -34,9 +34,37 @@ class ReceiptSummary(BaseModel):
     created_at: datetime
 
 
+class ReceiptLineItem(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    quantity: float | None = Field(default=None, ge=0)
+    unit_price: int | None = Field(default=None, ge=0)
+    amount: int | None = Field(default=None, ge=0)
+
+
+class AdditionalReceiptField(BaseModel):
+    label: str = Field(min_length=1, max_length=100)
+    value: str = Field(max_length=1000)
+
+
+class ReceiptDetails(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    business_number: str | None = Field(default=None, max_length=30)
+    address: str | None = Field(default=None, max_length=300)
+    phone: str | None = Field(default=None, max_length=40)
+    payment_method: str | None = Field(default=None, max_length=40)
+    approval_number: str | None = Field(default=None, max_length=40)
+    receipt_number: str | None = Field(default=None, max_length=60)
+    supply_amount: int | None = Field(default=None, ge=0)
+    vat_amount: int | None = Field(default=None, ge=0)
+    tax_free_amount: int | None = Field(default=None, ge=0)
+    items: list[ReceiptLineItem] = Field(default_factory=list, max_length=100)
+    additional_fields: list[AdditionalReceiptField] = Field(default_factory=list, max_length=50)
+
+
 class ReceiptProcessingOut(ReceiptOut):
     """v2-only receipt details with replaceable OCR pipeline progress."""
 
+    details: ReceiptDetails = Field(default_factory=ReceiptDetails)
     direction: Literal["purchase", "sales"]
     processing_stage: Optional[str]
     processing_progress: int
@@ -51,6 +79,7 @@ class ReceiptProcessingOut(ReceiptOut):
 
 
 class ExtractionConfirmation(BaseModel):
+    details: ReceiptDetails | None = None
     vendor: str = Field(min_length=1, max_length=255)
     amount: int = Field(ge=0)
     date: date

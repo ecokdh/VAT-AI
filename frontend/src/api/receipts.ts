@@ -14,7 +14,14 @@ export interface ReceiptApi {
   created_at: string;
 }
 
+export interface ReceiptLineItem {name:string;quantity:number|null;unit_price:number|null;amount:number|null;}
+export interface ReceiptDetails {
+ business_number?:string|null;address?:string|null;phone?:string|null;payment_method?:string|null;
+ approval_number?:string|null;receipt_number?:string|null;supply_amount?:number|null;vat_amount?:number|null;tax_free_amount?:number|null;
+ items?:ReceiptLineItem[];additional_fields?:{label:string;value:string}[];
+}
 export interface ReceiptProcessingApi extends ReceiptApi {
+  details: ReceiptDetails;
   direction: "purchase" | "sales";
   processing_stage: string | null;
   processing_progress: number;
@@ -28,7 +35,7 @@ export interface ReceiptProcessingApi extends ReceiptApi {
   retention_status: string;
 }
 
-export interface ReceiptExtractionInput { vendor: string; amount: number; date: string; }
+export interface ReceiptExtractionInput { vendor: string; amount: number; date: string; details?: ReceiptDetails; }
 
 export function uploadReceipt(file: File) {
   const formData = new FormData();

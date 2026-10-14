@@ -42,7 +42,7 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
     finally { setLoading(false); }
   }, [direction]);
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { getMe().then(user => { if(user.business?.tax_type_code === "02") { setSimplified(true); setPeriod("2026-YEAR"); } }).catch(() => {}); }, []);
+  useEffect(() => { getMe().then(user => { if(user.business?.tax_type_code === "02") { setSimplified(true); setPeriod(current => `${current.slice(0,4)}-YEAR`); } }).catch(() => {}); }, []);
   useEffect(() => { const scroll = () => setScrolled(window.scrollY > 300); window.addEventListener("scroll", scroll); return () => window.removeEventListener("scroll", scroll); }, []);
   useEffect(() => { if(detail) dialog.current?.showModal(); }, [detail]);
   const periodRows = transactions.filter(r => inPeriod(r.transaction_date, period));

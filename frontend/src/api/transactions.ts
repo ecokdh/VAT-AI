@@ -140,7 +140,7 @@ export async function saveTaxProfile(input: TaxProfileInput): Promise<TaxProfile
 }
 
 export async function createPdfJob(period: string): Promise<AsyncJobApi> {
-  const { data } = await apiClient.post<AsyncJobApi>("/v2/pdf-jobs", null, { params: { period } });
+  const { data } = await apiClient.post<AsyncJobApi>("/v2/pdf-jobs", null, { params: { period, reviewed: true } });
   return data;
 }
 
@@ -163,3 +163,9 @@ export async function requestPermanentDelete(id: number): Promise<TransactionApi
   const { data } = await apiClient.post<TransactionApi>(`/v2/trash/${id}/permanent-delete-request`);
   return data;
 }
+
+export interface FilingReadiness {
+ period: string; ready: boolean; checks: {business:boolean; transactions:boolean; deductions:boolean; estimate:boolean};
+ total:number; unconfirmed:number; pending:number; deductible:number; nondeductible:number; first_receipt_id:number|null;
+}
+export const getFilingReadiness = (period:string) => apiClient.get<FilingReadiness>("/v2/filing-readiness", {params:{period}}).then(r=>r.data);

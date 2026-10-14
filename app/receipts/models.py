@@ -16,6 +16,7 @@ class Receipt(SQLModel, table=True):
     image_url: str = Field(nullable=False)
     direction: str = Field(default="purchase", nullable=False)
     ocr_raw: Optional[str] = Field(default=None)
+    details_json: str = Field(default="{}", nullable=False)
     vendor: Optional[str] = Field(default=None)
     amount: Optional[float] = Field(default=None)
     date: Optional[date_] = Field(default=None)
@@ -56,3 +57,12 @@ class Receipt(SQLModel, table=True):
         except (TypeError, json.JSONDecodeError):
             return []
 
+
+
+    @property
+    def details(self) -> dict:
+        try:
+            result = json.loads(self.details_json)
+            return result if isinstance(result, dict) else {}
+        except (TypeError, ValueError):
+            return {}

@@ -3,6 +3,8 @@ import { isAxiosError } from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { Icon } from "../components/Icon";
+import { getMe, markOcrGuideSeen } from "../api/auth";
+import { CaptureGuide } from "../components/CaptureGuide";
 import { enqueueReceiptOcr } from "../api/receipts";
 
 export function CapturePage() {
@@ -19,10 +21,31 @@ export function CapturePage() {
   const [error, setError] = useState("");
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [cameraReady, setCameraReady] = useState(false);
+  const [guide,setGuide] = useState<"loading"|"show"|"ready"|"error">("loading");
+  const [seconds,setSeconds] = useState(3);
+  const [pendingFile,setPendingFile] = useState<File|null>(null);
+  const [preview,setPreview] = useState("");
+  useEffect(()=>{
+    if(!hasDirection)return;
+    let active=true;
+    getMe().then(user=>{if(active)setGuide(user.ocr_guide_seen?"ready":"show");}).catch(()=>{if(active)setGuide("error");});
+    return()=>{active=false;};
+  },[hasDirection]);
+  useEffect(()=>{
+    if(guide!=="show")return;
+    const tick=window.setInterval(()=>setSeconds(value=>Math.max(0,value-1)),1000);
+    const timer=window.setTimeout(()=>{void markOcrGuideSeen().catch(()=>{});setGuide("ready");},3000);
+    return()=>{window.clearInterval(tick);window.clearTimeout(timer);};
+  },[guide]);
+  useEffect(()=>{
+    if(!pendingFile){setPreview("");return;}
+    const url=URL.createObjectURL(pendingFile);setPreview(url);
+    return()=>URL.revokeObjectURL(url);
+  },[pendingFile]);
 
   // 카메라 스트림 시작/정리 — facingMode가 바뀔 때마다 재실행됨
   useEffect(() => {
-    if (!hasDirection) return;
+    if (!hasDirection || guide !== "ready" || pendingFile) return;
     let cancelled = false;
 
     async function startCamera() {
@@ -55,7 +78,7 @@ export function CapturePage() {
       cancelled = true;
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [facingMode, hasDirection]);
+  }, [facingMode, hasDirection, guide, pendingFile]);
 
   async function uploadAndNavigate(file: File) {
     if (direction !== "purchase" && direction !== "sales") return;
@@ -93,7 +116,7 @@ export function CapturePage() {
           return;
         }
         const file = new File([blob], `receipt-${Date.now()}.jpg`, { type: "image/jpeg" });
-        void uploadAndNavigate(file);
+        setPendingFile(file);
       },
       "image/jpeg",
       0.92
@@ -105,7 +128,7 @@ export function CapturePage() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    await uploadAndNavigate(file);
+    setPendingFile(file);
   }
 
   function openFilePicker() {
@@ -121,10 +144,12 @@ export function CapturePage() {
     <div className="stack-gap-sm" style={{ marginTop: 28 }}>{(["purchase", "sales"] as const).map((value) => <button className="card capture-choice" key={value} onClick={() => setParams({ direction: value })}><Icon name="folder" size={30} /><span><strong>{value === "purchase" ? "매입" : "매출"}</strong><small>{value === "purchase" ? "사업을 위해 지출한 거래" : "고객에게 판매한 거래"}</small></span><span>›</span></button>)}</div>
   </div></div>;
 
+  if(guide!=="ready")return <div className="page qa-page"><PageHeader title="증빙 촬영 안내" onBack={()=>navigate(`/storage/${direction}`)}/>{guide==="show"?<CaptureGuide seconds={seconds}/>:<div className="page__body">{guide==="error"?<p className="banner banner--error">촬영 안내 정보를 불러오지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.</p>:<p role="status">촬영을 준비하고 있습니다.</p>}</div>}</div>;
+  if(pendingFile)return <div className="page qa-page"><PageHeader title="촬영한 증빙 확인" onBack={()=>setPendingFile(null)}/><main className="page__body"><h1 className="screen-title">글자가 선명하게 보이나요?</h1><p className="muted">영수증 전체가 보이고 금액·날짜를 읽을 수 있는지 확인해 주세요.</p><img className="capture-preview" src={preview} alt="분석할 증빙 미리보기"/>{error&&<p className="banner banner--error" role="alert">{error}</p>}<div className="btn-row"><button className="btn btn--secondary" disabled={isUploading} onClick={()=>{setPendingFile(null);setError("");}}>다시 촬영·선택</button><button className="btn btn--primary" disabled={isUploading} onClick={()=>void uploadAndNavigate(pendingFile)}>{isUploading?"올리는 중…":"선명해요 · 분석하기"}</button></div></main></div>;
   return (
     <div className="page" style={{ background: "#0c0c10" }}>
       <header className="page-header" style={{ background: "transparent" }}>
-        <button className="icon-btn" style={{ color: "#fff" }} onClick={() => navigate(-1)}>
+        <button className="icon-btn" style={{ color: "#fff" }} aria-label="보관함으로 돌아가기" onClick={() => navigate(`/storage/${direction}`)}>
           ‹
         </button>
         <span className="page-header__title" style={{ color: "#fff" }}>
@@ -181,7 +206,7 @@ export function CapturePage() {
               gap: 6,
             }}
           >
-            ⬚ 사각 가이드라인에 영수증을 맞춰주세요
+            ⬚ 어두운 배경 · 전체가 보이게 · 초점 맞추기
           </div>
         </div>
       </div>

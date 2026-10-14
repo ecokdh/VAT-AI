@@ -1,4 +1,5 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { parentRoute } from "../hooks/navigation";
 import { AmountVisibilityToggle } from "./AmountVisibilityToggle";
 import { AccountMenu } from "./AccountMenu";
 
@@ -7,15 +8,17 @@ interface PageHeaderProps {
   onBack?: () => void;
   showBack?: boolean;
   showAmountToggle?: boolean;
+  showMenu?: boolean;
 }
 
-export function PageHeader({ title, onBack, showBack = true, showAmountToggle = false }: PageHeaderProps) {
+export function PageHeader({ title, onBack, showBack = true, showAmountToggle = false, showMenu = true }: PageHeaderProps) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   return (
     <header className="page-header">
       {showBack ? (
-        <button className="icon-btn" aria-label="뒤로가기" onClick={onBack ?? (() => navigate(-1))}>
+        <button className="icon-btn" aria-label="뒤로가기" onClick={onBack ?? (() => navigate(parentRoute(location.pathname, location.search)))}>
           ‹
         </button>
       ) : (
@@ -24,7 +27,7 @@ export function PageHeader({ title, onBack, showBack = true, showAmountToggle = 
       <span className="page-header__title">{title}</span>
       <div style={{ display: "flex", gap: 4 }}>
         {showAmountToggle && <AmountVisibilityToggle />}
-        <AccountMenu />
+        {showMenu && <AccountMenu />}
       </div>
     </header>
   );

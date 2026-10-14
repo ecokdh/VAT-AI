@@ -35,7 +35,7 @@ def verify_business(value: str) -> BusinessVerifyResponse:
     )
 
 
-def save_tax_profile(session: Session, user_id, data: TaxProfileUpdate) -> TaxProfileV2:
+def save_tax_profile(session: Session, user_id, data: TaxProfileUpdate, *, commit: bool = True) -> TaxProfileV2:
     payload = data.model_dump(exclude_unset=True, exclude={"confirmed"})
     suspension_periods = payload.pop("suspension_periods", None)
     item = session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id == user_id)).first()
@@ -73,6 +73,9 @@ def save_tax_profile(session: Session, user_id, data: TaxProfileUpdate) -> TaxPr
         item.confirmed_at = None
     item.updated_at = datetime.now(timezone.utc)
     session.add(item)
-    session.commit()
-    session.refresh(item)
+    if commit:
+        session.commit()
+        session.refresh(item)
+    else:
+        session.flush()
     return item

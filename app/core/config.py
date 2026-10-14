@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     # A트랙 계약명에 맞춘 JWT 만료 시간 설정.
     JWT_EXPIRE_MINUTES: int = 60 * 24
+    FRONTEND_URL: str = "http://localhost:5173"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USE_SSL: bool = False
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
     OPENAI_API_KEY: str = ""
     # RAG 법령 임베딩. 차원(1536)은 law_embeddings.embedding 컬럼과 맞춰야 한다.
     EMBEDDING_MODEL: str = "text-embedding-3-small"

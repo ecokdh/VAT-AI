@@ -38,6 +38,7 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
             "async_jobs",
             "consent_records",
             "law_embeddings",
+            "password_reset_tokens",
         }
         consent_columns = {
             column["name"] for column in inspect(connection).get_columns("consent_records")
@@ -76,4 +77,6 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
         assert "direction" in receipt_columns
-        assert revision == "a3f1c2d4e5b6"
+        assert revision == "b72c4e91f630"
+        assert "details_json" in receipt_columns
+        assert {"token_version", "ocr_guide_seen"} <= {column["name"] for column in inspect(connection).get_columns("users")}

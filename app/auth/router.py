@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlmodel import Session
 
 from app.auth import service
@@ -35,3 +35,25 @@ def login(data: LoginRequest, db: Session = Depends(get_session)):
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
     return service.get_user_out(db, current_user)
+
+
+from app.auth.schemas import PasswordResetRequest, PasswordResetConfirmation
+from app.auth import password_reset
+
+
+@router.post("/forgot-password", status_code=202)
+def forgot_password(data: PasswordResetRequest, request: Request, db: Session = Depends(get_session)):
+    return password_reset.request_reset(db, str(data.email), request.client.host if request.client else "unknown")
+
+
+@router.post("/reset-password")
+def reset_password(data: PasswordResetConfirmation, db: Session = Depends(get_session)):
+    return password_reset.reset_password(db, data.token, data.password)
+
+
+@router.post("/ocr-guide-seen", response_model=UserOut)
+def mark_ocr_guide_seen(user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    user.ocr_guide_seen = True
+    db.add(user)
+    db.commit()
+    return service.get_user_out(db, user)

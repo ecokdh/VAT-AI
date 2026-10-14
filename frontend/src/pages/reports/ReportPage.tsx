@@ -15,10 +15,14 @@ export function ReportPage() {
   const [error,setError]=useState("");
   const [pdfBusy,setPdfBusy]=useState(false);
   const [pdfMessage,setPdfMessage]=useState("");
-  const [reviewed,setReviewed]=useState(false);
+  const [reviewedKey,setReviewedKey]=useState("");
+  const reviewKey=JSON.stringify([period,estimate,view.readiness,view.transactions]);
+  const reviewed=reviewedKey===reviewKey;
+  const canGenerate=!view.loading&&!view.error&&!!view.readiness?.ready&&reviewed;
+  const setReviewed=(value:boolean)=>setReviewedKey(value?reviewKey:"");
 
   async function createReviewPdf() {
-    if (!period || pdfBusy) return;
+    if (!period || pdfBusy || !canGenerate) return;
     setPdfBusy(true);
     setPdfMessage("검토용 PDF 작업을 시작했습니다.");
     setError("");
@@ -51,16 +55,20 @@ export function ReportPage() {
   }
 
 
-  return <div className="page qa-page"><PageHeader title="신고 전 검토" showAmountToggle/><main className="page__body">
+  return <div className="page qa-page"><PageHeader title="신고서 생성" showAmountToggle/><main className="page__body">
     <p className="eyebrow muted">부가가치세 신고 준비</p><h1 className="screen-title">신고할 내용을 확인하세요</h1><p className="muted">확정 거래와 공제 분석을 바탕으로 신고 전 확인사항을 정리했어요.</p>
     <label className="form-field"><span className="form-field__label">신고 대상 기간</span><select className="input" value={period} onChange={e=>{view.setPeriod(e.target.value);setReviewed(false);}}>{periodOptions(view.user?.business?.tax_type_code==="02").map(p=><option key={p} value={p}>{periodLabel(p)}</option>)}</select></label>
     {(error || view.error) && <p className="banner banner--error" role="alert">{error || view.error}</p>}
     {view.loading && <p role="status">신고 준비 상태를 불러오는 중입니다.</p>}
     <section className="report-total"><small className="muted">예상 납부세액</small><strong>{estimate?.payable_estimate==null?"확인 필요":fmt.won(estimate.payable_estimate)}</strong><p className="muted">확정 거래 기준 · 검토를 위한 참고용 추정치</p></section>
     {estimate ? <details className="card"><summary>계산 내역 자세히 보기</summary>{[["매출세액",estimate.output_vat],["일반 매입 공제액",estimate.eligible_input_vat],["의제매입 공제액",estimate.deemed_input_vat]].map(([label,value])=><div className="field-row" key={String(label)}><span>{label}</span><strong>{value==null?"확인 필요":fmt.won(Number(value))}</strong></div>)}{estimate.notes.map(note=><p className="muted" key={note}>{note}</p>)}</details> : <button className="banner banner--warning" onClick={()=>navigate("/account")}>사업자 과세유형 및 설정을 확인해 주세요 ›</button>}
-    <section className="card overview-card"><h2 className="section-title">신고 준비 현황</h2><div className="stat-grid">{[["전체 거래",view.total],["확인 필요",view.unconfirmed],["공제 검토",view.pending]].map(([label,count])=><div key={label}><strong>{count}</strong><small>{label}</small></div>)}</div><div className="action-list"><button onClick={()=>go(`/storage/${view.firstDirection}?status=review`)}><span><strong>미확정 거래 {view.unconfirmed}건</strong><small>OCR 결과와 거래 정보를 확인해요</small></span><span>›</span></button><button onClick={()=>go("/storage/purchase?status=review")}><span><strong>공제 분석 확인 {view.pending}건</strong><small>분석 전·판단 보류 거래를 확인해요</small></span><span>›</span></button></div></section>
-    <section className="card review-checklist"><h2 className="section-title">신고 전 체크리스트</h2><p>{estimate ? "✓" : "○"} 사업자정보·과세유형 확인</p><p>{!view.loading && view.total>0 && view.unconfirmed===0?"✓":"○"} 매입·매출 거래 확정</p><p>{!view.loading && view.total>0 && view.pending===0?"✓":"○"} 공제 보류 거래 확인</p><label><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> 예상세액 및 계산 근거 검토</label></section>
-    <button className="btn btn--primary" disabled={pdfBusy || !estimate} onClick={()=>void createReviewPdf()}>{pdfBusy?"PDF 생성 중…":"신고 지원용 PDF 생성"}</button>{pdfMessage && <p role="status">{pdfMessage}</p>}
+    <section className="card overview-card"><h2 className="section-title">신고 준비 현황</h2><div className="stat-grid">{[["공제",view.readiness?.deductible??0],["불공제",view.readiness?.nondeductible??0],["확인 필요",view.unconfirmed+view.pending]].map(([label,count])=><div key={label}><strong>{count}</strong><small>{label}</small></div>)}</div><div className="action-list"><button onClick={()=>go(`/storage/${view.firstDirection}?status=review`)}><span><strong>미확정 거래 {view.unconfirmed}건</strong><small>OCR 결과와 거래 정보를 확인해요</small></span><span>›</span></button><button onClick={()=>go("/storage/purchase?status=review")}><span><strong>확인 필요 {view.pending}건</strong><small>분석 전·판단 보류 거래를 확인해요</small></span><span>›</span></button></div></section>
+    <section className="card review-checklist"><h2 className="section-title">신고 전 체크리스트</h2>
+      {([["business","사업자정보·과세유형 확인","/account"],["transactions","매입·매출 거래 확정",`/storage/${view.firstDirection}?status=review`],["deductions","공제·불공제 판단 확인","/storage/purchase?status=review"],["estimate","예상세액 계산 완료",null]] as const).map(([key,label,path])=><div className="checklist-row" key={key}><span className={view.readiness?.checks[key]?"status-label--done":"muted"}>{view.readiness?.checks[key]?"✓":"○"} {label}</span>{!view.readiness?.checks[key]&&path&&<button className="text-link" onClick={()=>go(path)}>확인하기</button>}</div>)}
+      <label className="check-row"><input type="checkbox" checked={reviewed} disabled={!view.readiness?.ready||view.loading} onChange={e=>setReviewed(e.target.checked)}/>예상세액 및 계산 근거를 검토했습니다.</label>
+      {!canGenerate&&<p className="footnote">위 확인사항을 모두 완료하면 PDF 생성 버튼이 활성화됩니다.</p>}
+    </section>
+    <button className="btn btn--primary" disabled={pdfBusy || !canGenerate} onClick={()=>void createReviewPdf()}>{pdfBusy?"PDF 생성 중…":"신고 지원용 PDF 생성"}</button>{pdfMessage && <p role="status">{pdfMessage}</p>}
     <p className="footnote">이 자료는 세무 신고서가 아닙니다. 실제 제출 전 내용을 검토해 주세요.</p>
   </main></div>;
 }
