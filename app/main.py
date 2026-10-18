@@ -35,6 +35,8 @@ app.include_router(deduction_router)
 app.include_router(transactions_v2_router)
 app.include_router(jobs_v2_router)
 app.include_router(rag_router)
+from app.team_benchmark.router import router as team_benchmark_router
+app.include_router(team_benchmark_router)
 
 @app.get("/health", tags=["health"])
 def health_check(db: Session = Depends(get_session)):

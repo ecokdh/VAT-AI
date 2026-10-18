@@ -234,6 +234,8 @@ def test_e2e_negative_cancellation_receipt_and_item_parent_reindex(client, monke
     assert "amount" in detail["ocr_missing_fields"]
     assert any("음수·소수 금액" in w for w in detail["ocr_warnings"])
     assert detail["recognition"]["document"]["fields"]["payment_amount"] == -11000
+    assert detail["recognition"]["document"]["fields"]["transaction_save_amount"] == -11000
+    assert detail["recognition"]["document"]["fields"]["transaction_save_amount_source"] == "payment_amount"
 
     # Simulate ReceiptReviewEditor removeItem(0): item 1 shifts to index 0, item 2's parent_row shifts from 1 -> 0
     items_before = detail["recognition"]["document"]["items"]
@@ -288,20 +290,25 @@ def test_e2e_negative_cancellation_receipt_and_item_parent_reindex(client, monke
     assert saved_doc["recognition"]["original_document"]["fields"]["payment_amount"] == -11000
 
 
-def test_e2e_sequential_queue_processing_with_independent_fixtures(client, monkeypatch):
+def test_e2e_sequential_queue_processing_with_isolated_fixtures(client, monkeypatch):
     """Scenario D: 3 rapid uploads queued simultaneously are processed sequentially by worker without lock collision."""
     from app.main import app
     from app.core.database import get_session
 
     headers = _register_user(client, monkeypatch, "queue3-e2e@example.com")
-    case_ids = ["fixture-a", "fixture-b", "fixture-c"]
+    # Self-contained synthetic fixtures: no private images or experiment outputs.
+    case_ids = ["QUEUE_A", "QUEUE_B", "QUEUE_C"]
     raw_by_sha = {}
+    saved_by_case = {}
     receipt_ids = []
 
     for idx, cid in enumerate(case_ids):
-        payment = [11500,26160,303400][idx]
-        total = [11500,46140,303400][idx]
-        saved = {'raw_prediction':{'h':{'vendor':f'독립 테스트 상점 {idx+1}','branch':None,'business_number':None,'datetime':'2026-10-01 12:00:00'},'m':[{'role':'total','scope':'unknown','label':'합계','value':total},{'role':'payment','scope':'unknown','label':'결제액','value':payment}],'i':[{'n':'독립 테스트 상품','q':1,'u':None,'p':payment,'t':'item','parent':None}],'uncertain':[]}}
+        saved = {"raw_prediction": {
+            "h": {"vendor": f"가상상점{idx}", "branch": None, "business_number": None, "datetime": "2026-10-13 12:30:00"},
+            "m": [{"role": "payment", "scope": "unknown", "label": "결제액", "value": 1000 + idx}],
+            "i": [{"n": f"가상상품{idx}", "q": 1, "u": 1000 + idx, "p": 1000 + idx, "t": "item", "parent": None}],
+            "uncertain": []}}
+        saved_by_case[cid] = saved
         img_bytes = _make_png_bytes((100 + idx * 20, 150, 200))
         sha = hashlib.sha256(img_bytes).hexdigest()
         raw_by_sha[sha] = (cid, saved["raw_prediction"])
@@ -342,13 +349,15 @@ def test_e2e_sequential_queue_processing_with_independent_fixtures(client, monke
     r_kr38 = client.get(f"/v2/receipts/{receipt_ids[1]}", headers=headers).json()
     r_kr44 = client.get(f"/v2/receipts/{receipt_ids[2]}", headers=headers).json()
 
-    assert r_kr02["status"] == "done" and r_kr02["amount"] == 11500
-    assert r_kr02["recognition"]["document"]["fields"]["payment_amount"] == 11500
-
-    assert r_kr38["status"] == "done" and r_kr38["amount"] == 26160
-    assert r_kr38["recognition"]["document"]["fields"]["printed_total_amount"] == 46140
-    assert r_kr38["recognition"]["document"]["fields"]["payment_amount"] == 26160
-
-    assert r_kr44["status"] == "done" and r_kr44["amount"] == 303400
-    assert r_kr44["recognition"]["document"]["fields"]["payment_amount"] == 303400
-    assert r_kr44["recognition"]["document"]["items"][0]["name"] == "독립 테스트 상품"
+    for cid, response in zip(case_ids, [r_kr02, r_kr38, r_kr44]):
+        expected = normalize(saved_by_case[cid]["raw_prediction"])
+        document = response["recognition"]["document"]
+        assert response["status"] == "done"
+        for key in (
+            "vendor", "branch", "business_number", "transaction_datetime",
+            "printed_total_amount", "payment_amount", "supply_amount", "vat_amount",
+            "tax_exempt_amount", "discount_amount", "transaction_save_amount",
+            "transaction_save_amount_source",
+        ):
+            assert document["fields"][key] == expected["fields"][key]
+        assert document["items"] == expected["items"]

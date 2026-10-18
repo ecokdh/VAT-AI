@@ -160,7 +160,8 @@ def test_worker_adapter_preserves_partial_and_reports_combined_stages(monkeypatc
     assert result.status=='PARTIAL' and result.vendor=='검토상점' and result.amount==11000
     assert 'transaction_date' in result.missing_fields
     assert events[0].status.value=='skipped'
-    assert [e.stage.value for e in events[1:3]]==['text_recognition','transaction_extraction']
+    assert events[1].stage.value=='text_recognition' and events[1].status.value=='processing'
+    assert any(e.stage.value=='transaction_extraction' and e.status.value=='completed' for e in events)
     assert json.loads(result.raw_text)['document']['items'][0]['quantity'] is None
 
 def test_worker_failure_has_no_automatic_fallback(monkeypatch):

@@ -118,8 +118,12 @@ class AdditionalReceiptField(BaseModel):
 
 
 class ReceiptDetails(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     business_number: str | None = Field(default=None, max_length=30)
+    raw_business_number: str | None = Field(default=None, max_length=30)
+    suggested_business_number: str | None = Field(default=None, max_length=30)
+    raw_vendor: str | None = Field(default=None, max_length=255)
+    suggested_vendor: str | None = Field(default=None, max_length=255)
     address: str | None = Field(default=None, max_length=300)
     phone: str | None = Field(default=None, max_length=40)
     payment_method: str | None = Field(default=None, max_length=40)
@@ -127,7 +131,10 @@ class ReceiptDetails(BaseModel):
     receipt_number: str | None = Field(default=None, max_length=60)
     supply_amount: int | None = Field(default=None, ge=0)
     vat_amount: int | None = Field(default=None, ge=0)
+    calculated_supply_amount: int | None = Field(default=None, ge=0)
+    calculated_vat_amount: int | None = Field(default=None, ge=0)
     tax_free_amount: int | None = Field(default=None, ge=0)
+    conflicting_candidates: dict | None = Field(default_factory=dict)
     items: list[ReceiptLineItem] = Field(default_factory=list, max_length=100)
     additional_fields: list[AdditionalReceiptField] = Field(default_factory=list, max_length=50)
 
@@ -228,4 +235,3 @@ class ReceiptRetryAccepted(BaseModel):
     job_id: uuid.UUID
     status: Literal["PENDING"]
     attempt: int
-

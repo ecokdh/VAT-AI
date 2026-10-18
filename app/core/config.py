@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", ".env.luna.local"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     LUNA_TIMEOUT_SECONDS: float = 180.0
     LUNA_BUDGET_KRW: float = 2000.0
     LUNA_BUDGET_LEDGER_FILE: str = "storage/luna_budget.json"
+    # photo_ocr: General OCR + image; photo: explicit legacy image-only mode.
+    LUNA_INPUT_MODE: str = "photo_ocr"
     LOCAL_FRONTEND_ORIGIN: str = ""
     DEDUCTION_ANALYZER: str = ""
     NTS_BUSINESS_API_KEY: str = ""
@@ -46,6 +48,8 @@ class Settings(BaseSettings):
     CLOVA_OCR_API_URL: str = ""
     CLOVA_OCR_SECRET_KEY: str = ""
     OCR_PIPELINE: str = ""
+    # legacy keeps the current Luna low contract. relation_v1 is the experiment path.
+    RECEIPT_STRUCTURE_PATH: str = "legacy"
 
     STORAGE_DIR: str = "storage"
     S3_BUCKET: str = ""

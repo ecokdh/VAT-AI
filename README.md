@@ -1,9 +1,15 @@
 # VAT-AI — 소상공인을 위한 AI 부가가치세 신고 지원 서비스
 
 VAT-AI는 소상공인의 증빙 수집·구조화, 사업자정보 확인, 매입세액 공제 검토를 구현하고 예상세액 확인과 신고 전 Review를 목표로 합니다. 홈택스 신고서를 자동 제출하지 않습니다.
-영수증 이미지를 업로드하면 Naver CLOVA OCR로 매입 내역을 판독하고, AI 분석을 거쳐 매입 보관함 및 세무 신고 검토 데이터로 집계합니다.
+현재 OCR 개선 버전은 **사진 + 네이버 CLOVA General OCR → Luna low → 근거·금액 검사 → 사용자 수정 → 거래 저장** 경로를 사용합니다.
 
-현재 `jaehwang/sprint1-business-verification` 브랜치는 **Track A(계정/인증)**, **Track B(영수증/OCR 백엔드)**, **Track C(공제 판별·리포트 및 Sprint 1 사업자 상태조회·회원가입)**, **Track D(React 프론트엔드)**를 통합합니다. 분석·리포트 화면은 아직 목데이터를 사용합니다.
+- 상호·사업자번호·금액·날짜·전체 품목을 추출하고, 기본 6개 항목과 상세 화면에서 수정합니다.
+- 인쇄 근거 없는 소계는 보류하고, 원본 사진·OCR 응답·모델 원출력·사용자 수정값을 구분해 보존합니다.
+- 사업 프로필과 규칙 기반 거래 질문을 연결하며, 답변이 부족한 공제 분석은 확인 필요로 남깁니다.
+- 자동 유료 재시도·다른 모델 fallback은 하지 않습니다. 사진·실험 자료·DB·키는 커밋 대상이 아닙니다.
+
+**설치·설정·현재 처리 경로는 [OCR 개선 버전 안내](docs/OCR_PROTOTYPE.md)를 먼저 확인하세요.** 아래 트랙별 설명과 화면은 이전 개발 단계의 기록을 포함합니다. 실험 재평가 점수를 서비스 전체 정확도로 간주하지 않습니다.
+
 <img width="468" height="852" alt="rn1" src="https://github.com/user-attachments/assets/b912f7ad-a868-4785-883c-c71793cd046c" />
 <img width="306" height="899" alt="rm2" src="https://github.com/user-attachments/assets/95e118b1-ca32-43e8-8a58-1effc2073b9e" />
 
@@ -789,7 +795,3 @@ git merge origin/main
 - 장애 발생 시 Log 확인 체계 점검
 
 Staging 구축 전까지 Local 개발 및 PR 검증은 Docker Compose + Alembic + GitHub Actions CI를 공통 기준으로 사용한다.
-
-## OCR 프로토타입
-
-Luna low 문서 인식, 거래 검토 화면, 사업 프로필·사용 목적 질문의 실행 방법은 [OCR 프로토타입 안내](docs/OCR_PROTOTYPE.md)를 참고하세요.

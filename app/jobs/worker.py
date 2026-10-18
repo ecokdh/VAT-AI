@@ -238,7 +238,7 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
         receipt.stage_statuses_json = json.dumps(stage_statuses, ensure_ascii=False)
 
         from app.receipts.details import extract_details
-        details=extract_details(result.raw_text)
+        details=extract_details(result.raw_text) if result.pipeline_name!='luna_low' else {}
         if result.pipeline_name=='luna_low':
             from app.receipts.details import project_luna_details
             raw=json.loads(result.raw_text or '{}')

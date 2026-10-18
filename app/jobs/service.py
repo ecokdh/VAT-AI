@@ -202,6 +202,19 @@ def confirm_receipt_extraction(
     session.add(receipt)
     session.commit()
     session.refresh(receipt)
+
+    try:
+        biz_no = None
+        if data.document and data.document.fields:
+            biz_no = getattr(data.document.fields, 'business_number', None)
+        if not biz_no and receipt.details:
+            biz_no = receipt.details.get('business_number')
+        if biz_no:
+            from app.business.merchant_memory import record_merchant
+            record_merchant(session, biz_no, receipt.vendor, source="user_confirmed")
+    except Exception:
+        pass
+
     return receipt
 
 

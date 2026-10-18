@@ -51,3 +51,22 @@ class TaxProfileV2(SQLModel, table=True):
     confirmed_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class MerchantMemory(SQLModel, table=True):
+    """Verified merchant directory / cache linking business numbers to official names and tax status."""
+
+    __tablename__ = "merchant_memories"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    business_number: str = Field(nullable=False, max_length=10, unique=True, index=True)
+    business_name: str = Field(nullable=False)
+    branch: Optional[str] = Field(default=None)
+    tax_type: Optional[str] = Field(default=None)  # 일반과세자, 간이과세자, 면세사업자
+    tax_type_code: Optional[str] = Field(default=None)  # 01, 02, 03
+    business_status: Optional[str] = Field(default="계속사업자")  # 계속사업자, 휴업자, 폐업자
+    source: str = Field(default="system_seed", nullable=False)  # system_seed | nts_api | user_confirmed
+    confidence: float = Field(default=1.0, nullable=False)
+    hit_count: int = Field(default=0, nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)

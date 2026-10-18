@@ -50,7 +50,10 @@ class OcrPipelineResult(BaseModel):
     vendor: str | None = Field(default=None, max_length=255)
     amount: int | None = Field(default=None, ge=0)
     transaction_date: date | None = None
-    raw_text: str | None = Field(default=None, max_length=40_000)
+    # Provider evidence is an internal persisted response, not a short display
+    # string. Photo + OCR includes tokens, coordinates and original model output;
+    # rejecting/truncating it after generation would lose a paid recognition.
+    raw_text: str | None = None
     field_confidences: dict[str, float] = Field(default_factory=dict)
     missing_fields: list[str] = Field(default_factory=list, max_length=50)
     warnings: list[str] = Field(default_factory=list, max_length=50)

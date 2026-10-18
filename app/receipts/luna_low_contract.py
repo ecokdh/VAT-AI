@@ -1,4 +1,6 @@
 """Frozen real-tested Luna low receipt contract. No GT or experiment imports."""
+from datetime import datetime
+import re
 
 NULLSTR={'type':['string','null']}
 
@@ -227,63 +229,361 @@ def evaluate_classification(c, fields, items, conflicts, uncertain):
         'final_status': 'needs_edit' if is_partial else 'completed',
     }
 
+from app.business.merchant_memory import (
+    resolve_merchant_identity,
+    resolve_merchant_branch,
+    resolve_business_number_by_vendor,
+    MERCHANT_MEMORY_SEEDS,
+)
+
+NTS_CONFUSION = {
+    '0': ['6', '8'],
+    '6': ['0', '8'],
+    '8': ['0', '6', '3'],
+    '1': ['7'],
+    '7': ['1'],
+    '3': ['8'],
+    '5': ['6'],
+}
+
+def validate_nts_checksum(biz_no: str) -> bool:
+    digits = [int(c) for c in biz_no if c.isdigit()]
+    if len(digits) != 10:
+        return False
+    weights = [1, 3, 7, 1, 3, 7, 1, 3, 5]
+    s = sum(digits[i] * weights[i] for i in range(8))
+    p = digits[8] * 5
+    s += (p // 10) + (p % 10)
+    check_digit = (10 - (s % 10)) % 10
+    return digits[9] == check_digit
+
+def suggest_business_number_repair(raw_biz: str | None) -> str | None:
+    """Return a unique visual-confusion checksum candidate for review only."""
+    if not raw_biz:
+        return None
+    cleaned = ''.join(c for c in str(raw_biz) if c.isdigit())
+    if len(cleaned) == 10 and validate_nts_checksum(cleaned):
+        return None  # Already valid, no repair needed
+    if len(cleaned) == 10:
+        candidates = []
+        for idx in range(10):
+            orig = cleaned[idx]
+            for sim in '0123456789':
+                if sim != orig:
+                    cand = cleaned[:idx] + sim + cleaned[idx+1:]
+                    if validate_nts_checksum(cand):
+                        candidates.append((idx, cand))
+
+        # A checksum is only a constraint. Suggest a candidate only when the
+        # observed character has one unique, common visual-confusion match.
+        vis_candidates = []
+        for idx, cand in candidates:
+            orig = cleaned[idx]
+            sim = cand[idx]
+            if sim in NTS_CONFUSION.get(orig, []):
+                vis_candidates.append(cand)
+        if len(vis_candidates) == 1:
+            best = vis_candidates[0]
+            return f"{best[:3]}-{best[3:5]}-{best[5:]}"
+    return None
+
+def normalize_datetime_string(raw_dt: str | None) -> str | None:
+    if not raw_dt:
+        return None
+    s = " ".join(str(raw_dt).strip().split())
+    match = re.fullmatch(
+        r"(?P<year>20\d{2})\s*(?:년|[-/.])\s*(?P<month>\d{1,2})\s*(?:월|[-/.])\s*"
+        r"(?P<day>\d{1,2})\s*일?(?:\s*[Tt]?\s*(?P<period>오전|오후|AM|PM)?\s*"
+        r"(?P<hour>\d{1,2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?\s*(?:분|초)?)?",
+        s,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return s
+    parts = match.groupdict()
+    year, month, day = int(parts["year"]), int(parts["month"]), int(parts["day"])
+    try:
+        date_value = datetime(year, month, day)
+        if parts["hour"] is None:
+            return date_value.strftime("%Y-%m-%d")
+        hour = int(parts["hour"])
+        minute = int(parts["minute"])
+        second = int(parts["second"] or 0)
+        period = (parts["period"] or "").upper()
+        if period in {"오후", "PM"}:
+            if not 1 <= hour <= 12:
+                return s
+            hour = hour % 12 + 12
+        elif period in {"오전", "AM"}:
+            if not 1 <= hour <= 12:
+                return s
+            hour %= 12
+        elif hour > 23:
+            return s
+        normalized = date_value.replace(hour=hour, minute=minute, second=second)
+    except ValueError:
+        return s
+    if minute > 59 or second > 59:
+        return s
+    if parts["second"] is not None:
+        return normalized.strftime("%Y-%m-%d %H:%M:%S")
+    return normalized.strftime("%Y-%m-%d %H:%M")
+
 def normalize(raw):
-    h=raw['h'];amounts=[dict(a) for a in raw['m']];fields={'vendor':h['vendor'],'branch':h['branch'],'business_number':h['business_number'],'transaction_datetime':h['datetime']}
-    mapping={'supply':'supply_amount','vat':'vat_amount','exempt':'tax_exempt_amount','discount':'discount_amount','subtotal':'subtotal_amount','total':'printed_total_amount','payment':'payment_amount'}
-    conflicts=[]
-    for role,key in mapping.items():
-        candidates=[a for a in amounts if a['role']==role]
-        if role=='supply' and any(a['scope']=='all' for a in candidates): candidates=[a for a in candidates if a['scope']=='all']
-        elif role=='total':
-            non_pay_totals=[a for a in candidates if '결제' not in a.get('label','')]
-            subtotals=[a for a in amounts if a['role']=='subtotal' and '예약' not in a.get('label','')]
-            discounts=[a for a in amounts if a['role']=='discount' and a.get('value') not in (None,0)]
-            if len({a['value'] for a in candidates})>1 and len({a['value'] for a in non_pay_totals})==1:
-                candidates=non_pay_totals
-            elif subtotals and len({a['value'] for a in subtotals})==1:
-                pay_vals={a['value'] for a in amounts if a['role']=='payment'}
-                tot_vals={a['value'] for a in candidates}
-                if not candidates or all('결제' in a.get('label','') for a in candidates) or (discounts and tot_vals and tot_vals==pay_vals):
-                    candidates=subtotals
-            elif not candidates:
-                slip_totals=[a for a in amounts if any(w in a.get('label','') for w in ('요금','승인금액')) and '할인' not in a.get('label','')]
-                if len({a['value'] for a in slip_totals})==1:
-                    candidates=slip_totals
-        elif role=='payment':
-            filtered=[a for a in candidates if not any(w in a.get('label','') for w in ('거스름','받은돈','받은금액','잔돈'))]
-            if filtered: candidates=filtered
-            if not candidates:
-                pay_labeled_totals=[a for a in amounts if a['role']=='total' and '결제' in a.get('label','')]
-                if len({a['value'] for a in pay_labeled_totals})==1:
-                    candidates=pay_labeled_totals
-            elif len({a['value'] for a in candidates})>1:
-                summary_pay=[a for a in candidates if any(w in a.get('label','') for w in ('결제금액','결제대상','청구액','승인금액','최종결제'))]
-                if len({a['value'] for a in summary_pay})==1:
-                    candidates=summary_pay
-                else:
-                    nonzero=[a for a in candidates if a['value']!=0]
-                    if len({a['value'] for a in nonzero})==1:
-                        candidates=nonzero
-            pos_ref=[a['value'] for a in amounts if a['role'] in ('total','supply') and a['value'] is not None and a['value']>0]
-            if pos_ref and len({a['value'] for a in candidates})==1 and next(iter({a['value'] for a in candidates}))<0:
-                candidates=[]
-                conflicts.append(key)
-        values={a['value'] for a in candidates}
-        fields[key]=next(iter(values)) if len(values)==1 else None
-        if len(values)>1 and key not in conflicts: conflicts.append(key)
-    # Scope is preserved without summing or using ground truth.
-    taxed={a['value'] for a in amounts if a['role']=='supply' and a['scope']=='taxable'}
-    fields['taxable_supply_amount']=next(iter(taxed)) if len(taxed)==1 else None
-    items=[]
-    for i in raw['i']:
-        raw_name=i['n']
-        name=raw_name.replace('×','x')
-        if i['t']=='option':
-            if name.startswith('L-'): name='└'+name[2:]
-            elif name.startswith('L '): name='└'+name[2:].lstrip()
-        items.append({'name':name,'raw_name':raw_name,'quantity':i['q'],'unit_price':i['u'],'line_amount':i['p'],'row_type':i['t'],'parent_row':i['parent']})
-    classification = evaluate_classification(raw.get('c'), fields, items, conflicts, raw['uncertain'])
-    return {'fields':fields,'items':items,'printed_amounts':raw['m'],'conflicts':conflicts,'uncertain':raw['uncertain'],'classification':classification}
+    """Normalize the model's printed extraction without replacing it by a guess.
+
+    Direct values, arithmetic references, and local-memory suggestions stay in
+    separate groups. User-confirmed edits are stored by the review workflow.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    header = raw.get('h') or {}
+    amounts = [dict(value) for value in (raw.get('m') or [])]
+    raw_items = raw.get('i') or []
+    uncertain = list(raw.get('uncertain') or [])
+    conflicts = []
+    conflicting_candidates = {}
+    provenance = {}
+
+    raw_vendor = header.get('vendor')
+    raw_branch = header.get('branch')
+    raw_biz = header.get('business_number')
+    raw_dt = header.get('datetime')
+    parsed_dt = normalize_datetime_string(raw_dt)
+    fields = {
+        'vendor': raw_vendor,
+        'raw_vendor': raw_vendor,
+        'branch': raw_branch,
+        'raw_branch': raw_branch,
+        'business_number': raw_biz,
+        'raw_business_number': raw_biz,
+        'transaction_datetime': parsed_dt,
+        'raw_transaction_datetime': raw_dt,
+        'tax_type': None,
+    }
+    for name, source_key, raw_value, value in (
+        ('vendor', 'h.vendor', raw_vendor, raw_vendor),
+        ('branch', 'h.branch', raw_branch, raw_branch),
+        ('business_number', 'h.business_number', raw_biz, raw_biz),
+        ('transaction_datetime', 'h.datetime', raw_dt, parsed_dt),
+    ):
+        provenance[name] = {
+            'origin': 'printed_extraction',
+            'source': source_key,
+            'raw_value': raw_value,
+            'value': value,
+            'reason': '모델이 반환한 인쇄 후보를 보존; 날짜는 유효한 형식일 때 표기만 변환',
+            'transformation': 'format_only' if raw_value != value else 'none',
+        }
+
+    amount_fields = {
+        'supply': 'supply_amount',
+        'vat': 'vat_amount',
+        'exempt': 'tax_exempt_amount',
+        'discount': 'discount_amount',
+        'subtotal': 'subtotal_amount',
+        'total': 'printed_total_amount',
+        'payment': 'payment_amount',
+    }
+
+    def numeric_key(value):
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            number = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return ('raw', repr(value))
+        return number if number.is_finite() else ('raw', repr(value))
+
+    def select_amount(role, field_name, *, scope=None, prefer_all=False):
+        indexed = [(index, amount) for index, amount in enumerate(amounts)
+                   if amount.get('role') == role and (scope is None or amount.get('scope') == scope)]
+        if prefer_all:
+            all_scope = [(index, amount) for index, amount in indexed if amount.get('scope') == 'all']
+            if all_scope:
+                indexed = all_scope
+        present = [(index, amount) for index, amount in indexed if amount.get('value') is not None]
+        distinct = {numeric_key(amount.get('value')) for _, amount in present}
+        value = present[0][1].get('value') if len(distinct) == 1 and present else None
+        state = 'selected_unique_role' if value is not None else 'conflicting_candidates' if len(distinct) > 1 else 'not_returned'
+        provenance[field_name] = {
+            'origin': 'printed_extraction',
+            'source': 'm[]',
+            'source_indexes': [index for index, _ in present],
+            'raw_candidates': [dict(amount) for _, amount in indexed],
+            'value': value,
+            'reason': '모델이 분류한 동일 인쇄 역할의 값이 하나일 때만 선택; 다른 역할·소계·계산값으로 대체하지 않음',
+            'selection_state': state,
+        }
+        if len(distinct) > 1:
+            conflicts.append(field_name)
+            conflicting_candidates[field_name] = [dict(amount) for _, amount in present]
+        return value
+
+    for role, field_name in amount_fields.items():
+        fields[field_name] = select_amount(role, field_name, prefer_all=(role == 'supply'))
+
+    fields['taxable_supply_amount'] = select_amount('supply', 'taxable_supply_amount', scope='taxable')
+    fields['printed_supply_amount'] = fields['supply_amount']
+    provenance['printed_supply_amount'] = {
+        **provenance['supply_amount'],
+        'reason': '인쇄 공급가액 역할의 직접 추출 후보; 과세 공급가액과 구분',
+    }
+    fields['conflicting_candidates'] = conflicting_candidates
+
+    calculated_values = {}
+
+    def as_decimal(value):
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            number = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return None
+        return number if number.is_finite() else None
+
+    def add_calculation(name, terms, formula, assumptions):
+        values = [as_decimal(value) for _, value in terms]
+        if any(value is None for value in values):
+            return
+        result = sum(values, Decimal('0'))
+        output_value = int(result) if result == result.to_integral_value() else float(result)
+        calculated_values[name] = {
+            'value': output_value,
+            'origin': 'calculated_reference',
+            'source': [key for key, _ in terms],
+            'formula': formula,
+            'assumptions': assumptions,
+            'applied_to_extraction': False,
+            'reason': '산술 참고 후보이며 인쇄 필드나 거래 금액을 자동 대체하지 않음',
+        }
+
+    total = fields.get('printed_total_amount')
+    supply = fields.get('supply_amount')
+    vat = fields.get('vat_amount')
+    exempt = fields.get('tax_exempt_amount')
+    assumptions = ['할인·복합 결제·과세 범위가 등식과 맞는지 별도 확인 필요']
+    if 'supply_amount' not in conflicts and fields.get('calculated_supply_amount') is None and supply is None and total is not None and vat is not None:
+        exempt_term = exempt if exempt is not None else 0
+        total_dec = as_decimal(total)
+        vat_dec = as_decimal(vat)
+        exempt_dec = as_decimal(exempt_term)
+        if total_dec is not None and vat_dec is not None and exempt_dec is not None:
+            add_calculation('calculated_supply_amount', [('printed_total_amount', total_dec), ('vat_amount', -vat_dec), ('tax_exempt_amount_or_zero', -exempt_dec)],
+                            '총액 - 부가세 - 면세금액(없으면 0 가정)', assumptions)
+    if 'vat_amount' not in conflicts and vat is None and total is not None and supply is not None:
+        exempt_term = exempt if exempt is not None else 0
+        total_dec = as_decimal(total)
+        supply_dec = as_decimal(supply)
+        exempt_dec = as_decimal(exempt_term)
+        if total_dec is not None and supply_dec is not None and exempt_dec is not None:
+            add_calculation('calculated_vat_amount', [('printed_total_amount', total_dec), ('supply_amount', -supply_dec), ('tax_exempt_amount_or_zero', -exempt_dec)],
+                            '총액 - 공급가액 - 면세금액(없으면 0 가정)', assumptions)
+    if 'printed_total_amount' not in conflicts and total is None and supply is not None and vat is not None:
+        exempt_term = exempt if exempt is not None else 0
+        supply_dec = as_decimal(supply)
+        vat_dec = as_decimal(vat)
+        exempt_dec = as_decimal(exempt_term)
+        if supply_dec is not None and vat_dec is not None and exempt_dec is not None:
+            add_calculation('calculated_total_amount', [('supply_amount', supply_dec), ('vat_amount', vat_dec), ('tax_exempt_amount_or_zero', exempt_dec)],
+                            '공급가액 + 부가세 + 면세금액(없으면 0 가정)', assumptions)
+    fields['calculated_supply_amount'] = calculated_values.get('calculated_supply_amount', {}).get('value')
+    fields['calculated_vat_amount'] = calculated_values.get('calculated_vat_amount', {}).get('value')
+    fields['calculated_total_amount'] = calculated_values.get('calculated_total_amount', {}).get('value')
+
+    payment = fields.get('payment_amount')
+    if payment is not None:
+        save_amount, save_source = payment, 'payment_amount'
+        save_reason = '명시 결제 역할에서 나온 저장 후보'
+    elif total is not None:
+        save_amount, save_source = total, 'printed_total_amount_fallback'
+        save_reason = '명시 결제액이 없어 인쇄 총액을 별도 거래 저장 후보로 보존; 결제액으로 간주하지 않음'
+    else:
+        save_amount, save_source, save_reason = None, None, '저장 후보로 쓸 인쇄 결제액 또는 총액이 없음'
+    fields['transaction_save_amount'] = save_amount
+    fields['transaction_save_amount_source'] = save_source
+    provenance['transaction_save_amount'] = {
+        'origin': 'transaction_storage_candidate',
+        'source': save_source,
+        'value': save_amount,
+        'reason': save_reason,
+        'applied_to_payment_amount': False,
+    }
+
+    recommendations = {}
+    resolved_vendor, suggested_tax_type = resolve_merchant_identity(raw_biz, raw_vendor)
+    if resolved_vendor and resolved_vendor != raw_vendor:
+        recommendations['vendor'] = {
+            'value': resolved_vendor, 'origin': 'external_information_or_merchant_memory',
+            'source': 'local_merchant_memory', 'reason': '인쇄 상호를 덮지 않는 추천값; 사용자 확인 전 적용 안 함',
+        }
+    if suggested_tax_type:
+        recommendations['tax_type'] = {
+            'value': suggested_tax_type, 'origin': 'external_information_or_merchant_memory',
+            'source': 'local_merchant_memory', 'reason': '사업자번호 연결 상점정보의 과세유형 추천; 인쇄값이 아님',
+        }
+    resolved_branch = resolve_merchant_branch(raw_biz, raw_branch, raw_dt=raw_dt)
+    if resolved_branch and resolved_branch != raw_branch:
+        recommendations['branch'] = {
+            'value': resolved_branch, 'origin': 'external_information_or_merchant_memory',
+            'source': 'local_merchant_memory', 'reason': '인쇄 지점을 덮지 않는 추천값; 사용자 확인 전 적용 안 함',
+        }
+    suggested_biz = suggest_business_number_repair(raw_biz)
+    if suggested_biz and suggested_biz != raw_biz:
+        recommendations['business_number_checksum_candidate'] = {
+            'value': suggested_biz, 'origin': 'external_information_or_merchant_memory',
+            'source': 'checksum_and_visual_confusion_constraint',
+            'reason': '체크섬 후보일 뿐 정답 증거가 아니며 사용자 확인 전 적용 안 함',
+        }
+    merchant_biz = resolve_business_number_by_vendor(raw_vendor) if raw_vendor else None
+    if merchant_biz and re.sub(r'\D', '', str(merchant_biz)) != re.sub(r'\D', '', str(raw_biz or '')):
+        recommendations['business_number_by_merchant'] = {
+            'value': merchant_biz, 'origin': 'external_information_or_merchant_memory',
+            'source': 'local_merchant_memory', 'reason': '상호 기반 추천값; 인쇄 사업자번호를 대체하지 않음',
+        }
+    fields['suggested_vendor'] = recommendations.get('vendor', {}).get('value')
+    fields['suggested_branch'] = recommendations.get('branch', {}).get('value')
+    fields['suggested_business_number'] = recommendations.get('business_number_checksum_candidate', {}).get('value')
+    fields['suggested_tax_type'] = recommendations.get('tax_type', {}).get('value')
+
+    items = []
+    item_provenance = []
+    for index, item in enumerate(raw_items):
+        raw_name = item.get('n')
+        name = (raw_name or '').replace('×', 'x')
+        if item.get('t') == 'option':
+            if name.startswith('L-'):
+                name = '└' + name[2:]
+            elif name.startswith('L '):
+                name = '└' + name[2:].lstrip()
+        items.append({
+            'name': name,
+            'raw_name': raw_name,
+            'quantity': item.get('q'),
+            'unit_price': item.get('u'),
+            'line_amount': item.get('p'),
+            'row_type': item.get('t'),
+            'parent_row': item.get('parent'),
+        })
+        item_provenance.append({
+            'source': f'i[{index}]', 'origin': 'printed_extraction',
+            'reason': '모델 반환 순서와 parent 참조를 보존',
+            'parent_row': item.get('parent'),
+        })
+
+    classification = evaluate_classification(raw.get('c'), fields, items, conflicts, uncertain)
+    return {
+        'fields': fields,
+        'field_provenance': provenance,
+        'calculated_values': calculated_values,
+        'merchant_recommendations': recommendations,
+        'items': items,
+        'item_provenance': item_provenance,
+        'printed_amounts': amounts,
+        'conflicts': list(dict.fromkeys(conflicts)),
+        'uncertain': uncertain,
+        'classification': classification,
+    }
 
 PROMPT = BASE_PROMPT + TEXT_EXAMPLES
 MODEL = "gpt-6-luna"

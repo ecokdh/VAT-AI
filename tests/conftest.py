@@ -15,6 +15,7 @@ from app.core.config import settings
 def isolate_live_configuration(monkeypatch):
     monkeypatch.setattr(settings,'RECEIPT_RECOGNITION_BACKEND','clova')
     monkeypatch.setattr(settings,'OCR_PIPELINE','')
+    monkeypatch.setattr(settings,'LUNA_INPUT_MODE','photo')
 
 
 @pytest.fixture()
@@ -39,4 +40,3 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
 
     app.dependency_overrides.clear()
     engine.dispose()
-
