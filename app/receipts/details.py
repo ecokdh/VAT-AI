@@ -23,3 +23,46 @@ def extract_details(text: str | None) -> dict:
             value = match.group(1).strip()
             details[key] = int(value.replace(",", "")) if key.endswith("amount") else value
     return details
+
+
+def project_luna_details(document: dict, existing: dict | None = None) -> dict:
+    """QA4 compatibility view; full signed/relational output stays in document."""
+    details=dict(existing or {})
+    fields=document.get('fields') or {}
+    for source,target in [
+        ('business_number','business_number'),
+        ('raw_business_number','raw_business_number'),
+        ('suggested_business_number','suggested_business_number'),
+        ('raw_vendor','raw_vendor'),
+        ('suggested_vendor','suggested_vendor'),
+        ('supply_amount','supply_amount'),
+        ('vat_amount','vat_amount'),
+        ('calculated_supply_amount','calculated_supply_amount'),
+        ('calculated_vat_amount','calculated_vat_amount'),
+        ('tax_exempt_amount','tax_free_amount'),
+        ('address','address'),('phone','phone'),('payment_method','payment_method'),
+        ('approval_number','approval_number'),('receipt_number','receipt_number')
+    ]:
+        if source in {'address','phone','payment_method','approval_number','receipt_number'} and source not in fields:
+            continue
+        value=fields.get(source)
+        if target.endswith('amount') and value is not None:
+            if isinstance(value,bool) or not isinstance(value,(int,float)) or value<0 or int(value)!=value:
+                value=None
+        details[target]=value
+    if 'conflicting_candidates' in fields:
+        details['conflicting_candidates']=fields['conflicting_candidates']
+
+    rows=[]
+    for item in document.get('items',[]):
+        if item.get('row_type')!='item' or not item.get('name') or len(item['name'])>200:
+            continue
+        row={'name':item['name']}
+        for source,target in [('quantity','quantity'),('unit_price','unit_price'),('line_amount','amount')]:
+            value=item.get(source)
+            if value is not None and (isinstance(value,bool) or not isinstance(value,(int,float)) or value<0 or (target!='quantity' and int(value)!=value)):
+                value=None
+            row[target]=value
+        rows.append(row)
+    details['items']=rows[:100]
+    return details

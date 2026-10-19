@@ -5,6 +5,7 @@ import "./styles/tokens.css";
 import "./styles/global.css";
 import "./styles/ui.css";
 import App from "./App.tsx";
+import "./styles/qa-polish.css";
 import { AmountVisibilityProvider } from "./context/AmountVisibilityContext";
 
 createRoot(document.getElementById("root")!).render(

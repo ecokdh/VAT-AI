@@ -18,7 +18,7 @@ def verification(monkeypatch):
 def headers(client, email="qa@example.com"):
     result = client.post("/auth/register", json={
         "email": email, "password": "Qa-only-2026!", "name": "QA", "business_name": "QA",
-        "business_number": "1234567890", "terms_accepted": True, "privacy_accepted": True,
+        "business_number": "1234567890", "tax_profile": {"business_start_date": "2025-01-01"}, "terms_accepted": True, "privacy_accepted": True,
     })
     assert result.status_code == 201
     return {"Authorization": f"Bearer {result.json()['access_token']}"}

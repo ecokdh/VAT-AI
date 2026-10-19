@@ -19,7 +19,7 @@ def body(email="owner@example.com"):
     return {
         "email": email, "password": "correct-password", "name": "Owner",
         "business_name": " Owner Store ", "business_number": "123-45-67890",
-        "terms_accepted": True, "privacy_accepted": True, "marketing_accepted": False,
+        "tax_profile": {"business_start_date": "2025-01-01"}, "terms_accepted": True, "privacy_accepted": True, "marketing_accepted": False,
     }
 
 
@@ -58,7 +58,7 @@ def test_registration_persists_user_and_business(client, monkeypatch, code, stat
     assert profiles[0].business_number == "1234567890"
     assert profiles[0].business_status == status
     assert profiles[0].business_status_code == code
-    assert profiles[0].verification_status == "status_checked"
+    assert profiles[0].verification_status == "identity_verified"
     assert profiles[0].verified_at is not None
     assert profiles[0].end_date == ("20200101" if code == "03" else None)
     assert users[0].name == "Owner"
@@ -76,7 +76,7 @@ def test_registration_persists_user_and_business(client, monkeypatch, code, stat
     business = me.json()["business"]
     assert business["business_status"] == status
     assert business["tax_type"] == "부가가치세 일반과세자"
-    assert business["verification_status"] == "status_checked"
+    assert business["verification_status"] == "identity_verified"
     assert business["verified_at"] is not None
     assert business["business_name"] == "Owner Store"
     assert "password_hash" not in registered.text + login.text + me.text

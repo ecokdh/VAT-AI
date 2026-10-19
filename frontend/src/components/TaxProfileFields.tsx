@@ -9,7 +9,7 @@ export const emptyTaxProfile: TaxProfileInput = {
 export function TaxProfileFields({taxProfile,taxType,updateProfile}: {
  taxProfile: TaxProfileInput; taxType: string | null;
  updateProfile: <K extends keyof TaxProfileInput>(key: K,value: TaxProfileInput[K]) => void;
-}) { return <>
+}) { return <div className="tax-profile-fields">
             <div className="form-field"><label className="form-field__label" htmlFor="entity-type">사업자 형태</label><select id="entity-type" className="input" value={taxProfile.entity_type ?? ""} onChange={(e) => { updateProfile("entity_type", (e.target.value || null) as TaxProfileApi["entity_type"]); updateProfile("is_sme", null); }}><option value="">선택</option><option value="individual">개인</option><option value="corporation">법인</option></select></div>
             <div className="form-field"><label className="form-field__label" htmlFor="industry-category">업종</label><select id="industry-category" className="input" value={taxProfile.industry_category ?? ""} onChange={(e) => { updateProfile("industry_category", (e.target.value || null) as TaxProfileApi["industry_category"]); updateProfile("industry_subtype", null); updateProfile("is_sme", null); }}><option value="">선택</option><option value="food_service">음식점업</option><option value="manufacturing">제조업</option><option value="other">그 외 업종</option></select></div>
             {taxProfile.industry_category && taxProfile.industry_category !== "other" && <div className="form-field"><label className="form-field__label" htmlFor="industry-subtype">세부 업종</label><select id="industry-subtype" className="input" value={taxProfile.industry_subtype ?? ""} onChange={(e) => updateProfile("industry_subtype", (e.target.value || null) as TaxProfileApi["industry_subtype"])}><option value="">선택</option>{taxProfile.industry_category === "food_service" ? <><option value="restaurant">일반 음식점</option><option value="taxable_entertainment">과세 유흥장소</option></> : <><option value="specified_mill">특정 제분업</option><option value="other">그 외 제조업</option></>}</select></div>}
@@ -29,4 +29,4 @@ export function TaxProfileFields({taxProfile,taxType,updateProfile}: {
             <div className="field-row"><label htmlFor="suspension-start">휴업 시작일 (해당 시)</label><input id="suspension-start" className="input" type="date" value={taxProfile.suspension_periods[0]?.start_date ?? ""} onChange={(e) => updateProfile("suspension_periods", e.target.value ? [{ start_date: e.target.value, end_date: taxProfile.suspension_periods[0]?.end_date ?? e.target.value }] : [])} /></div>
             <div className="field-row"><label htmlFor="suspension-end">휴업 종료일</label><input id="suspension-end" className="input" type="date" value={taxProfile.suspension_periods[0]?.end_date ?? ""} onChange={(e) => updateProfile("suspension_periods", e.target.value ? [{ start_date: taxProfile.suspension_periods[0]?.start_date ?? e.target.value, end_date: e.target.value }] : [])} /></div>
 
-</>; }
+</div>; }

@@ -5,6 +5,7 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  nickname: string | null;
   created_at: string;
   ocr_guide_seen: boolean;
   business: BusinessProfile | null;
@@ -29,6 +30,7 @@ export interface RegisterRequest {
   email: string;
   password: string;
   name: string;
+  nickname: string;
   business_name: string;
   business_number: string;
   terms_accepted: boolean;
@@ -63,6 +65,8 @@ export function checkEmailAvailability(email: string) {
 export function getMe() {
   return apiClient.get<AuthUser>("/auth/me").then((res) => res.data);
 }
+
+export const updateNickname = (nickname: string) => apiClient.patch<AuthUser>("/auth/me", {nickname}).then(r => r.data);
 
 export const requestPasswordReset = (email: string) => apiClient.post<{message: string}>("/auth/forgot-password", {email}).then(r => r.data);
 export const resetPassword = (token: string, password: string) => apiClient.post<{message: string}>("/auth/reset-password", {token, password}).then(r => r.data);

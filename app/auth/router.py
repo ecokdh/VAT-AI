@@ -11,6 +11,7 @@ from app.auth.schemas import (
     LoginRequest,
     RegisterRequest,
     UserOut,
+    ProfileUpdate,
 )
 from app.core.database import get_session
 
@@ -34,6 +35,15 @@ def login(data: LoginRequest, db: Session = Depends(get_session)):
 
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    return service.get_user_out(db, current_user)
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(data: ProfileUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    current_user.nickname = data.nickname
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
     return service.get_user_out(db, current_user)
 
 

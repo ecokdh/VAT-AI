@@ -11,7 +11,7 @@ export interface User {
 }
 
 export type ReceiptType = "매입" | "매출";
-export type ReceiptStatus = "processing" | "completed" | "failed";
+export type ReceiptStatus = "processing" | "completed" | "needs_edit" | "unsupported" | "retake" | "failed";
 
 export interface Receipt {
   id: string;

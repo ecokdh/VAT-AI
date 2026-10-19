@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMaskedFormat } from "../hooks/useMaskedFormat";
-import { useReviewOverview, periodLabel, periodOptions } from "../hooks/useReviewOverview";
+import { useReviewOverview } from "../hooks/useReviewOverview";
+import { PeriodPicker } from "../components/PeriodPicker";
 import { AmountVisibilityToggle } from "../components/AmountVisibilityToggle";
 import { AccountMenu } from "../components/AccountMenu";
 import { ProfilePhoto } from "../components/ProfileAvatar";
@@ -19,12 +20,13 @@ export function DashboardPage() {
   ...view.receipts.map(row=>({key:`receipt-${row.id}`,date:row.date??"",title:row.vendor||"거래처 확인 필요",
    direction:row.direction,amount:row.amount,path:`/receipts/${row.id}/edit`,status:"거래 확정 필요"})),
  ].sort((a,b)=>b.date.localeCompare(a.date));
- return <div className="page qa-page"><header className="page-header"><AccountMenu/><strong className="brand-title">VAT-AI</strong><ProfilePhoto userId={view.user?.id} showAccount/></header>
+ return <div className="page qa-page dashboard-page"><header className="page-header"><AccountMenu/><strong className="brand-title">VAT-AI</strong><ProfilePhoto userId={view.user?.id} showAccount/></header>
   <main className="page__body">
    <p className="business-name">{view.user?.business?.business_name??"내 사업장"}</p>
-   <h1 className="screen-title">{view.user?.name??"고객"}님,<br/>신고 준비 현황을 확인하세요</h1>
+   <h1 className="screen-title">{view.user?.nickname??"고객"}님,<br/>신고 준비 현황을 확인하세요</h1>
+   {view.user && !view.user.nickname && <button className="text-link" onClick={()=>navigate('/account')}>내 닉네임 설정하기</button>}
    {view.error&&<p className="banner banner--error" role="alert">{view.error}</p>}
-   <label className="form-field"><span className="form-field__label">신고 대상 기간</span><select className="input" value={view.period} onChange={e=>{view.setPeriod(e.target.value);setShowAll(false);}}>{periodOptions(view.user?.business?.tax_type_code==="02").map(p=><option key={p} value={p}>{periodLabel(p)}</option>)}</select></label>
+   <PeriodPicker value={view.period} simplified={view.user?.business?.tax_type_code==="02"} onChange={period=>{view.setPeriod(period);setShowAll(false);}}/>
    <section className="summary-card summary-card--primary review-hero">
     <div className="section-heading"><span>예상 공제세액</span><AmountVisibilityToggle/></div>
     <strong className="hero-amount">{view.loading?"불러오는 중":credit==null?"확인 필요":fmt.won(credit)}</strong>
@@ -34,7 +36,7 @@ export function DashboardPage() {
    </section>
    {view.period.startsWith("2025-")&&<p className="banner banner--info">2025년 거래 조회입니다. 현재 세액 계산은 2026년 규칙만 지원합니다.</p>}
    <section className="card overview-card"><div className="section-heading"><h2 className="section-title">신고 준비 요약</h2><span className="muted">전체 거래 {view.total}건</span></div>
-    <div className="stat-grid">{[["공제",view.readiness?.deductible??0],["불공제",view.readiness?.nondeductible??0],["확인 필요",need]].map(([label,count])=><div key={label}><strong>{count}</strong><small>{label}</small></div>)}</div>
+    <div className="stat-grid summary-filters">{[["공제",view.readiness?.deductible??0,"deductible"],["불공제",view.readiness?.nondeductible??0,"nondeductible"],["확인 필요",need,"review"]].map(([label,count,status])=><button key={label} disabled={view.loading} aria-label={`${label} ${count}건 보기`} onClick={()=>go(`/storage/purchase?status=${status}${status==="review"?"&scope=all":""}`)}><strong>{count}</strong><small>{label} <span aria-hidden="true">›</span></small></button>)}</div>
     <p className="footnote">공제·불공제는 매입 기준이며, 확인 필요에는 미확정 매출도 포함됩니다.</p>
     <div className="summary-transactions">{(showAll?rows:rows.slice(0,5)).map(row=><button key={row.key} onClick={()=>go(row.path)}><span><strong>{row.title}</strong><small>{row.date||"거래일 확인 필요"} · {row.direction==="sales"?"매출":"매입"} · {row.status}</small></span><strong>{row.amount==null?"금액 확인 필요":fmt.won(row.amount)}</strong></button>)}</div>
     {rows.length>5&&<button className="text-link" onClick={()=>setShowAll(!showAll)}>{showAll?"접기":`전체 거래 보기 (${rows.length}건)`}</button>}

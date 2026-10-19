@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
@@ -125,3 +125,51 @@ def get_tax_estimate(
     session: Session = Depends(get_session),
 ):
     return service.calculate_period_estimate(session, user, period, simplified_industry_rate)
+
+
+@router.put('/transactions/{transaction_id}/question-answers',response_model=TransactionOut)
+def update_question_answers(transaction_id:int,answers:dict[str,str],user:User=Depends(get_current_user),session:Session=Depends(get_session)):
+    from app.receipts.models import Receipt
+    from app.business.models import TaxProfileV2
+    from app.receipts.questions import validated_answers,receipt_document,facts,VERSION
+    import json
+    t=service._owned(session,user.id,transaction_id)
+    receipt=session.get(Receipt,t.receipt_id) if t.receipt_id else None
+    p=session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id==user.id)).first()
+    answers=validated_answers(receipt_document(receipt) if receipt else {},answers,t.direction,p)
+    if json.loads(t.question_answers_json or '{}')==answers and t.question_rule_version==VERSION:
+        return t
+    old_summary=facts(json.loads(t.question_answers_json or '{}'))[1]
+    t.question_answers_json=json.dumps(answers,ensure_ascii=False);t.question_rule_version=VERSION
+    related,new_summary=facts(answers)
+    t.business_related=related
+    if not t.purpose or t.purpose==old_summary:t.purpose=new_summary
+    t.review_status='stale';t.deductible_vat=0;t.risk_level=None;t.revision+=1
+    t.analysis_reason='거래 목적이 변경되어 다시 분석해야 합니다.'
+    t.legal_references_json='[]'
+    t.updated_at=service._now()
+    session.add(t);service._record_revision(session,t);session.commit();session.refresh(t);return t
+
+
+@router.get('/transactions/{transaction_id}/questions')
+def stored_questions(transaction_id:int,user:User=Depends(get_current_user),session:Session=Depends(get_session)):
+    from app.receipts.models import Receipt
+    from app.business.models import TaxProfileV2
+    from app.receipts.questions import questions,receipt_document,VERSION,canonical_answers
+    import json
+    t=service._owned(session,user.id,transaction_id)
+    receipt=session.get(Receipt,t.receipt_id) if t.receipt_id else None
+    p=session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id==user.id)).first()
+    answers=json.loads(t.question_answers_json or '{}')
+    return {'version':VERSION,'answers':canonical_answers(receipt_document(receipt) if receipt else {},answers,t.direction),'questions':questions(receipt_document(receipt) if receipt else {},answers,t.direction,p)}
+
+
+@router.post('/transactions/{transaction_id}/questions')
+def stored_question_preview(transaction_id:int,answers:dict[str,str],user:User=Depends(get_current_user),session:Session=Depends(get_session)):
+    from app.receipts.models import Receipt
+    from app.business.models import TaxProfileV2
+    from app.receipts.questions import questions,receipt_document,VERSION,canonical_answers
+    t=service._owned(session,user.id,transaction_id)
+    receipt=session.get(Receipt,t.receipt_id) if t.receipt_id else None
+    p=session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id==user.id)).first()
+    return {'version':VERSION,'answers':canonical_answers(receipt_document(receipt) if receipt else {},answers,t.direction),'questions':questions(receipt_document(receipt) if receipt else {},answers,t.direction,p)}

@@ -27,7 +27,7 @@ def registration(monkeypatch):
         tax_type="일반과세자", tax_type_code="01", verified=True))
     return {"email": "qa4@example.com", "password": "Original-123!", "name": "QA",
             "business_name": "QA 상점", "business_number": "1234567890",
-            "terms_accepted": True, "privacy_accepted": True}
+            "tax_profile": {"business_start_date": "2025-01-01"}, "terms_accepted": True, "privacy_accepted": True}
 
 
 @pytest.fixture

@@ -46,17 +46,26 @@ class OcrPipelineResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    status: Literal["COMPLETED", "PARTIAL", "FAILED"]
+    status: Literal["COMPLETED", "PARTIAL", "FAILED", "UNSUPPORTED", "RETAKE", "NEEDS_EDIT"]
     vendor: str | None = Field(default=None, max_length=255)
     amount: int | None = Field(default=None, ge=0)
     transaction_date: date | None = None
-    raw_text: str | None = Field(default=None, max_length=40_000)
+    # Provider evidence is an internal persisted response, not a short display
+    # string. Photo + OCR includes tokens, coordinates and original model output;
+    # rejecting/truncating it after generation would lose a paid recognition.
+    raw_text: str | None = None
     field_confidences: dict[str, float] = Field(default_factory=dict)
     missing_fields: list[str] = Field(default_factory=list, max_length=50)
     warnings: list[str] = Field(default_factory=list, max_length=50)
     retention_status: Literal["required", "not_required", "under_review"] = "under_review"
     pipeline_name: str = Field(min_length=1, max_length=100)
     pipeline_version: str = Field(min_length=1, max_length=100)
+    doc_type: str | None = Field(default=None, max_length=50)
+    support_status: str | None = Field(default=None, max_length=50)
+    issues: list[str] = Field(default_factory=list, max_length=20)
+    affected_regions: list[str] = Field(default_factory=list, max_length=20)
+    issue_code: str | None = Field(default=None, max_length=100)
+    guide_message: str | None = Field(default=None, max_length=500)
 
 
 ProgressCallback = Callable[[OcrStageUpdate], None]

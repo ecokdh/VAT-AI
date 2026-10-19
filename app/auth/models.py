@@ -15,6 +15,7 @@ class User(SQLModel, table=True):
     email: str = Field(unique=True, index=True, nullable=False)
     password_hash: str = Field(nullable=False)
     name: str = Field(nullable=False)
+    nickname: str | None = Field(default=None, max_length=20)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
 
 

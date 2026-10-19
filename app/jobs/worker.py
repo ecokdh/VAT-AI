@@ -55,7 +55,7 @@ def process_analysis_run(session: Session, run: AnalysisRun) -> None:
     business_facts = BusinessFacts(
         verification_status=business_profile.verification_status if business_profile else None,
         business_status=business_profile.business_status if business_profile else None,
-        tax_type=("general" if business_profile.tax_type_code == "01" else "simplified" if business_profile.tax_type_code == "02" else None) if business_profile else None,
+        tax_type=(("general" if business_profile.tax_type_code == "01" else "simplified" if business_profile.tax_type_code == "02" else None) if business_profile else None) or (tax_profile.tax_type if tax_profile and tax_profile.onboarding_completed else None),
         tax_profile_confirmed=bool(tax_profile and tax_profile.confirmed_at),
         entity_type=tax_profile.entity_type if tax_profile and tax_profile.confirmed_at else None,
         industry_category=tax_profile.industry_category if tax_profile and tax_profile.confirmed_at else None,
@@ -77,6 +77,9 @@ def process_analysis_run(session: Session, run: AnalysisRun) -> None:
             results.append({"transaction_id": selection["id"], "status": "SKIPPED_STALE"})
             continue
         receipt = session.get(Receipt, transaction.receipt_id) if transaction.receipt_id else None
+        from app.receipts.questions import facts
+        answer_summary=facts(json.loads(transaction.question_answers_json or '{}'))[1]
+        purpose_context=' / '.join(x for x in (answer_summary,transaction.purpose) if x) or None
         request = AnalysisRequest(
             run_id=run.id,
             transaction=TransactionFacts(
@@ -85,7 +88,7 @@ def process_analysis_run(session: Session, run: AnalysisRun) -> None:
                 transaction_date=transaction.transaction_date,
                 vendor=transaction.vendor,
                 description=transaction.description,
-                purpose=transaction.purpose,
+                purpose=purpose_context,
                 ocr_text=receipt.ocr_raw if receipt else None,
                 direction=transaction.direction,
                 evidence_type=transaction.evidence_type,
@@ -100,7 +103,17 @@ def process_analysis_run(session: Session, run: AnalysisRun) -> None:
             ),
             business=business_facts,
         )
-        decision = AnalysisDecision.model_validate(analyzer.analyze(request))
+        from app.receipts.questions import incomplete,receipt_document
+        answers=json.loads(transaction.question_answers_json or '{}')
+        missing=incomplete(receipt_document(receipt) if receipt else {},answers,tax_profile) if transaction.question_rule_version or settings.RECEIPT_RECOGNITION_BACKEND=='luna_low' else []
+        if missing:
+            decision=AnalysisDecision(disposition='NEEDS_REVIEW',reason='공제 분석 보류: '+' / '.join(missing),missing_information=missing,analyzer_name='user-facts-gate',analyzer_version='1')
+        else:
+            decision = AnalysisDecision.model_validate(analyzer.analyze(request))
+        session.refresh(transaction)
+        if transaction.revision != selection['revision']:
+            results.append({'transaction_id':transaction.id,'status':'SKIPPED_STALE'})
+            continue
         # A final disposition without a cited source is never allowed to enter
         # the tax estimate. The deterministic tax engine remains the only place
         # that computes amounts.
@@ -197,26 +210,66 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
             ),
             report_progress,
         ))
+        receipt.vendor = result.vendor
+        receipt.amount = result.amount
+        receipt.date = result.transaction_date
+        receipt.ocr_raw = result.raw_text
+        receipt.doc_type = result.doc_type or ("uninspected" if result.status != "FAILED" else None)
+        receipt.support_status = result.support_status or ("uninspected" if result.status != "FAILED" else None)
+        receipt.readability_issues_json = json.dumps(result.issues, ensure_ascii=False)
+        receipt.affected_regions_json = json.dumps(result.affected_regions, ensure_ascii=False)
+        receipt.issue_code = result.issue_code
+        receipt.guide_message = result.guide_message
+        from app.receipts.luna_low_contract import CONTRACT_VERSION
+        receipt.classification_version = CONTRACT_VERSION if result.pipeline_name == 'luna_low' and result.doc_type not in (None, "uninspected") else None
+
         for stage_name in ("photo_quality", "text_recognition", "transaction_extraction"):
             if stage_statuses.get(stage_name) in {None, "pending", "processing"}:
                 stage_statuses[stage_name] = "completed"
         if stage_statuses.get("missing_field_check") in {None, "pending", "processing"}:
             stage_statuses["missing_field_check"] = "failed" if result.status in {"PARTIAL", "FAILED"} else "completed"
+        if result.status == "UNSUPPORTED":
+            stage_statuses["transaction_extraction"] = "failed"
+            stage_statuses["missing_field_check"] = "skipped"
+        elif result.status == "RETAKE":
+            stage_statuses["photo_quality"] = "failed"
+            stage_statuses["transaction_extraction"] = "failed"
+            stage_statuses["missing_field_check"] = "skipped"
         receipt.stage_statuses_json = json.dumps(stage_statuses, ensure_ascii=False)
-        receipt.vendor = result.vendor
-        receipt.amount = result.amount
-        receipt.date = result.transaction_date
-        receipt.ocr_raw = result.raw_text
+
         from app.receipts.details import extract_details
-        receipt.details_json = json.dumps(extract_details(result.raw_text), ensure_ascii=False)
+        details=extract_details(result.raw_text) if result.pipeline_name!='luna_low' else {}
+        if result.pipeline_name=='luna_low':
+            from app.receipts.details import project_luna_details
+            raw=json.loads(result.raw_text or '{}')
+            details=project_luna_details(raw.get('document') or {},details)
+        receipt.details_json = json.dumps(details,ensure_ascii=False)
         receipt.ocr_warnings_json = json.dumps(result.warnings, ensure_ascii=False)
         receipt.ocr_missing_fields_json = json.dumps(result.missing_fields, ensure_ascii=False)
         receipt.ocr_pipeline_name = result.pipeline_name
         receipt.ocr_pipeline_version = result.pipeline_version
         receipt.retention_status = result.retention_status
-        receipt.status = "failed" if result.status == "FAILED" else "done"
-        receipt.processing_stage = "complete" if result.status != "FAILED" else "failed"
-        receipt.processing_progress = 100 if result.status != "FAILED" else receipt.processing_progress
+
+        if result.status == "FAILED":
+            receipt.status = "failed"
+            receipt.processing_stage = "failed"
+        elif result.status == "UNSUPPORTED":
+            receipt.status = "unsupported"
+            receipt.processing_stage = "unsupported"
+            receipt.processing_progress = 100
+        elif result.status == "RETAKE":
+            receipt.status = "retake"
+            receipt.processing_stage = "retake"
+            receipt.processing_progress = 100
+        elif result.status == "NEEDS_EDIT":
+            receipt.status = "needs_edit"
+            receipt.processing_stage = "complete"
+            receipt.processing_progress = 100
+        else:
+            receipt.status = "done"
+            receipt.processing_stage = "complete"
+            receipt.processing_progress = 100
+
         job.result_json = json.dumps({
             "receipt_id": receipt.id,
             "receipt_status": receipt.status,
@@ -225,6 +278,10 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
             "warnings": result.warnings,
             "pipeline_name": result.pipeline_name,
             "pipeline_version": result.pipeline_version,
+            "doc_type": receipt.doc_type,
+            "support_status": receipt.support_status,
+            "issue_code": receipt.issue_code,
+            "guide_message": receipt.guide_message,
         }, ensure_ascii=False)
         session.add(receipt)
         return

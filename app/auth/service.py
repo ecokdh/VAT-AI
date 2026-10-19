@@ -9,7 +9,7 @@ from app.auth.models import ConsentRecord, User
 from app.auth.schemas import AuthResponse, LoginRequest, RegisterRequest, UserOut
 from app.business.models import BusinessProfile
 from app.business.schemas import BusinessProfileOut
-from app.business.service import verify_business, save_tax_profile
+from app.business.service import verify_business, verify_identity, save_tax_profile
 from app.common.exceptions import AppException
 from app.core.security import create_access_token, hash_password, verify_password
 
@@ -36,6 +36,7 @@ def _to_user_out(user: User, profile: BusinessProfile | None = None) -> UserOut:
         id=str(user.id),
         email=user.email,
         name=user.name,
+        nickname=user.nickname,
         created_at=user.created_at,
         business=_to_business_out(profile) if profile is not None else None,
         ocr_guide_seen=user.ocr_guide_seen,
@@ -68,12 +69,17 @@ def register_user(db: Session, data: RegisterRequest) -> AuthResponse:
     verification = verify_business(data.business_number)
     if not verification.verified:
         raise AppException(502, "BUSINESS_API_INVALID_RESPONSE", "사업자정보 확인에 실패했습니다.")
+    if data.tax_profile is None or data.tax_profile.business_start_date is None:
+        raise AppException(400, "BUSINESS_START_DATE_REQUIRED", "대표자 진위확인을 위한 개업일자를 입력해 주세요.")
+    verify_identity(data.business_number, name, data.tax_profile.business_start_date)
+    nickname = data.nickname
 
     consent_recorded_at = datetime.now(timezone.utc)
     user = User(
         email=email,
         password_hash=hash_password(data.password),
         name=name,
+        nickname=nickname,
     )
     user_flushed = False
     try:
@@ -89,7 +95,7 @@ def register_user(db: Session, data: RegisterRequest) -> AuthResponse:
             tax_type=verification.tax_type,
             tax_type_code=verification.tax_type_code,
             end_date=verification.end_date,
-            verification_status="status_checked",
+            verification_status="identity_verified",
             verified_at=datetime.utcnow(),
         )
         db.add(profile)

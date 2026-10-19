@@ -17,7 +17,7 @@ def register_body(email="owner@example.com", password="correct-password"):
     return {
         "email": email, "password": password, "name": "Owner",
         "business_name": "Owner Store", "business_number": "123-45-67890",
-        "terms_accepted": True, "privacy_accepted": True, "marketing_accepted": False,
+        "tax_profile": {"business_start_date": "2025-01-01"}, "terms_accepted": True, "privacy_accepted": True, "marketing_accepted": False,
     }
 
 

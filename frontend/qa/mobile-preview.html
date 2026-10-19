@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VAT-AI 모바일 QA</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#e8ebf1;color:#142039;font:14px system-ui}header{display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:16px;background:#fff}select,input,button{font:inherit;padding:8px;border:1px solid #cbd0da;border-radius:8px}input{width:240px}main{padding:20px;overflow:auto}iframe{display:block;border:0;background:white;box-shadow:0 8px 28px #14203922;margin:auto;border-radius:20px}#status{font-size:12px}label{display:flex;align-items:center;gap:6px}</style></head>
+<body><header><strong>모바일 화면 검토</strong><label>화면 크기<select id="size"><option value="320,568">320 × 568</option><option value="360,800">360 × 800</option><option value="390,844" selected>390 × 844 · 기본</option><option value="430,932">430 × 932</option><option value="844,390">844 × 390 · 가로</option><option value="768,1024">768 × 1024 · 태블릿</option></select></label><form id="route"><label>화면 경로<input id="path" value="/dashboard" aria-label="화면 경로"><button>열기</button></label></form><span id="status" role="status"></span></header><main><iframe id="phone" title="스마트폰 앱 화면" width="390" height="844" src="/dashboard"></iframe></main>
+<script>
+const phone=document.getElementById('phone'), size=document.getElementById('size'), path=document.getElementById('path'), status=document.getElementById('status');
+function report(){try{const d=phone.contentDocument;status.textContent=`${phone.clientWidth}px · 문서 ${d.documentElement.scrollWidth}px · ${d.documentElement.scrollWidth>phone.clientWidth?'가로 넘침 있음':'가로 넘침 없음'}`;}catch{status.textContent='화면 확인 중';}}
+size.addEventListener('change',()=>{const [w,h]=size.value.split(',');phone.width=w;phone.height=h;requestAnimationFrame(report);});
+document.getElementById('route').addEventListener('submit',e=>{e.preventDefault();if(path.value.startsWith('/')&&!path.value.startsWith('//'))phone.src=path.value;});
+phone.addEventListener('load',()=>{report();new ResizeObserver(report).observe(phone.contentDocument.body);});
+</script></body></html>

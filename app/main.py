@@ -8,6 +8,7 @@ from app.auth.router import router as auth_router
 from app.business.router import router as business_router, v2_router as business_v2_router
 from app.common.exceptions import register_exception_handlers
 from app.core.database import get_session
+from app.core.config import settings
 from app.deduction.rag.router import router as rag_router
 from app.deduction.router import router as deduction_router
 from app.receipts.router import router as receipts_router
@@ -19,7 +20,7 @@ app = FastAPI(title="VAT-AI")
 # TODO: 프론트 실제 배포 도메인이 정해지면 allow_origins를 그걸로 좁힌다.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173"] + ([settings.LOCAL_FRONTEND_ORIGIN] if settings.LOCAL_FRONTEND_ORIGIN else []),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -34,6 +35,8 @@ app.include_router(deduction_router)
 app.include_router(transactions_v2_router)
 app.include_router(jobs_v2_router)
 app.include_router(rag_router)
+from app.team_benchmark.router import router as team_benchmark_router
+app.include_router(team_benchmark_router)
 
 @app.get("/health", tags=["health"])
 def health_check(db: Session = Depends(get_session)):

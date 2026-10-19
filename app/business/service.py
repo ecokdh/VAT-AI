@@ -35,6 +35,12 @@ def verify_business(value: str) -> BusinessVerifyResponse:
     )
 
 
+def verify_identity(value: str, name: str, start_date) -> None:
+    if not name.strip():
+        raise AppException(400, "VALIDATION_ERROR", "대표자 이름을 입력해 주세요.")
+    nts_client.validate_identity(normalize_business_number(value), name.strip(), start_date.strftime("%Y%m%d"))
+
+
 def save_tax_profile(session: Session, user_id, data: TaxProfileUpdate, *, commit: bool = True) -> TaxProfileV2:
     payload = data.model_dump(exclude_unset=True, exclude={"confirmed"})
     suspension_periods = payload.pop("suspension_periods", None)
@@ -72,6 +78,10 @@ def save_tax_profile(session: Session, user_id, data: TaxProfileUpdate, *, commi
     elif data.model_fields_set - {"confirmed"}:
         item.confirmed_at = None
     item.updated_at = datetime.now(timezone.utc)
+    if data.model_fields_set:
+        from app.transactions.models import Transaction
+        for t in session.exec(select(Transaction).where(Transaction.user_id==user_id,Transaction.direction=='purchase',Transaction.deleted_at.is_(None))).all():
+            t.review_status='stale';t.deductible_vat=0;t.risk_level=None;t.revision+=1;t.analysis_reason='사업 정보 변경으로 다시 분석해야 합니다.';session.add(t)
     session.add(item)
     if commit:
         session.commit()

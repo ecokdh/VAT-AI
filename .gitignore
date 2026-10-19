@@ -38,3 +38,9 @@ venv/
 
 # 웹 수집 영수증 평가 데이터 (이용 조건 미확인, 로컬 검토용)
 data/receipts/
+
+# Local backups, experiments and generated audit artifacts
+*.bak
+*.bak_*
+outputs/
+artifacts/

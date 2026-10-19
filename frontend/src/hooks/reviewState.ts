@@ -15,6 +15,12 @@ export const inPeriod = (date: string | null, period: string) => {
  return from <= month && month <= to;
 };
 export const needsReview = (row: TransactionApi) => row.state !== "confirmed" || (row.direction === "purchase" && !["analyzed", "excluded"].includes(row.review_status));
+export function matchesReviewStatus(row: TransactionApi, status: string) {
+  if (status === "review") return needsReview(row);
+  if (status === "done") return !needsReview(row);
+  if (status === "deductible" || status === "nondeductible") return row.direction === "purchase" && row.state === "confirmed" && row.review_status === (status === "deductible" ? "analyzed" : "excluded");
+  return true;
+}
 export function summarizeReview(rows: TransactionApi[], inbox: ReceiptProcessingApi[], period: string) {
   const transactions = rows.filter(row => !row.deleted_at && inPeriod(row.transaction_date, period));
   const receipts = inbox.filter(row => !row.date || inPeriod(row.date, period));

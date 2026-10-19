@@ -6,18 +6,44 @@ import type { Receipt } from "../../types";
 
 function toReceiptView(receipt: ReceiptApi): Receipt {
   const failed = receipt.status === "failed";
+  const unsupported = receipt.status === "unsupported";
+  const retake = receipt.status === "retake";
+  const needsEdit = receipt.status === "needs_edit";
+
+  let status: Receipt["status"] = "completed";
+  let fallbackName = "인식 완료";
+  let summary = "OCR 인식 완료";
+
+  if (failed) {
+    status = "failed";
+    fallbackName = "분석 실패";
+    summary = "실행 오류";
+  } else if (unsupported) {
+    status = "unsupported";
+    fallbackName = "미지원 문서";
+    summary = "미지원 증빙";
+  } else if (retake) {
+    status = "retake";
+    fallbackName = "재촬영 필요";
+    summary = receipt.guide_message || "사진 재촬영";
+  } else if (needsEdit) {
+    status = "needs_edit";
+    fallbackName = receipt.vendor ?? "확인 필요";
+    summary = "직접 확인 필요";
+  }
+
   return {
     id: String(receipt.id),
     type: "매입",
     issuedAt: receipt.date ?? receipt.created_at.slice(0, 10),
-    supplierName: receipt.vendor ?? "OCR 인식 실패",
+    supplierName: receipt.vendor ?? fallbackName,
     supplierBusinessNumber: "",
-    itemSummary: failed ? "OCR 결과 없음" : "OCR 인식 완료",
+    itemSummary: summary,
     supplyAmount: receipt.amount ?? 0,
     amount: receipt.amount,
     vatAmount: 0,
     isExempt: false,
-    status: failed ? "failed" : "completed",
+    status,
   };
 }
 
@@ -55,7 +81,7 @@ export function PurchaseStoragePage() {
 
   const totalAmount = receipts.reduce((sum, receipt) => sum + (receipt.amount ?? 0), 0);
   const doneCount = receipts.filter((receipt) => receipt.status === "completed").length;
-  const failedCount = receipts.filter((receipt) => receipt.status === "failed").length;
+  const issueCount = receipts.filter((receipt) => receipt.status === "failed" || receipt.status === "unsupported" || receipt.status === "retake").length;
 
   return (
     <StorageView
@@ -67,8 +93,8 @@ export function PurchaseStoragePage() {
       loading={loading}
       error={error}
       summaryRows={[
-        { label: "OCR 완료", countText: `${doneCount}건` },
-        { label: "OCR 실패", countText: `${failedCount}건` },
+        { label: "인식 완료", countText: `${doneCount}건` },
+        { label: "재촬영 · 안내", countText: `${issueCount}건` },
       ]}
     />
   );

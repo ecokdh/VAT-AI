@@ -85,3 +85,37 @@ def lookup_status(business_number: str) -> dict[str, str]:
         if not isinstance(row.get(field), str):
             raise AppException(502, "BUSINESS_API_INVALID_RESPONSE", "사업자정보 조회 응답이 올바르지 않습니다.")
     return row
+
+
+def validate_identity(business_number: str, name: str, start_date: str) -> None:
+    key = settings.NTS_BUSINESS_API_KEY.strip()
+    if not key:
+        raise AppException(503, "BUSINESS_API_NOT_CONFIGURED", "사업자 진위확인 서비스가 설정되지 않았습니다.")
+    try:
+        response = httpx.post(
+            settings.NTS_BUSINESS_VALIDATE_URL,
+            params={"serviceKey": key},
+            json={"businesses": [{"b_no": business_number, "start_dt": start_date, "p_nm": name}]},
+            headers={"Accept": "application/json"},
+            timeout=settings.NTS_BUSINESS_TIMEOUT_SECONDS,
+        )
+    except httpx.TimeoutException as exc:
+        raise AppException(504, "BUSINESS_API_TIMEOUT", "사업자 진위확인 시간이 초과되었습니다.") from exc
+    except httpx.RequestError as exc:
+        raise AppException(502, "BUSINESS_API_ERROR", "사업자 진위확인 서비스에 연결할 수 없습니다.") from exc
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise AppException(502, "BUSINESS_API_INVALID_RESPONSE", "사업자 진위확인 응답이 올바르지 않습니다.") from exc
+    error = _api_error(payload)
+    if error:
+        raise error
+    if not response.is_success:
+        raise AppException(502, "BUSINESS_API_ERROR", "사업자 진위확인에 실패했습니다.")
+    rows = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(payload, dict) or payload.get("status_code") != "OK" or not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict) or rows[0].get("b_no") != business_number:
+        raise AppException(502, "BUSINESS_API_INVALID_RESPONSE", "사업자 진위확인 응답이 올바르지 않습니다.")
+    if rows[0].get("valid") == "02":
+        raise AppException(400, "BUSINESS_IDENTITY_MISMATCH", "대표자명·사업자등록번호·개업일자가 국세청 정보와 일치하지 않습니다.")
+    if rows[0].get("valid") != "01":
+        raise AppException(502, "BUSINESS_API_INVALID_RESPONSE", "사업자 진위확인 응답이 올바르지 않습니다.")

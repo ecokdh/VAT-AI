@@ -9,6 +9,16 @@ from app.core.database import get_session
 from app.main import app
 from app.receipts import service as receipt_service
 from app.receipts.storage import LocalFileStorage
+from app.core.config import settings
+
+@pytest.fixture(autouse=True)
+def isolate_live_configuration(monkeypatch):
+    monkeypatch.setattr(settings,'RECEIPT_RECOGNITION_BACKEND','clova')
+    monkeypatch.setattr(settings,'OCR_PIPELINE','')
+    monkeypatch.setattr(settings,'LUNA_INPUT_MODE','photo')
+    # Registration tests must not submit fixture identities to the live NTS API.
+    from app.business import nts_client
+    monkeypatch.setattr(nts_client, 'validate_identity', lambda *_: None)
 
 
 @pytest.fixture()
@@ -33,4 +43,3 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
 
     app.dependency_overrides.clear()
     engine.dispose()
-

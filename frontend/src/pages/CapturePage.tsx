@@ -11,6 +11,7 @@ export function CapturePage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const direction = params.get("direction");
+  const fileOnly = params.get("source") === "file";
   const hasDirection = direction === "purchase" || direction === "sales";
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -45,7 +46,7 @@ export function CapturePage() {
 
   // 카메라 스트림 시작/정리 — facingMode가 바뀔 때마다 재실행됨
   useEffect(() => {
-    if (!hasDirection || guide !== "ready" || pendingFile) return;
+    if (!hasDirection || guide !== "ready" || pendingFile || fileOnly) return;
     let cancelled = false;
 
     async function startCamera() {
@@ -78,7 +79,7 @@ export function CapturePage() {
       cancelled = true;
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [facingMode, hasDirection, guide, pendingFile]);
+  }, [facingMode, hasDirection, guide, pendingFile, fileOnly]);
 
   async function uploadAndNavigate(file: File) {
     if (direction !== "purchase" && direction !== "sales") return;
@@ -146,6 +147,7 @@ export function CapturePage() {
 
   if(guide!=="ready")return <div className="page qa-page"><PageHeader title="증빙 촬영 안내" onBack={()=>navigate(`/storage/${direction}`)}/>{guide==="show"?<CaptureGuide seconds={seconds}/>:<div className="page__body">{guide==="error"?<p className="banner banner--error">촬영 안내 정보를 불러오지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.</p>:<p role="status">촬영을 준비하고 있습니다.</p>}</div>}</div>;
   if(pendingFile)return <div className="page qa-page"><PageHeader title="촬영한 증빙 확인" onBack={()=>setPendingFile(null)}/><main className="page__body"><h1 className="screen-title">글자가 선명하게 보이나요?</h1><p className="muted">영수증 전체가 보이고 금액·날짜를 읽을 수 있는지 확인해 주세요.</p><img className="capture-preview" src={preview} alt="분석할 증빙 미리보기"/>{error&&<p className="banner banner--error" role="alert">{error}</p>}<div className="btn-row"><button className="btn btn--secondary" disabled={isUploading} onClick={()=>{setPendingFile(null);setError("");}}>다시 촬영·선택</button><button className="btn btn--primary" disabled={isUploading} onClick={()=>void uploadAndNavigate(pendingFile)}>{isUploading?"올리는 중…":"선명해요 · 분석하기"}</button></div></main></div>;
+  if(fileOnly)return <div className="page qa-page"><PageHeader title="영수증 사진 선택" onBack={()=>navigate(`/storage/${direction}`)}/><main className="page__body"><h1 className="screen-title">다른 영수증 사진을 선택해 주세요</h1><p className="muted">영수증 전체와 금액·날짜가 선명하게 보이는 사진을 선택해 주세요.</p><input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} style={{display:'none'}}/><button className="btn btn--primary" onClick={openFilePicker}>앨범 및 파일 선택</button><button className="btn btn--secondary" onClick={()=>setParams({direction:direction!})}>직접 촬영하기</button></main></div>;
   return (
     <div className="page" style={{ background: "#0c0c10" }}>
       <header className="page-header" style={{ background: "transparent" }}>
