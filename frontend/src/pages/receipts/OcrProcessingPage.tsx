@@ -103,43 +103,35 @@ export function OcrProcessingPage() {
   }
 
   return (
-    <div className="page">
-      <div className="page__body" style={{ paddingTop: 36 }}>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--color-primary)" }}>증빙 분석</div>
+    <div className="page processing-page">
+      <div className="page__body">
+        <div className="processing-intro">
+          <div className="processing-eyebrow">증빙 분석</div>
           {!isFinal && <div className="ocr-loading-spinner" aria-label="분석 진행 중" />}
-          <div style={{ fontSize: 24, fontWeight: 800, marginTop: 20 }}>
-            {statusTitle}
-          </div>
-          <div className="muted" style={{ fontSize: 14, marginTop: 8 }}>
-            {statusDescription}
-          </div>
+          <h1>{statusTitle}</h1>
+          <p className="muted">{statusDescription}</p>
         </div>
 
         {id && <ReceiptPreview key={id} id={Number(id)} wide />}
         {!unsupported && !retake && !failed && <RecognitionDetails result={receipt?.recognition} />}
 
-        <div className="card" style={{ marginTop: 16, padding: 18 }}>
+        <div className="card processing-timeline">
           {stages.map(([key, label]) => {
             const status = receipt?.stage_statuses[key] ?? "pending";
             return (
-              <div className="field-row" key={key} style={{ minHeight: 54 }}>
-                <span className="field-row__label" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span aria-hidden="true" style={{ color: status === "completed" ? "#1473e6" : "#76839a" }}>
-                    {status === "completed" ? "✓" : status === "processing" ? "◌" : status === "failed" ? "!" : "○"}
-                  </span>
+              <div className={`field-row processing-stage processing-stage--${status}`} key={key}>
+                <span className="field-row__label">
+                  <span className="processing-stage__marker" aria-hidden="true" />
                   {label}
                 </span>
-                <span className="field-row__value" style={{ color: status === "failed" ? "#b54708" : undefined }}>
-                  {stageLabel(status)}
-                </span>
+                <span className="field-row__value">{stageLabel(status)}</span>
               </div>
             );
           })}
-          <div style={{ marginTop: 14, height: 8, borderRadius: 8, background: "#e5edf9", overflow: "hidden" }}>
-            <div style={{ width: `${progress}%`, height: "100%", borderRadius: 8, background: "#1473e6", transition: "width 250ms ease" }} />
+          <div className="processing-progress">
+            <span style={{ width: `${progress}%` }} />
           </div>
-          <div className="muted" style={{ textAlign: "center", marginTop: 10, fontSize: 13 }}>
+          <div className="muted processing-note">
             {unsupported ? "현재는 인쇄된 구매 영수증만 지원합니다." :
              retake ? "선명하고 전체가 보이는 사진으로 다시 시도해 주세요." :
              needsEdit ? "읽은 정보를 확인하고 필요한 항목을 수정해 주세요." :

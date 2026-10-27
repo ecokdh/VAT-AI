@@ -149,7 +149,7 @@ export function CapturePage() {
   if(pendingFile)return <div className="page qa-page"><PageHeader title="촬영한 증빙 확인" onBack={()=>setPendingFile(null)}/><main className="page__body"><h1 className="screen-title">글자가 선명하게 보이나요?</h1><p className="muted">영수증 전체가 보이고 금액·날짜를 읽을 수 있는지 확인해 주세요.</p><img className="capture-preview" src={preview} alt="분석할 증빙 미리보기"/>{error&&<p className="banner banner--error" role="alert">{error}</p>}<div className="btn-row"><button className="btn btn--secondary" disabled={isUploading} onClick={()=>{setPendingFile(null);setError("");}}>다시 촬영·선택</button><button className="btn btn--primary" disabled={isUploading} onClick={()=>void uploadAndNavigate(pendingFile)}>{isUploading?"올리는 중…":"선명해요 · 분석하기"}</button></div></main></div>;
   if(fileOnly)return <div className="page qa-page"><PageHeader title="영수증 사진 선택" onBack={()=>navigate(`/storage/${direction}`)}/><main className="page__body"><h1 className="screen-title">다른 영수증 사진을 선택해 주세요</h1><p className="muted">영수증 전체와 금액·날짜가 선명하게 보이는 사진을 선택해 주세요.</p><input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} style={{display:'none'}}/><button className="btn btn--primary" onClick={openFilePicker}>앨범 및 파일 선택</button><button className="btn btn--secondary" onClick={()=>setParams({direction:direction!})}>직접 촬영하기</button></main></div>;
   return (
-    <div className="page" style={{ background: "#0c0c10" }}>
+    <div className="page capture-page" style={{ background: "#0c0c10" }}>
       <header className="page-header" style={{ background: "transparent" }}>
         <button className="icon-btn" style={{ color: "#fff" }} aria-label="보관함으로 돌아가기" onClick={() => navigate(`/storage/${direction}`)}>
           ‹

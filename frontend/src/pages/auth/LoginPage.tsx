@@ -38,29 +38,13 @@ export function LoginPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page auth-page">
       <PageHeader title="로그인" showBack={false} showMenu={false} />
       <div className="page__body">
-        <div style={{ textAlign: "center", padding: "24px 0 32px" }}>
-          <div
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: 20,
-              background: "var(--color-primary)",
-              margin: "0 auto 16px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 32,
-            }}
-          >
-            💼
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>VAT-AI</div>
-          <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
-            소상공인을 위한 스마트 부가가치세 비서
-          </div>
+        <div className="auth-intro">
+          <img className="auth-logo" src="/vat-ai-logo.png" alt="VAT-AI 로고" width={320} height={252} />
+          <h1 className="auth-title">VAT-AI</h1>
+          <p className="auth-description">소상공인을 위한 스마트 부가가치세 비서</p>
         </div>
 
         <div className="form-field">
@@ -74,8 +58,8 @@ export function LoginPage() {
 
         {routeState?.signupComplete && <div className="banner" style={{ marginBottom: 16 }} role="status">가입이 완료되었습니다. 이메일과 비밀번호로 로그인해 주세요.</div>}
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, margin: "4px 0 28px" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--color-primary)" }}>
+        <div className="auth-preferences">
+          <label>
             <input type="checkbox" checked={rememberEmail} onChange={(e) => setRememberEmail(e.target.checked)} />
             이메일 저장
           </label>
@@ -84,7 +68,7 @@ export function LoginPage() {
 
         {error && (
           <div className="banner banner--error" style={{ marginBottom: 20 }}>
-            <span>⚠️</span>
+            <Icon name="info" />
             <div>{error}</div>
           </div>
         )}

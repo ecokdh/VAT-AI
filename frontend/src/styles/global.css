@@ -17,7 +17,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font-family: inherit;
 }
 
@@ -45,3 +47,7 @@ a {
     transform: rotate(360deg);
   }
 }
+
+html { color-scheme: light; scroll-padding-top: 104px; }
+body { line-height: 1.5; }
+button { color: inherit; }
