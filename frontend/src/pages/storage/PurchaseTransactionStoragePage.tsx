@@ -11,6 +11,8 @@ import { PageHeader } from "../../components/PageHeader";
 import { DeleteConfirmation } from "../../components/DeleteConfirmation";
 import { ReceiptPreview } from "../../components/ReceiptPreview";
 import { ReceiptDocumentDetails } from "../../components/ReceiptDocumentDetails";
+import { type SavedDocument } from "../../components/MonthlySalesReview";
+import { apiClient } from "../../api/client";
 
 const labels: Record<string,string> = { pending:"분석 대기",not_analyzed:"분석 대기",analyzed:"공제 가능",caution:"추가 확인 필요",insufficient_info:"정보 부족",excluded:"공제 불가능",stale:"재분석 필요" };
 export function PurchaseTransactionStoragePage({ direction = "purchase" }: { direction?: "purchase" | "sales" }) {
@@ -21,6 +23,7 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   const purchase = direction === "purchase";
   const [transactions, setTransactions] = useState<TransactionApi[]>([]);
   const [inbox, setInbox] = useState<ReceiptProcessingApi[]>([]);
+  const [monthly, setMonthly] = useState<SavedDocument[]>([]);
   const [period, setPeriod] = useState(() => { const value = params.get("period"); return value === "all" || isPeriod(value) ? value! : "all"; });
   const [simplified, setSimplified] = useState(false);
   const [month, setMonth] = useState("");
@@ -39,8 +42,8 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [rows, receipts] = await Promise.all([listTransactions(direction), listReceiptInbox()]);
-      setTransactions(rows); setInbox(receipts.filter(r => r.direction === direction));
+      const [rows, receipts, monthlyDocs] = await Promise.all([listTransactions(direction), listReceiptInbox(), direction === 'sales' ? apiClient.get<SavedDocument[]>('/sales/monthly').then(r=>r.data) : Promise.resolve([])]);
+      setTransactions(rows); setInbox(receipts.filter(r => r.direction === direction)); setMonthly(monthlyDocs);
       setSelected(ids => ids.filter(id => rows.some(r => r.id === id)));
     } catch { setMessage("거래를 불러오지 못했습니다. 다시 시도해 주세요."); }
     finally { setLoading(false); }
@@ -51,11 +54,13 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   useEffect(() => { if(detail) dialog.current?.showModal(); }, [detail]);
   const periodRows = transactions.filter(r => period === "all" || inPeriod(r.transaction_date, period));
   const periodInbox = inbox.filter(r => period === "all" || !r.date || inPeriod(r.date, period));
-  const review = periodRows.filter(needsReview).length + periodInbox.length;
-  const total = periodRows.length + periodInbox.length;
+  const periodMonthly=monthly.filter(r=>{const m=r.document.거래일;return period==='all'||!m||(/^\d{4}-\d{2}$/.test(m)&&inPeriod(`${m}-01`,period));});
+  const review = periodRows.filter(needsReview).length + periodInbox.length + periodMonthly.length;
+  const total = periodRows.length + periodInbox.length + periodMonthly.length;
   const filterStatus = (row: TransactionApi) => status === "all" || (status === "review" ? needsReview(row) : !needsReview(row));
   const filtered = periodRows.filter(r => (!month || Number(r.transaction_date.slice(5,7)) === Number(month)) && filterStatus(r)).sort((a,b) => order === "amount" ? b.total_amount-a.total_amount : order === "oldest" ? a.transaction_date.localeCompare(b.transaction_date) : b.transaction_date.localeCompare(a.transaction_date));
   const receipts = periodInbox.filter(r => status !== "done" && (!month || !r.date || Number(r.date.slice(5,7)) === Number(month)));
+  const monthlyVisible=periodMonthly.filter(r=>status !== 'done'&&(!month||!r.document.거래일||Number(r.document.거래일.slice(5,7))===Number(month)));
   const visibleSelected = selected.filter(id => filtered.some(r => r.id === id && r.state === "confirmed" && r.review_status !== "analyzed"));
   function filter(value:string) { setParams(value === "all" ? {period} : { period, status:value }, {replace:true}); setSelected([]); }
   async function analyze(ids: number[]) {
@@ -92,7 +97,8 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
     <div className="month-filter" aria-label="거래 월"><button aria-pressed={!month} onClick={()=>{setMonth("");setSelected([]);}}>전체</button>{Array.from({length:12},(_,i)=>String(i+1)).map(m=><button key={m} aria-pressed={month===m} onClick={()=>{setMonth(m);setSelected([]);}}>{m}월</button>)}</div>
     <div className="status-tabs">{[["all","전체"],["review","확인 필요"],["done",purchase?"분석 완료":"확정"]].map(([key,label])=><button key={key} aria-pressed={status===key} onClick={()=>filter(key)}>{label}</button>)}</div>
     {loading ? <p className="center-note" role="status">거래를 불러오는 중입니다.</p> : <>
-      {!filtered.length && !receipts.length && <div className="empty-card"><strong>표시할 거래가 없어요</strong><p className="muted">신고 기간·월·상태를 바꾸거나 증빙을 추가해 주세요.</p></div>}
+      {!filtered.length && !receipts.length && !monthlyVisible.length && <div className="empty-card"><strong>표시할 거래가 없어요</strong><p className="muted">신고 기간·월·상태를 바꾸거나 증빙을 추가해 주세요.</p></div>}
+      {monthlyVisible.map(r=><article className="card ledger-card" key={`monthly-${r.id}`}><div className="ledger-head"><div><strong>{r.document.사업장.상호 || "상호 확인 필요"}</strong><small>{r.document.거래일 || "기간 확인 필요"} · 월간 매출 정산서</small></div><strong>{typeof r.document.집계합계.실매출액 === 'number' ? fmt.won(r.document.집계합계.실매출액) : "금액 확인 필요"}</strong></div><p className="status-label status-label--review">◷ {r.status === 'reviewed' ? '확인 저장됨 · 매출 합계 미반영' : '정산서 확인 필요'}</p><button className="btn btn--primary btn--sm" onClick={()=>navigate(`/receipts/monthly/${r.id}/review`)}>증빙 확인·수정</button></article>)}
       {receipts.map(r=><article className="card ledger-card" key={`receipt-${r.id}`}><div className="ledger-head"><div><strong>{r.vendor || "거래처 확인 필요"}</strong><small>{r.date ?? "거래일 확인 필요"}</small></div><strong>{r.amount == null ? "금액 확인 필요" : fmt.won(r.amount)}</strong></div><p className="status-label status-label--review">◷ 거래 확인 필요</p><button className="btn btn--primary btn--sm" onClick={()=>navigate(`/receipts/${r.id}/edit`)}>거래 정보 확인·저장</button></article>)}
       {filtered.map(item=><article key={item.id} className="card ledger-card"><div className="ledger-head">{purchase && <input type="checkbox" aria-label={`${item.description || item.vendor} 분석 선택`} checked={visibleSelected.includes(item.id)} disabled={item.state!=="confirmed" || item.review_status==="analyzed"} onChange={e=>setSelected(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<div><strong>{item.description || item.vendor}</strong><small>{item.transaction_date}</small></div><strong>{fmt.won(item.total_amount)}</strong></div>
       <div className={`status-label ${needsReview(item) ? "status-label--review" : "status-label--done"}`}>{purchase ? labels[item.review_status] ?? "확인 필요" : item.state==="confirmed" ? "✓ 확정" : "◷ 확인 필요"}</div>

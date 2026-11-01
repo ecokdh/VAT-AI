@@ -15,6 +15,7 @@ import { TrashPage } from "./pages/storage/TrashPage";
 import { ReportPage } from "./pages/reports/ReportPage";
 import { BottomNav } from "./components/BottomNav";
 import { AccountPage, AboutPage } from "./pages/AccountPage";
+import { MonthlySalesReviewPage } from "./components/MonthlySalesReview";
 
 import {TeamBenchmarkPage} from "./pages/TeamBenchmarkPage";
 
@@ -31,6 +32,7 @@ export default function App() {
       <Route path="/about" element={<AboutPage />} />
       <Route path="/capture" element={<CapturePage />} />
       <Route path="/receipts/:id/processing" element={<OcrProcessingPage />} />
+      <Route path="/receipts/monthly/:id/review" element={<MonthlySalesReviewPage />} />
       <Route path="/receipts/:id/review" element={<OcrExtractionReviewPage />} />
       <Route path="/receipts/:id/edit" element={<OcrResultEditPage />} />
       <Route path="/receipts/:id/analysis" element={<AnalysisResultPage />} />
