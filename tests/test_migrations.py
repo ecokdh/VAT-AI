@@ -2,7 +2,10 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from uuid import uuid4
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 
@@ -16,16 +19,15 @@ def test_upgrade_existing_prototype_preserves_receipt(tmp_path):
         assert result.returncode == 0, result.stdout + result.stderr
     upgrade('e1a2b3c4d5e6')
     from sqlmodel import Session
-    from app.auth.models import User
     from app.receipts.models import Receipt
     engine = create_engine(database_url)
-    with Session(engine) as session:
-        user = User(email='migration@example.com', name='검증', password_hash='fixture')
-        session.add(user); session.flush()
-        receipt = Receipt(user_id=user.id, image_url='preserved.png', status='done',
-                          vendor='유지할 상호', amount=1000, ocr_raw='{"original":true}')
-        session.add(receipt); session.commit(); session.refresh(receipt)
-        rid = receipt.id
+    # 그 시점 스키마에 있는 칸만 SQL로 넣는다. 현재 ORM 모델에는 뒤에 추가된 칸(nickname 등)이 있다.
+    with engine.begin() as connection:
+        user_id = uuid4().hex
+        connection.execute(text("INSERT INTO users (id, email, password_hash, name, created_at) VALUES (:id, 'migration@example.com', 'fixture', '검증', CURRENT_TIMESTAMP)"), {'id': user_id})
+        rid = connection.execute(text("INSERT INTO receipts (user_id, image_url, status, vendor, amount, ocr_raw, created_at) "
+                                      "VALUES (:user_id, 'preserved.png', 'done', :vendor, 1000, :ocr_raw, CURRENT_TIMESTAMP)"),
+                                 {'user_id': user_id, 'vendor': '유지할 상호', 'ocr_raw': '{"original":true}'}).lastrowid
     upgrade('head')
     with Session(engine) as session:
         receipt = session.get(Receipt, rid)
@@ -111,7 +113,8 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
         ).scalar_one()
         assert "direction" in receipt_columns
         assert {"doc_type", "support_status", "readability_issues_json", "affected_regions_json", "issue_code", "guide_message", "classification_version"}.issubset(receipt_columns)
-        assert revision == "f2b3c4d5e6a7"
+        # 최신 리비전을 적어 두면 마이그레이션이 추가될 때마다 깨지므로 alembic이 아는 head와 비교한다.
+        assert revision == ScriptDirectory.from_config(Config(str(Path(__file__).parents[1] / "alembic.ini"))).get_current_head()
         assert {"id", "business_number", "business_name", "tax_type", "source", "hit_count"}.issubset({c["name"] for c in inspect(connection).get_columns("merchant_memories")})
         assert {'business_description','operating_industry','has_employees','onboarding_completed','tax_type'} <= {c['name'] for c in inspect(connection).get_columns('tax_profiles_v2')}
         assert {'question_answers_json','question_rule_version'} <= {c['name'] for c in inspect(connection).get_columns('transactions')}
