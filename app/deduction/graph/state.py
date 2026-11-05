@@ -4,7 +4,7 @@ from typing import Literal, TypedDict
 
 from pydantic import BaseModel
 
-from app.analysis.contract import AnalysisRequest, LegalReference
+from app.deduction.analyzer import AnalysisRequest, LegalReference
 from app.deduction.rag.schemas import LawOut
 
 

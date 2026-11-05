@@ -1,11 +1,11 @@
-"""분류 그래프를 PurchaseAnalyzer 계약(app/analysis/contract.py)에 연결하는 어댑터.
+"""분류 그래프를 PurchaseAnalyzer 계약(app/deduction/analyzer.py)에 연결하는 어댑터.
 
 연결: DEDUCTION_ANALYZER=app.deduction.graph.adapter:create_analyzer
 """
 
 from sqlmodel import Session
 
-from app.analysis.contract import AnalysisDecision, AnalysisRequest
+from app.deduction.analyzer import AnalysisDecision, AnalysisRequest
 from app.core.database import engine
 from app.deduction.ai_client import judge_with_laws
 from app.deduction.graph.graph import build_graph, classify

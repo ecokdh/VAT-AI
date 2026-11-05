@@ -69,6 +69,8 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
             "team_benchmark_members",
             "team_benchmark_cases",
             "merchant_memories",
+            "filing_inputs",
+            "monthly_sales_documents",
         }
         consent_columns = {
             column["name"] for column in inspect(connection).get_columns("consent_records")
@@ -86,6 +88,7 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
             "id", "user_id", "business_number", "business_name", "business_status",
             "business_status_code", "tax_type", "tax_type_code", "end_date",
             "verification_status", "verified_at", "created_at",
+            "business_address", "business_type", "business_item", "industry_code",
         }
         for name in ("id", "user_id", "business_number", "verification_status", "created_at"):
             assert not columns[name]["nullable"]

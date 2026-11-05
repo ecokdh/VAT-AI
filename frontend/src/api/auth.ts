@@ -24,7 +24,16 @@ export interface BusinessProfile {
   verification_status: string;
   verified_at: string | null;
   created_at: string;
+  business_address: string | null;
+  business_type: string | null;
+  business_item: string | null;
+  industry_code: string | null;
 }
+
+/** 부가세 신고서에 그대로 적는 사업자 정보(사업장 주소, 과세표준명세 업태·종목·업종코드). */
+export type BusinessFilingInfo = Pick<BusinessProfile, "business_address" | "business_type" | "business_item" | "industry_code">;
+export const emptyFilingInfo: BusinessFilingInfo = { business_address: null, business_type: null, business_item: null, industry_code: null };
+export const validIndustryCode = (code: string | null) => !code || /^\d{6}$/.test(code);
 
 export interface RegisterRequest {
   email: string;
@@ -37,6 +46,7 @@ export interface RegisterRequest {
   privacy_accepted: boolean;
   marketing_accepted: boolean;
   tax_profile?: TaxProfileInput;
+  filing_info?: BusinessFilingInfo;
 }
 
 export interface EmailAvailabilityResponse {

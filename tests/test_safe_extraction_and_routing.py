@@ -15,13 +15,13 @@ import time
 from pathlib import Path
 from PIL import Image
 
-from app.receipts.image_utils import apply_safe_receipt_orientation
-from app.receipts.routing_rules import (
+from app.receipts.ocr.image_utils import apply_safe_receipt_orientation
+from app.receipts.ocr.routing_rules import (
     check_business_number_signal,
     check_amount_arithmetic_signal,
     route_suspicious_fields,
 )
-from app.receipts.luna_low_contract import normalize
+from app.receipts.ocr.luna_low_contract import normalize
 from app.receipts.questions import canonical_answers, questions, validated_answers
 from app.receipts.schemas import ReceiptDetails
 
@@ -218,7 +218,7 @@ def test_zero_discount_vs_unprinted_discount():
 
 def test_stale_lock_recovery(tmp_path, monkeypatch):
     from app.core.config import settings
-    from app.receipts import luna_client
+    from app.receipts.ocr import luna_client
 
     fake_ledger = tmp_path / "test_budget.json"
     fake_lock = tmp_path / "test_budget.lock"

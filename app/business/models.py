@@ -20,6 +20,11 @@ class BusinessProfile(SQLModel, table=True):
     verification_status: str = Field(default="unverified", nullable=False)
     verified_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    # 부가세 신고서 기재용(사업장 주소, 과세표준명세 업태·종목·업종코드). 공제 판단에는 쓰지 않는다.
+    business_address: Optional[str] = Field(default=None, max_length=255)
+    business_type: Optional[str] = Field(default=None, max_length=100)
+    business_item: Optional[str] = Field(default=None, max_length=100)
+    industry_code: Optional[str] = Field(default=None, max_length=6)
 
 
 class TaxProfileV2(SQLModel, table=True):

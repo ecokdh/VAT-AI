@@ -31,7 +31,7 @@ async def enqueue_receipt_ocr(session: Session, user_id: uuid.UUID, content: byt
         "transaction_extraction": "pending",
         "missing_field_check": "pending",
     }
-    luna_local = settings.OCR_PIPELINE == 'app.ocr_pipeline.luna:create_pipeline'
+    luna_local = settings.OCR_PIPELINE == 'app.receipts.ocr.luna:create_pipeline'
     if luna_local:
         initial_stages['photo_quality'] = 'skipped'
     receipt = Receipt(
@@ -70,16 +70,28 @@ async def enqueue_receipt_ocr(session: Session, user_id: uuid.UUID, content: byt
 
 
 def enqueue_pdf(session: Session, user: User, period: str, reviewed: bool = False) -> AsyncJob:
+    if not reviewed:
+        raise AppException(409, "FILING_NOT_REVIEWED", "예상세액 및 계산 근거 검토를 확인해 주세요.")
     estimate = calculate_period_estimate(session, user, period, None)
-    from app.jobs.readiness import filing_readiness
-    readiness = filing_readiness(session, user, period, estimate)
-    if not reviewed or not readiness["ready"]:
-        raise AppException(409, "FILING_NOT_READY", "사업자정보, 거래 확정, 공제 검토와 예상세액 검토를 모두 완료해 주세요.")
     job = AsyncJob(
         user_id=user.id,
         job_type="pdf",
         payload_json=json.dumps(estimate, ensure_ascii=False),
     )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job
+
+
+def enqueue_vat_return(session: Session, user: User, period: str, reviewed: bool = False) -> AsyncJob:
+    """부가세 신고서(별지 제21호서식) PDF. 칸 값은 요청 시점에 계산해 두고, 워커가 덧입히고 검증한다."""
+    if not reviewed:
+        raise AppException(409, "FILING_NOT_REVIEWED", "예상세액 및 계산 근거 검토를 확인해 주세요.")
+    from app.vat_return.returns import build_vat_return
+
+    job = AsyncJob(user_id=user.id, job_type="vat_return",
+                   payload_json=json.dumps(build_vat_return(session, user, period), ensure_ascii=False))
     session.add(job)
     session.commit()
     session.refresh(job)
@@ -219,7 +231,7 @@ def confirm_receipt_extraction(
 
 
 def retry_receipt_ocr(session: Session, user_id: uuid.UUID, receipt_id: int):
-    luna_local = settings.OCR_PIPELINE == 'app.ocr_pipeline.luna:create_pipeline'
+    luna_local = settings.OCR_PIPELINE == 'app.receipts.ocr.luna:create_pipeline'
     receipt = session.exec(
         select(Receipt).where(Receipt.id == receipt_id, Receipt.user_id == user_id)
     ).first()

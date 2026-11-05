@@ -578,7 +578,56 @@
 .status-label { font-size:12px; margin:13px 0; }
 .status-label--review { color:var(--color-warning-text); }
 .status-label--done { color:var(--color-sales-dark); }
+.status-label--danger { color:var(--color-danger); }
+.ledger-card--link { display:block; width:100%; text-align:left; font:inherit; color:inherit; cursor:pointer; }
+.view-all { width:100%; margin:4px 0 16px; }
+.receipt-search { margin:8px 0 16px; }
+.attachment-list { display:flex; flex-direction:column; gap:8px; }
+.attachment-row { display:flex; align-items:center; gap:12px; width:100%; padding:14px 16px; text-align:left; font:inherit; color:inherit; background:var(--color-surface-muted); border:0; border-radius:16px; cursor:pointer; }
+.attachment-row__icon { flex-shrink:0; width:40px; height:40px; display:grid; place-items:center; border-radius:12px; background:white; font-size:20px; }
+.attachment-row__body { min-width:0; flex:1; display:flex; flex-direction:column; gap:2px; }
+.attachment-row__body strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.attachment-row__body small { color:var(--color-text-muted); }
+.attachment-row__body .status-label { margin:4px 0 0; font-size:13px; }
+.attachment-row--select { padding:0; cursor:default; }
+.attachment-row__main { display:flex; align-items:center; gap:12px; flex:1; min-width:0; padding:14px 0 14px 16px; background:none; border:0; font:inherit; color:inherit; text-align:left; cursor:pointer; }
+.attachment-check { flex-shrink:0; display:grid; place-items:center; width:44px; height:44px; margin-right:6px; cursor:pointer; }
+.attachment-check input { width:18px; height:18px; margin:0; accent-color:var(--color-primary); }
+/* 상세 패널: 닫기(×) 대신 왼쪽 가장자리에 걸친 회색 원형 화살표, 열고 닫을 때 밀려 들어오고 나간다 */
+.analysis-peek--handle { padding:0 !important; overflow:visible !important; }
+.analysis-peek--handle .peek-scroll { height:100%; overflow:auto; padding:28px 24px 28px 48px; box-sizing:border-box; border-radius:inherit; }
+.analysis-peek--handle .peek-title { font-size:24px; line-height:1.35; margin:4px 0 16px -18px; padding:12px 18px; background:#eceef1; border-radius:16px; overflow-wrap:anywhere; }
+.peek-handle { position:absolute; left:-11px; top:50%; transform:translateY(-50%); z-index:1; width:44px; height:44px; padding:0; border:0; border-radius:50%; background:white; color:#8c929b; box-shadow:0 2px 10px rgba(20,25,40,.18); cursor:pointer; transition:color .15s; }
+.peek-handle:hover { color:#5c626b; }
+.peek-handle:focus-visible { outline:2px solid #8c929b; outline-offset:2px; }
+.analysis-peek--handle .peek-scroll:focus { outline:none; }
+.peek-handle svg { display:block; width:44px; height:44px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.analysis-peek--handle[open] { animation:peek-slide-in .3s cubic-bezier(.2,.8,.2,1); }
+.analysis-peek--handle.is-closing { animation:peek-slide-out .25s ease-in forwards; }
+.analysis-peek--handle[open]::backdrop { animation:peek-fade-in .3s ease-out; }
+.analysis-peek--handle.is-closing::backdrop { animation:peek-fade-out .25s ease-in forwards; }
+@keyframes peek-slide-in { from { transform:translateX(100%); } }
+@keyframes peek-slide-out { to { transform:translateX(100%); } }
+@keyframes peek-fade-in { from { opacity:0; } }
+@keyframes peek-fade-out { to { opacity:0; } }
+@media (max-width: 600px) {
+  .peek-handle { left:10px; }
+  .analysis-peek--handle .peek-scroll { padding-left:64px; }
+  .analysis-peek--handle[open] { animation-name:peek-slide-up; }
+  .analysis-peek--handle.is-closing { animation-name:peek-slide-down; }
+}
+@keyframes peek-slide-up { from { transform:translateY(100%); } }
+@keyframes peek-slide-down { to { transform:translateY(100%); } }
+@media (prefers-reduced-motion: reduce) { .analysis-peek--handle[open], .analysis-peek--handle.is-closing, .analysis-peek--handle[open]::backdrop { animation:none; } }
 .ledger-details { margin:12px 0; color:var(--color-text-muted); }
+.ledger-detail-link { display:flex; align-items:center; gap:4px; min-height:44px; margin:4px 0 8px; padding:0; border:0; background:none; font:inherit; font-size:13px; color:var(--color-text-muted); cursor:pointer; }
+.ledger-detail-link:hover { color:var(--color-text); }
+.analysis-peek--handle .peek-amount-row { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin:4px 0 16px; }
+.analysis-peek--handle .peek-amount-row .peek-amount { margin:0; }
+.analysis-peek--handle .peek-amount-row .text-link { flex-shrink:0; font-size:14px; }
+.analysis-peek--handle .peek-verdict { font-size:16px; font-weight:700; margin:4px 0 10px; }
+.analysis-peek--handle .peek-reason { margin:0 0 16px; padding:12px 14px; background:#f6f7f9; border-radius:14px; font-size:13px; line-height:1.6; color:var(--color-text); }
+.analysis-peek--handle .peek-amount { display:block; font-size:28px; letter-spacing:-.5px; margin:4px 0 16px; }
 .ledger-details summary { font-size:11px!important; font-weight:400!important; }
 .ledger-card .btn--sm { height:38px; font-size:12px; border-radius:20px; }
 .vault-actions { display:grid; gap:12px; margin-top:24px; }
@@ -657,3 +706,12 @@
 .signup-tax-profile .field-row .input { width:100%; }
 @media (prefers-reduced-motion:reduce) { .ocr-picker {transition:none} .profile-photo-dialog>img,.guide-timer>span {animation:none} .guide-timer>span {width:100%} }
 @media (max-width:360px) { .field-grid {grid-template-columns:1fr} .business-name {font-size:21px} }
+/* 전체 증빙 정보 '수정하기': 값 자리가 회색 입력칸으로 바뀐다 */
+.receipt-detail-edit fieldset { border:0; margin:0; padding:0; min-width:0; }
+.receipt-detail-edit .field-row { align-items:center; gap:10px; }
+.receipt-detail-edit .field-row > span:first-child { flex-shrink:0; }
+.detail-input { width:62%; min-width:0; min-height:38px !important; padding:7px 12px !important; border-radius:12px !important; font-size:14px !important; text-align:right; background:var(--color-surface-muted); }
+.receipt-detail-edit article > .detail-input { width:100%; text-align:left; font-weight:600; }
+.receipt-detail-edit .field-row > .detail-input + .detail-input { width:50%; }
+.detail-edit-actions { margin-top:18px; }
+.detail-edit-actions .btn { flex:1; }

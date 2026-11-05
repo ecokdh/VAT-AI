@@ -1,0 +1,12 @@
+# GPU 서버(train_lora.py, evaluate.py)용. torch·torchvision은 NVIDIA NGC PyTorch 컨테이너에 들어 있는 것을 쓴다.
+# (Qwen3-VL processor는 이미지만 써도 torchvision이 있어야 불러와진다.)
+# Qwen3-VL은 transformers 4.57.0부터 지원된다. 로컬 확인은 transformers 5.21.0 + torch 2.14.1(CPU)로 했다.
+# 서버에서 설치된 실제 버전을 확인한 뒤 여기에 고정한다.
+transformers>=4.57.0
+peft>=0.17.0
+accelerate>=1.10.0
+pillow>=11.0
+# 검증 서버(serve.py)
+fastapi>=0.115
+uvicorn>=0.30
+python-multipart>=0.0.9

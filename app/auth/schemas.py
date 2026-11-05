@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 
-from app.business.schemas import BusinessProfileOut, TaxProfileUpdate
+from app.business.schemas import BusinessFilingInfo, BusinessProfileOut, TaxProfileUpdate
 
 
 class RegisterRequest(BaseModel):
@@ -16,6 +16,7 @@ class RegisterRequest(BaseModel):
     privacy_accepted: bool
     marketing_accepted: bool = False
     tax_profile: TaxProfileUpdate | None = None
+    filing_info: BusinessFilingInfo | None = None
 
     @field_validator("nickname", mode="before")
     @classmethod

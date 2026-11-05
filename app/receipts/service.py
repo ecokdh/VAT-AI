@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 
 from app.common.exceptions import AppException
 from app.core.config import settings
-from app.receipts import ocr_client
+from app.receipts.ocr import ocr_client
 from app.receipts.models import Receipt
 from app.receipts.schemas import ReceiptOut, ReceiptSummary
 from app.receipts.storage import FileStorage, LocalFileStorage, S3FileStorage

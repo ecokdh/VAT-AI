@@ -13,7 +13,7 @@ from app.receipts.models import Receipt
 from app.receipts.schemas import ExtractionConfirmation
 from app.receipts.storage import LocalFileStorage
 from app.transactions.models import Transaction
-from app.ocr_pipeline.contract import OcrPipelineResult, OcrStage, OcrStageStatus, OcrStageUpdate
+from app.receipts.ocr.contract import OcrPipelineResult, OcrStage, OcrStageStatus, OcrStageUpdate
 
 
 def setup_session():
@@ -96,8 +96,8 @@ def test_partial_ocr_is_done_for_user_correction(monkeypatch, tmp_path):
 
 
 def test_missing_ocr_result_is_not_reported_as_recognition_success(monkeypatch):
-    from app.ocr_pipeline.contract import ClovaPipelineAdapter, OcrPipelineInput
-    monkeypatch.setattr("app.receipts.ocr_client.extract_receipt_sync", lambda *_: None)
+    from app.receipts.ocr.contract import ClovaPipelineAdapter, OcrPipelineInput
+    monkeypatch.setattr("app.receipts.ocr.ocr_client.extract_receipt_sync", lambda *_: None)
     stages = []
     result = ClovaPipelineAdapter().process(
         OcrPipelineInput(receipt_id=1, content_type="image/png", image_bytes=b"fixture"), stages.append,

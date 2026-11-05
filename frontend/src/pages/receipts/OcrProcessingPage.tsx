@@ -4,21 +4,7 @@ import { isAxiosError } from "axios";
 import { getReceipt, retryReceiptOcr, type ReceiptProcessingApi } from "../../api/receipts";
 import { ReceiptPreview } from "../../components/ReceiptPreview";
 import { RecognitionDetails } from "../../components/RecognitionDetails";
-
-const stages = [
-  ["photo_quality", "사진 품질 확인"],
-  ["text_recognition", "증빙 글자 인식"],
-  ["transaction_extraction", "거래 정보 · 금액 구분"],
-  ["missing_field_check", "누락 · 오독 항목 확인"],
-] as const;
-
-function stageLabel(status?: string) {
-  if (status === "completed") return "완료";
-  if (status === "processing") return "진행 중";
-  if (status === "failed") return "확인 필요";
-  if (status === "skipped") return "건너뜀";
-  return "대기";
-}
+import { ProcessingTimeline, useStageReveal } from "../../components/ProcessingTimeline";
 
 export function OcrProcessingPage() {
   const navigate = useNavigate();
@@ -27,6 +13,7 @@ export function OcrProcessingPage() {
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
   const [pollVersion, setPollVersion] = useState(0);
+  const { revealed, ready, progressCap } = useStageReveal(receipt?.stage_statuses ?? {});
 
   useEffect(() => {
     if (!id) return;
@@ -40,8 +27,6 @@ export function OcrProcessingPage() {
         setReceipt(result);
         if (result.status === "processing") {
           timer = window.setTimeout(() => void loadReceipt(), 900);
-        } else if (result.status === "done" && !result.ocr_missing_fields?.length && !result.ocr_warnings?.length) {
-          timer = window.setTimeout(() => navigate(`/receipts/${id}/review`, { replace: true }), 700);
         }
       } catch (requestError) {
         if (!active) return;
@@ -57,15 +42,23 @@ export function OcrProcessingPage() {
       active = false;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [id, navigate, pollVersion]);
+  }, [id, pollVersion]);
 
-  const failed = receipt?.status === "failed";
-  const unsupported = receipt?.status === "unsupported";
-  const retake = receipt?.status === "retake";
-  const needsEdit = receipt?.status === "needs_edit" || (receipt?.status === "done" && Boolean(receipt.ocr_missing_fields?.length || receipt.ocr_warnings?.length));
-  const complete = receipt?.status === "done";
+  // 결과 안내와 버튼은 마지막 단계까지 다 차오른 뒤에 보여 준다.
+  const status = ready ? receipt?.status : "processing";
+  const failed = status === "failed";
+  const unsupported = status === "unsupported";
+  const retake = status === "retake";
+  const needsEdit = status === "needs_edit" || (status === "done" && Boolean(receipt?.ocr_missing_fields?.length || receipt?.ocr_warnings?.length));
+  const complete = status === "done";
   const isFinal = failed || unsupported || retake || needsEdit || complete;
-  const progress = receipt?.processing_progress ?? 0;
+  const progress = Math.min(receipt?.processing_progress ?? 0, progressCap);
+
+  useEffect(() => {
+    if (!complete || needsEdit) return;
+    const timer = window.setTimeout(() => navigate(`/receipts/${id}/review`, { replace: true }), 700);
+    return () => window.clearTimeout(timer);
+  }, [complete, needsEdit, id, navigate]);
 
   async function retrySamePhoto() {
     if (!id) return;
@@ -115,31 +108,13 @@ export function OcrProcessingPage() {
         {id && <ReceiptPreview key={id} id={Number(id)} wide />}
         {!unsupported && !retake && !failed && <RecognitionDetails result={receipt?.recognition} />}
 
-        <div className="card processing-timeline">
-          {stages.map(([key, label]) => {
-            const status = receipt?.stage_statuses[key] ?? "pending";
-            return (
-              <div className={`field-row processing-stage processing-stage--${status}`} key={key}>
-                <span className="field-row__label">
-                  <span className="processing-stage__marker" aria-hidden="true" />
-                  {label}
-                </span>
-                <span className="field-row__value">{stageLabel(status)}</span>
-              </div>
-            );
-          })}
-          <div className="processing-progress">
-            <span style={{ width: `${progress}%` }} />
-          </div>
-          <div className="muted processing-note">
-            {unsupported ? "현재는 인쇄된 구매 영수증만 지원합니다." :
-             retake ? "선명하고 전체가 보이는 사진으로 다시 시도해 주세요." :
-             needsEdit ? "읽은 정보를 확인하고 필요한 항목을 수정해 주세요." :
-             complete ? "추출 결과를 확인해 주세요." :
-             failed ? "일시적인 오류입니다. 다시 시도할 수 있어요." :
-             "증빙 정보를 분석하고 있어요…"}
-          </div>
-        </div>
+        <ProcessingTimeline statuses={receipt?.stage_statuses ?? {}} revealed={revealed} progress={progress} note={
+          unsupported ? "현재는 인쇄된 구매 영수증만 지원합니다." :
+          retake ? "선명하고 전체가 보이는 사진으로 다시 시도해 주세요." :
+          needsEdit ? "읽은 정보를 확인하고 필요한 항목을 수정해 주세요." :
+          complete ? "추출 결과를 확인해 주세요." :
+          failed ? "일시적인 오류입니다. 다시 시도할 수 있어요." :
+          "증빙 정보를 분석하고 있어요…"} />
 
         {receipt && (receipt.vendor || receipt.amount != null || receipt.date) && !unsupported && !retake && (
           <div className="card" style={{ marginTop: 18 }}>
@@ -160,7 +135,7 @@ export function OcrProcessingPage() {
         ))}
         {error && <div className="banner banner--error" style={{ marginTop: 20 }} role="alert">{error}</div>}
 
-        {unsupported && (
+        {unsupported && receipt && (
           <div className="stack-gap-sm" style={{ marginTop: 24 }}>
             <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}&source=file`, { replace: true })}>
               다른 사진 선택
@@ -171,7 +146,7 @@ export function OcrProcessingPage() {
           </div>
         )}
 
-        {retake && (
+        {retake && receipt && (
           <div className="stack-gap-sm" style={{ marginTop: 24 }}>
             <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}`, { replace: true })}>
               다시 촬영하기
@@ -185,7 +160,7 @@ export function OcrProcessingPage() {
           </div>
         )}
 
-        {needsEdit && (
+        {needsEdit && receipt && (
           <div className="stack-gap-sm" style={{ marginTop: 24 }}>
             <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/receipts/${id}/review`, { replace: true })}>
               읽은 정보 확인 · 수정
@@ -199,7 +174,7 @@ export function OcrProcessingPage() {
           </div>
         )}
 
-        {failed && (
+        {failed && receipt && (
           <div className="stack-gap-sm" style={{ marginTop: 24 }}>
             {receipt.ocr_user_attempts < 2 ? (
               <button className="btn btn--primary" style={{ width: "100%" }} disabled={retrying} onClick={() => void retrySamePhoto()}>

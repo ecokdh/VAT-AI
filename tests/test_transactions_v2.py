@@ -13,6 +13,7 @@ from app.transactions.models import AnalysisRun, Transaction, TransactionRevisio
 from app.transactions.schemas import AnalysisRunCreate, TransactionCreate, TransactionUpdate
 from app.jobs.worker import process_analysis_run
 from app.receipts.models import Receipt
+from app.deduction.models import Deduction
 
 
 def setup_session():
@@ -79,30 +80,24 @@ def test_trash_removes_transaction_and_restore_requires_reanalysis():
     assert len(session.exec(select(TransactionRevision).where(TransactionRevision.transaction_id == item.id)).all()) == 4
 
 
-def test_permanent_delete_request_respects_retention_state():
+def test_permanent_delete_removes_transaction_receipt_and_deduction_only_from_trash():
     session, user = setup_session()
-    item = service.create_transaction(session, user.id, purchase_data())
-    item = service.move_to_trash(session, user.id, item.id)
+    receipt = Receipt(user_id=user.id, image_url="gone.png", status="done", vendor="문구점", amount=1100)
+    session.add(receipt); session.commit(); session.refresh(receipt)
+    session.add(Deduction(receipt_id=receipt.id, is_deductible=True, reason="업무용", category="소모품", amount=1100))
+    item = Transaction(user_id=user.id, receipt_id=receipt.id, direction="purchase", transaction_date=date(2026, 3, 2), vendor="문구점", total_amount=1100)
+    session.add(item); session.commit(); session.refresh(item)
     try:
-        service.request_permanent_delete(session, user.id, item.id)
-        assert False, "unknown retention must be blocked"
+        service.delete_permanently(session, user.id, item.id)
+        assert False, "only trashed transactions can be deleted"
     except AppException as error:
-        assert error.code == "RETENTION_STATUS_UNCONFIRMED"
+        assert error.code == "TRANSACTION_NOT_IN_TRASH"
 
-    item.retention_status = "required"
-    session.add(item)
-    session.commit()
-    try:
-        service.request_permanent_delete(session, user.id, item.id)
-        assert False, "required records must be blocked"
-    except AppException as error:
-        assert error.code == "RETENTION_PERIOD_ACTIVE"
-
-    item.retention_status = "not_required"
-    session.add(item)
-    session.commit()
-    requested = service.request_permanent_delete(session, user.id, item.id)
-    assert requested.permanent_delete_requested_at is not None
+    service.move_to_trash(session, user.id, item.id)
+    service.delete_permanently(session, user.id, item.id)
+    assert session.exec(select(Transaction)).all() == []
+    assert session.exec(select(TransactionRevision)).all() == []
+    assert session.exec(select(Receipt)).all() == [] and session.exec(select(Deduction)).all() == []
 
 
 def test_worker_skips_run_when_selected_transaction_revision_changed():

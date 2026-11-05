@@ -97,7 +97,7 @@ def test_profile_receipt_answers_transaction_roundtrip_and_invalidation(client):
         s.expire_all();assert s.get(Transaction,t['id']).revision>before
     finally:gen.close()
 
-def test_missing_facts_skip_analyzer_but_keep_transaction(client,monkeypatch):
+def test_missing_facts_still_reach_analyzer(client,monkeypatch):
     from app.jobs.worker import process_analysis_run
     from app.jobs import worker
     from app.transactions.service import create_analysis_run
@@ -107,12 +107,15 @@ def test_missing_facts_skip_analyzer_but_keep_transaction(client,monkeypatch):
         t=Transaction(user_id=u.id,receipt_id=r.id,direction='purchase',transaction_date=date(2026,10,13),vendor='카페',total_amount=11000,state='confirmed',question_rule_version=VERSION)
         s.add(t);s.commit();s.refresh(t)
         run=create_analysis_run(s,u.id,AnalysisRunCreate(transaction_ids=[t.id]))
-        class Never:
-            def analyze(self,request):raise AssertionError('Missing facts must not reach an external analyzer')
-        monkeypatch.setattr(worker,'load_analyzer',lambda _:Never())
+        calls=[]
+        class Stub:
+            def analyze(self,request):
+                calls.append(request.transaction.transaction_id)
+                return {'disposition':'NEEDS_REVIEW','reason':'용도 확인 필요','analyzer_name':'stub','analyzer_version':'1'}
+        monkeypatch.setattr(worker,'load_analyzer',lambda _:Stub())
         process_analysis_run(s,run);s.commit();s.refresh(t)
-        assert t.review_status=='caution' and t.deductible_vat==0
-        assert '사업 프로필' in t.analysis_reason and '어떤 목적으로' in t.analysis_reason
+        assert calls==[t.id]
+        assert t.review_status=='caution' and t.analysis_reason=='용도 확인 필요'
     finally:gen.close()
 
 def test_ownership_and_invalid_answers(client):
@@ -138,7 +141,7 @@ def test_profile_or_answer_change_during_analysis_cannot_publish_stale_result(cl
     from app.jobs import worker
     from app.transactions.service import create_analysis_run
     from app.transactions.schemas import AnalysisRunCreate
-    from app.analysis.contract import AnalysisDecision
+    from app.deduction.analyzer import AnalysisDecision
     gen,s,u,r,doc,h=setup(client)
     try:
         p=TaxProfileV2(user_id=u.id,onboarding_completed=True,has_employees=True);s.add(p)

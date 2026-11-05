@@ -4,6 +4,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field as PydanticField, model_validator
 
+from app.receipts.schemas import ReceiptDetails, ReviewedDocument
+
 
 class TransactionCreate(BaseModel):
     direction: Literal["purchase", "sales"]
@@ -49,6 +51,12 @@ class TransactionUpdate(BaseModel):
     tax_treatment: Optional[Literal["standard", "zero", "exempt", "unknown"]] = None
 
 
+class ReceiptDocumentEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    document: ReviewedDocument
+    details: ReceiptDetails | None = None
+
+
 class TransactionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -67,6 +75,7 @@ class TransactionOut(BaseModel):
     deemed_input_eligible: Optional[bool]
     deemed_input_document_type: Optional[str]
     tax_treatment: str
+    is_fixed_asset: bool
     state: str
     revision: int
     review_status: str
@@ -81,13 +90,26 @@ class TransactionOut(BaseModel):
     permanent_delete_requested_at: Optional[datetime]
 
 
+class FixedAssetUpdate(BaseModel):
+    is_fixed_asset: bool
+
+
+class FilingInputUpdate(BaseModel):
+    preliminary_notice_tax: Optional[int] = PydanticField(default=None, ge=0)
+
+
+class FilingInputOut(BaseModel):
+    period: str
+    preliminary_notice_tax: Optional[int]
+
+
 class AnalysisRunCreate(BaseModel):
     transaction_ids: list[int] = PydanticField(min_length=1, max_length=100)
 
 
 class AnalysisRunOut(BaseModel):
     id: uuid.UUID
-    status: Literal["PENDING", "PROCESSING", "COMPLETED", "FAILED"]
+    status: Literal["PENDING", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED"]
     result_json: Optional[str]
     error_code: Optional[str]
     error_message: Optional[str]

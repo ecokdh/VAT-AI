@@ -14,14 +14,15 @@ from datetime import datetime, timezone
 
 from sqlmodel import Session, select
 
-from app.analysis.contract import AnalysisDecision, AnalysisRequest, BusinessFacts, TransactionFacts, load_analyzer
+from app.deduction.analyzer import AnalysisDecision, AnalysisRequest, BusinessFacts, TransactionFacts, load_analyzer
 from app.core.database import engine
 from app.core.config import settings
+from app.deduction.receipt_summary import deduction_summary
 from app.jobs.models import AsyncJob
 from app.receipts import service as receipt_service
 from app.receipts.models import Receipt
 from app.business.models import BusinessProfile, TaxProfileV2
-from app.ocr_pipeline.contract import (
+from app.receipts.ocr.contract import (
     OcrPipelineInput,
     OcrPipelineResult,
     OcrStageUpdate,
@@ -34,6 +35,16 @@ logger = logging.getLogger(__name__)
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class AnalysisCancelled(Exception):
+    """사용자가 진행 중인 분석을 중단했다. 호출한 쪽은 롤백해 결과를 반영하지 않는다."""
+
+
+def _cancelled(session: Session, run_id, lock: bool = False) -> bool:
+    # 다른 요청이 커밋한 상태를 읽도록 엔티티 대신 컬럼만 조회한다.
+    query = select(AnalysisRun.status).where(AnalysisRun.id == run_id)
+    return session.exec(query.with_for_update() if lock else query).first() == "CANCELLED"
 
 
 def process_analysis_run(session: Session, run: AnalysisRun) -> None:
@@ -66,6 +77,8 @@ def process_analysis_run(session: Session, run: AnalysisRun) -> None:
         suspension_periods=suspension_periods,
     )
     for selection in selected:
+        if _cancelled(session, run.id):
+            raise AnalysisCancelled
         transaction = session.exec(
             select(Transaction).where(
                 Transaction.id == selection["id"],
@@ -89,7 +102,7 @@ def process_analysis_run(session: Session, run: AnalysisRun) -> None:
                 vendor=transaction.vendor,
                 description=transaction.description,
                 purpose=purpose_context,
-                ocr_text=receipt.ocr_raw if receipt else None,
+                ocr_text=deduction_summary(receipt) if receipt else None,
                 direction=transaction.direction,
                 evidence_type=transaction.evidence_type,
                 business_related=transaction.business_related,
@@ -103,13 +116,7 @@ def process_analysis_run(session: Session, run: AnalysisRun) -> None:
             ),
             business=business_facts,
         )
-        from app.receipts.questions import incomplete,receipt_document
-        answers=json.loads(transaction.question_answers_json or '{}')
-        missing=incomplete(receipt_document(receipt) if receipt else {},answers,tax_profile) if transaction.question_rule_version or settings.RECEIPT_RECOGNITION_BACKEND=='luna_low' else []
-        if missing:
-            decision=AnalysisDecision(disposition='NEEDS_REVIEW',reason='공제 분석 보류: '+' / '.join(missing),missing_information=missing,analyzer_name='user-facts-gate',analyzer_version='1')
-        else:
-            decision = AnalysisDecision.model_validate(analyzer.analyze(request))
+        decision = AnalysisDecision.model_validate(analyzer.analyze(request))
         session.refresh(transaction)
         if transaction.revision != selection['revision']:
             results.append({'transaction_id':transaction.id,'status':'SKIPPED_STALE'})
@@ -150,6 +157,9 @@ def process_analysis_run(session: Session, run: AnalysisRun) -> None:
                 "knowledge_version": decision.knowledge_version,
             },
         })
+    # 행을 잠근 채 마지막으로 확인해, 완료 직전에 들어온 중단 요청이 덮어써지지 않게 한다.
+    if _cancelled(session, run.id, lock=True):
+        raise AnalysisCancelled
     run.result_json = json.dumps(results, ensure_ascii=False)
     run.status = "COMPLETED"
     run.error_code = None
@@ -220,7 +230,7 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
         receipt.affected_regions_json = json.dumps(result.affected_regions, ensure_ascii=False)
         receipt.issue_code = result.issue_code
         receipt.guide_message = result.guide_message
-        from app.receipts.luna_low_contract import CONTRACT_VERSION
+        from app.receipts.ocr.luna_low_contract import CONTRACT_VERSION
         receipt.classification_version = CONTRACT_VERSION if result.pipeline_name == 'luna_low' and result.doc_type not in (None, "uninspected") else None
 
         for stage_name in ("photo_quality", "text_recognition", "transaction_extraction"):
@@ -301,6 +311,17 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
         stored = receipt_service.storage.save(job.user_id, pdf_bytes, "application/pdf", "pdf")
         job.result_json = json.dumps({"file_key": stored.key}, ensure_ascii=False)
         return
+    if job.job_type == "vat_return":
+        from app.vat_return.fill import fill_page1
+        from app.vat_return.render import page1_png
+        from app.vat_return.verifier import load_reader, verify
+
+        pdf_bytes = fill_page1(payload["values"])
+        stored = receipt_service.storage.save(job.user_id, pdf_bytes, "application/pdf", "pdf")
+        verification = verify(payload["values"], page1_png(pdf_bytes), load_reader())
+        job.result_json = json.dumps({"file_key": stored.key, "period": payload["period"], "payable": payload["payable"],
+                                      "notes": payload["notes"], "verification": verification}, ensure_ascii=False)
+        return
     raise RuntimeError(f"지원하지 않는 작업 유형: {job.job_type}")
 
 
@@ -377,11 +398,16 @@ def process_one() -> bool:
         try:
             process_analysis_run(session, run)
             session.commit()
+        except AnalysisCancelled:
+            session.rollback()
+            logger.info("Analysis run %s cancelled by user", run.id)
         except Exception as exc:  # persist retry state before worker continues
             session.rollback()
             run = session.get(AnalysisRun, run.id)
             if run is None:
                 logger.exception("Analysis run disappeared during processing")
+                return True
+            if run.status == "CANCELLED":
                 return True
             run.error_code = "ANALYSIS_FAILED"
             run.error_message = str(exc)[:1000]

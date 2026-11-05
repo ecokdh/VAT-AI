@@ -10,6 +10,10 @@ from app.transactions import service
 from app.transactions.schemas import (
     AnalysisRunCreate,
     AnalysisRunOut,
+    FilingInputOut,
+    FilingInputUpdate,
+    FixedAssetUpdate,
+    ReceiptDocumentEdit,
     TaxEstimateOut,
     TransactionCreate,
     TransactionOut,
@@ -58,6 +62,43 @@ def update_transaction(
     return service.update_transaction(session, user.id, transaction_id, body)
 
 
+@router.put("/transactions/{transaction_id}/receipt-document", response_model=TransactionOut)
+def edit_receipt_document(
+    transaction_id: int,
+    body: ReceiptDocumentEdit,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    return service.edit_receipt_document(session, user.id, transaction_id, body.document, body.details)
+
+
+@router.put("/transactions/{transaction_id}/fixed-asset", response_model=TransactionOut)
+def set_fixed_asset(
+    transaction_id: int,
+    body: FixedAssetUpdate,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    return service.set_fixed_asset(session, user.id, transaction_id, body.is_fixed_asset)
+
+
+@router.get("/filing-inputs/{period}", response_model=FilingInputOut)
+def get_filing_input(period: str, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    item = service.get_filing_input(session, user.id, period)
+    return FilingInputOut(period=period, preliminary_notice_tax=item.preliminary_notice_tax if item else None)
+
+
+@router.put("/filing-inputs/{period}", response_model=FilingInputOut)
+def save_filing_input(
+    period: str,
+    body: FilingInputUpdate,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    item = service.save_filing_input(session, user.id, period, body.preliminary_notice_tax)
+    return FilingInputOut(period=item.period, preliminary_notice_tax=item.preliminary_notice_tax)
+
+
 @router.post("/transactions/{transaction_id}/confirm", response_model=TransactionOut)
 def confirm_transaction(
     transaction_id: int,
@@ -90,13 +131,13 @@ def restore_transaction(
     return service.restore_from_trash(session, user.id, transaction_id)
 
 
-@router.post("/trash/{transaction_id}/permanent-delete-request", response_model=TransactionOut)
-def request_permanent_delete(
+@router.delete("/trash/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_permanently(
     transaction_id: int,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    return service.request_permanent_delete(session, user.id, transaction_id)
+    service.delete_permanently(session, user.id, transaction_id)
 
 
 @router.post("/analysis-runs", response_model=AnalysisRunOut, status_code=status.HTTP_202_ACCEPTED)
@@ -115,6 +156,15 @@ def get_analysis_run(
     session: Session = Depends(get_session),
 ):
     return service.get_analysis_run(session, user.id, run_id)
+
+
+@router.post("/analysis-runs/{run_id}/cancel", response_model=AnalysisRunOut)
+def cancel_analysis_run(
+    run_id: UUID,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    return service.cancel_analysis_run(session, user.id, run_id)
 
 
 @router.get("/tax-estimates/2026", response_model=TaxEstimateOut)

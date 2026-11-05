@@ -12,7 +12,7 @@ from app.common.exceptions import AppException
 from app.auth import service as auth_service
 from app.business.schemas import BusinessVerifyResponse
 from app.core import config
-from app.receipts import ocr_client
+from app.receipts.ocr import ocr_client
 from app.receipts import service as receipt_service
 
 

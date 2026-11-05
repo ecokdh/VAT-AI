@@ -1,6 +1,6 @@
 """Independent regression cases for classification gates; no API calls."""
 import pytest
-from app.receipts.luna_low_contract import evaluate_classification
+from app.receipts.ocr.luna_low_contract import evaluate_classification
 
 FIELDS={'vendor':'예시상점','payment_amount':11000,'printed_total_amount':11000,'transaction_datetime':'2026-10-15 12:00:00'}
 

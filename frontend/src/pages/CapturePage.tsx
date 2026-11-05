@@ -6,6 +6,9 @@ import { Icon } from "../components/Icon";
 import { getMe, markOcrGuideSeen } from "../api/auth";
 import { CaptureGuide } from "../components/CaptureGuide";
 import { enqueueReceiptOcr } from "../api/receipts";
+import { apiClient } from "../api/client";
+import { MonthlyProcessing } from "../components/MonthlySalesReview";
+import type { StageStatuses } from "../components/ProcessingTimeline";
 
 export function CapturePage() {
   const navigate = useNavigate();
@@ -26,6 +29,8 @@ export function CapturePage() {
   const [seconds,setSeconds] = useState(3);
   const [pendingFile,setPendingFile] = useState<File|null>(null);
   const [preview,setPreview] = useState("");
+  // 월간 정산서는 응답을 기다리는 동안 매입 영수증과 같은 분석 진행 화면을 보여 준다.
+  const [monthly,setMonthly] = useState<{statuses:StageStatuses;id?:number}|null>(null);
   useEffect(()=>{
     if(!hasDirection)return;
     let active=true;
@@ -86,9 +91,18 @@ export function CapturePage() {
     setError("");
     setIsUploading(true);
     try {
+      // 매출 증빙은 월간 매출 정산서 하나로 받는다.
+      if (direction === "sales") {
+        setMonthly({statuses:{text_recognition:"processing"}});
+        const body = new FormData(); body.append("file", file);
+        const { data } = await apiClient.post<{ id: number }>("/sales/monthly/extract", body);
+        setMonthly({statuses:{text_recognition:"completed",transaction_extraction:"completed",missing_field_check:"completed"},id:data.id});
+        return;
+      }
       const receipt = await enqueueReceiptOcr(file, direction);
       navigate(`/receipts/${receipt.receipt_id}/processing`, { replace: true });
     } catch (requestError) {
+      setMonthly(null);
       const message = isAxiosError(requestError)
         ? requestError.response?.data?.error?.message
         : undefined;
@@ -146,7 +160,8 @@ export function CapturePage() {
   </div></div>;
 
   if(guide!=="ready")return <div className="page qa-page"><PageHeader title="증빙 촬영 안내" onBack={()=>navigate(`/storage/${direction}`)}/>{guide==="show"?<CaptureGuide seconds={seconds}/>:<div className="page__body">{guide==="error"?<p className="banner banner--error">촬영 안내 정보를 불러오지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.</p>:<p role="status">촬영을 준비하고 있습니다.</p>}</div>}</div>;
-  if(pendingFile)return <div className="page qa-page"><PageHeader title="촬영한 증빙 확인" onBack={()=>setPendingFile(null)}/><main className="page__body"><h1 className="screen-title">글자가 선명하게 보이나요?</h1><p className="muted">영수증 전체가 보이고 금액·날짜를 읽을 수 있는지 확인해 주세요.</p><img className="capture-preview" src={preview} alt="분석할 증빙 미리보기"/>{error&&<p className="banner banner--error" role="alert">{error}</p>}<div className="btn-row"><button className="btn btn--secondary" disabled={isUploading} onClick={()=>{setPendingFile(null);setError("");}}>다시 촬영·선택</button><button className="btn btn--primary" disabled={isUploading} onClick={()=>void uploadAndNavigate(pendingFile)}>{isUploading?"올리는 중…":"선명해요 · 분석하기"}</button></div></main></div>;
+  if(monthly)return <MonthlyProcessing statuses={monthly.statuses} preview={preview} onDone={()=>navigate(`/receipts/monthly/${monthly.id}/review`,{replace:true})}/>;
+  if(pendingFile)return <div className="page qa-page"><PageHeader title="촬영한 증빙 확인" onBack={()=>setPendingFile(null)}/><main className="page__body"><h1 className="screen-title">글자가 선명하게 보이나요?</h1><p className="muted">영수증 전체가 보이고 금액·날짜를 읽을 수 있는지 확인해 주세요.</p><img className="capture-preview" src={preview} alt="분석할 증빙 미리보기"/>{error&&<p className="banner banner--error" role="alert">{error}</p>}<div className="btn-row"><button className="btn btn--secondary" disabled={isUploading} onClick={()=>{setPendingFile(null);setError("");}}>다시 촬영·선택</button><button className="btn btn--primary" disabled={isUploading} onClick={()=>void uploadAndNavigate(pendingFile)}>{isUploading?"증빙 분석 중…":"선명해요 · 분석하기"}</button></div></main></div>;
   if(fileOnly)return <div className="page qa-page"><PageHeader title="영수증 사진 선택" onBack={()=>navigate(`/storage/${direction}`)}/><main className="page__body"><h1 className="screen-title">다른 영수증 사진을 선택해 주세요</h1><p className="muted">영수증 전체와 금액·날짜가 선명하게 보이는 사진을 선택해 주세요.</p><input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} style={{display:'none'}}/><button className="btn btn--primary" onClick={openFilePicker}>앨범 및 파일 선택</button><button className="btn btn--secondary" onClick={()=>setParams({direction:direction!})}>직접 촬영하기</button></main></div>;
   return (
     <div className="page capture-page" style={{ background: "#0c0c10" }}>

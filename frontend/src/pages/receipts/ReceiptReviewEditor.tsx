@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { confirmReceiptExtraction, getReceipt, type ReceiptProcessingApi, type ReceiptReview, type ReviewedItem, type ReceiptDetails } from '../../api/receipts';
 import { PageHeader } from '../../components/PageHeader';
 import { ReceiptPreview } from '../../components/ReceiptPreview';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import '../../styles/receipt-review.css';
 import {apiClient} from '../../api/client';
 
@@ -31,6 +32,8 @@ export function OcrExtractionReviewPage() {
   const [tax,setTax]=useState<ReceiptReview['tax_treatment']>('unknown');
   const [loading,setLoading]=useState(true); const [saving,setSaving]=useState(false);
   const [showAllItems,setShowAllItems]=useState(false);
+  const [showTax,setShowTax]=useState(false);
+  const [confirm,setConfirm]=useState<'leave'|'save'|null>(null);
   const [dirty,setDirty]=useState(false); const [error,setError]=useState('');
   useEffect(()=>{
     let active=true;
@@ -60,8 +63,10 @@ export function OcrExtractionReviewPage() {
   const editItem=(index:number,patch:Partial<DraftItem>)=>{setItems(v=>v.map((item,i)=>i===index?{...item,...patch}:item));setDirty(true);};
   const removeItem=(index:number)=>{setItems(v=>v.filter((_,i)=>i!==index).map(item=>({...item,parent_row:item.parent_row===null?null:item.parent_row===index?null:item.parent_row>index?item.parent_row-1:item.parent_row})));setDirty(true);};
   function money(key:string){return <label className="review-field" key={key} htmlFor={`review-${key}`}><span>{moneyLabels[key]} (원)</span><input className="input" id={`review-${key}`} type="number" step="1" inputMode="numeric" value={fields[key]??''} placeholder="미확인" onChange={e=>editField(key,e.target.value)} required={key==='payment_amount'} />{receipt?.recognition?.document?.conflicts.includes(key)&&<small>사진에서 금액을 확인해 주세요.</small>}</label>;}
-  async function save(e:FormEvent){
-    e.preventDefault();if(!receipt||saving)return;
+  function askSave(e:FormEvent){e.preventDefault();if(receipt&&!saving)setConfirm('save');}
+  function leave(){setDirty(false);navigate(`/storage/${receipt?.direction??'purchase'}`);}
+  async function save(){
+    setConfirm(null);if(!receipt||saving)return;
     setError('');
     const amount=numberOrNull(fields.payment_amount??'');
     if(!fields.vendor?.trim()||!date||amount===null||!Number.isSafeInteger(amount)||amount<0){setError('거래처·거래일·결제액을 확인해 주세요.');setSearch({view:'all'});return;}
@@ -90,20 +95,21 @@ export function OcrExtractionReviewPage() {
   }
   function retake(){if(!dirty||window.confirm('수정한 내용이 아직 저장되지 않았습니다. 다시 촬영할까요?'))navigate(`/capture?direction=${receipt?.direction??'purchase'}`);}
   return <div className="page receipt-review-page">
-    <PageHeader title={detailed?"전체 정보 확인":"추출 결과 확인"} />
+    <PageHeader title={detailed?"전체 정보 확인":"추출 결과 확인"} onBack={()=>setConfirm('leave')} />
     <div className="page__body review-body">
       {loading?<p role="status">결과를 불러오는 중입니다.</p>:receipt?<div className="review-layout">
         <aside className="review-photo"><ReceiptPreview id={receipt.id} controls /></aside>
-        <form className="review-form" onSubmit={e=>void save(e)}>
+        <form className="review-form" onSubmit={askSave}>
           {error&&<div className="review-error" role="alert">{error}</div>}
           <fieldset disabled={saving}>
             {!detailed&&<section className="review-section"><h2>영수증 정보</h2><div className="review-grid">
               <label className="review-field review-full"><span>공급자 상호</span><input className="input" value={fields.vendor??''} required onChange={e=>editField('vendor',e.target.value)}/></label>
               <label className="review-field review-full"><span>공급자 사업자등록번호</span><input className="input" value={fields.business_number??''} placeholder="미확인" onChange={e=>editField('business_number',e.target.value)}/></label>
-              <div className="review-field review-full"><span>품목</span><div className="basic-item-names">{items.slice(0,showAllItems?items.length:3).map((item,i)=><label className="basic-item-name" key={i}><span>{i+1}</span><input aria-label={`품목 ${i+1} 이름`} className="input" value={item.name} maxLength={500} required placeholder="사진에 인쇄된 품목명" onChange={e=>editItem(i,{name:e.target.value})}/></label>)}</div>{items.length===0&&<p className="muted">읽은 품목이 없습니다. 전체 정보에서 추가할 수 있습니다.</p>}{items.length>3&&<button type="button" className="text-link" onClick={()=>setShowAllItems(v=>!v)}>{showAllItems?'품목 접기':`나머지 ${items.length-3}개 품목 수정`}</button>}<button type="button" className="text-link" onClick={()=>setSearch({view:'all'})}>수량·금액·할인 수정</button></div>
-              {money('supply_amount')}{money('vat_amount')}
+              <div className="review-field review-full"><span>품목</span><div className="basic-item-names">{items.slice(0,showAllItems?items.length:3).map((item,i)=><div key={i}><label className="basic-item-name"><span>{i+1}</span><input aria-label={`품목 ${i+1} 이름`} className="input" value={item.name} maxLength={500} required placeholder="사진에 인쇄된 품목명" onChange={e=>editItem(i,{name:e.target.value})}/></label>
+                <div className="review-item-numbers basic-item-numbers">{(['quantity','unit_price','line_amount'] as const).map((key,index)=><label className="review-field" key={key} htmlFor={`basic-item-${i}-${key}`}><span>{['수량','단가(원)','총 금액(원)'][index]}</span><input id={`basic-item-${i}-${key}`} type="number" step={key==='quantity'?'any':'1'} className="input" value={item[key]} placeholder="미확인" onChange={e=>editItem(i,{[key]:e.target.value})} /></label>)}</div></div>)}</div>{items.length===0&&<p className="muted">읽은 품목이 없습니다. 전체 정보에서 추가할 수 있습니다.</p>}{items.length>3&&<button type="button" className="text-link" onClick={()=>setShowAllItems(v=>!v)}>{showAllItems?'품목 접기':`나머지 ${items.length-3}개 품목 수정`}</button>}<button type="button" className="text-link" aria-expanded={showTax} onClick={()=>setShowTax(v=>!v)}>{showTax?'공급가액·부가세·할인 접기':'수량·금액·할인 수정'}</button></div>
+              {showTax&&<>{money('supply_amount')}{money('vat_amount')}{money('discount_amount')}</>}
               <label className="review-field review-full"><span>발행·거래 날짜</span><input className="input" type="date" value={date} required onChange={e=>{setDate(e.target.value);setDirty(true);}}/></label>
-            </div><button type="button" className="btn btn--secondary" onClick={()=>setSearch({view:'all'})}>전체 정보 확인</button></section>}
+            </div><button type="button" className="btn btn--secondary review-all-button" onClick={()=>setSearch({view:'all'})}>전체 정보 확인</button></section>}
             {!detailed&&receipt.direction==='purchase'&&<section className="review-section"><h2>사용 목적 확인</h2>{!profileComplete&&<p>공제 분석에 필요한 사업 정보를 입력해 주세요. <a href="/account">사업 정보 입력</a></p>}{questionError&&<p role="alert">{questionError}</p>}{questions.map(q=><label className="review-field" key={q.id}><span>{q.label}</span><select aria-label={q.label} className="input" value={answers[q.id]??''} onChange={e=>{setAnswers(v=>q.id===questions[0]?.id?{[q.id]:e.target.value}:{...v,[q.id]:e.target.value});setDirty(true);}}><option value="">나중에 확인</option>{q.options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>)}{Object.values(answers).includes('other')&&<label className="review-field"><span>실제 사용 상황</span><textarea aria-label="실제 사용 상황" className="input review-purpose" value={answers.detail??''} maxLength={1000} placeholder="누가, 무엇을 위해 사용했는지 간단히 적어 주세요." onChange={e=>{setAnswers(v=>({...v,detail:e.target.value}));setDirty(true);}}/></label>}<p className="muted">공제 여부가 아니라 실제 사용 상황을 알려 주세요. 아직 모르면 저장 후 답변할 수 있습니다.</p></section>}
             {detailed&&<><button type="button" className="text-link" onClick={()=>setSearch({})}>← 기본 정보로 돌아가기</button>
             <section className="review-section"><h2>거래 정보</h2><div className="review-grid">
@@ -125,9 +131,6 @@ export function OcrExtractionReviewPage() {
               {items.map((item,i)=><div className="review-item" key={i}>
                 {item.source_row===undefined&&<label className="review-field"><span>원본 품목 연결 확인</span><select className="input" required value="" onChange={e=>editItem(i,{source_row:e.target.value==='new'?null:Number(e.target.value)})}><option value="">원본을 선택해 주세요</option><option value="new">사용자가 추가한 품목</option>{(receipt.recognition?.original_document?.items??receipt.recognition?.document?.items??[]).map((o,j)=><option key={j} value={j}>{j+1}. {o.name}</option>)}</select></label>}<div className="review-item-heading"><span>{i+1}</span><button type="button" aria-label={`${i+1}번째 품목 삭제`} onClick={()=>removeItem(i)}>삭제</button></div>
                 <label className="review-field" htmlFor={`item-${i}-name`}><span>품목명</span><input id={`item-${i}-name`} className="input" value={item.name} maxLength={500} required onChange={e=>editItem(i,{name:e.target.value})} />{item.raw_name&&item.raw_name!==item.name&&<small>모델 원출력 이름: {item.raw_name}</small>}</label>
-                <div className="review-item-numbers">{(['quantity','unit_price','line_amount'] as const).map((key,index)=><label className="review-field" key={key} htmlFor={`item-${i}-${key}`}><span>{['수량','단가 (원)','행 금액 (원)'][index]}</span><input id={`item-${i}-${key}`} type="number" step={key==='quantity'?'any':'1'} className="input" value={item[key]} placeholder="미확인" onChange={e=>editItem(i,{[key]:e.target.value})} /></label>)}</div>
-                <div className="review-grid"><label className="review-field" htmlFor={`item-${i}-type`}><span>행 구분</span><select id={`item-${i}-type`} className="input" value={item.row_type} onChange={e=>{const type=e.target.value as ReviewedItem['row_type'];setItems(v=>v.map((r,j)=>j===i?{...r,row_type:type,parent_row:null}:r.parent_row===i?{...r,parent_row:null}:r));setDirty(true);}}><option value="item">상품</option><option value="option">옵션</option><option value="discount">할인</option></select></label>
-                {item.row_type!=='item'&&<label className="review-field" htmlFor={`item-${i}-parent`}><span>연결 상품</span><select id={`item-${i}-parent`} className="input" value={item.parent_row??''} onChange={e=>editItem(i,{parent_row:e.target.value===''?null:Number(e.target.value)})}><option value="">연결 없음</option>{items.map((r,j)=>r.row_type==='item'&&j!==i?<option key={j} value={j}>{j+1}. {r.name||'품목명 미입력'}</option>:null)}</select></label>}</div>
               </div>)}
             </section>
 
@@ -140,5 +143,7 @@ export function OcrExtractionReviewPage() {
         </form>
       </div>:<div className="review-error" role="alert">{error}</div>}
     </div>
+    <ConfirmDialog open={confirm==='leave'} title="촬영된 내용을 저장하지 않습니다" confirmLabel="예" cancelLabel="아니요" confirmClassName="btn--primary" onCancel={()=>setConfirm(null)} onConfirm={leave}/>
+    <ConfirmDialog open={confirm==='save'} title="저장하시겠습니까?" confirmLabel="예" cancelLabel="아니요" confirmClassName="btn--primary" busy={saving} onCancel={()=>setConfirm(null)} onConfirm={()=>void save()}/>
   </div>;
 }

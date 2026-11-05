@@ -9,7 +9,7 @@ from app.business.merchant_memory import (
     resolve_merchant_identity,
 )
 from app.business.models import MerchantMemory
-from app.receipts.luna_low_contract import normalize, validate_nts_checksum, suggest_business_number_repair
+from app.receipts.ocr.luna_low_contract import normalize, validate_nts_checksum, suggest_business_number_repair
 
 
 def test_merchant_memory_seed_lookup():

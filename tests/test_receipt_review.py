@@ -93,7 +93,7 @@ def test_raw_name_and_discount_sign_preserved_across_review_and_reload(client):
     from app.main import app
     from app.core.database import get_session
     from app.core.security import create_access_token
-    from app.receipts.luna_low_contract import normalize
+    from app.receipts.ocr.luna_low_contract import normalize
     generator=app.dependency_overrides[get_session]();s=next(generator)
     try:
         u=User(email='raw-name-review@example.com',name='검증',password_hash='fixture');s.add(u);s.flush()
@@ -157,7 +157,7 @@ def test_server_enforces_immutable_raw_name_against_client_tampering(client):
     from app.main import app
     from app.core.database import get_session
     from app.core.security import create_access_token
-    from app.receipts.luna_low_contract import normalize
+    from app.receipts.ocr.luna_low_contract import normalize
     generator=app.dependency_overrides[get_session]();s=next(generator)
     try:
         u=User(email='tamper-raw-name@example.com',name='검증',password_hash='fixture');s.add(u);s.flush()

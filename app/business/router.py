@@ -65,7 +65,7 @@ def put_tax_profile(
 
 
 from app.business.models import BusinessProfile
-from app.business.schemas import OperatingProfileUpdate
+from app.business.schemas import BusinessFilingInfo, OperatingProfileUpdate
 from app.common.exceptions import AppException
 from app.transactions.models import Transaction
 
@@ -77,7 +77,19 @@ def operating_profile(user: User = Depends(get_current_user), session: Session =
         'verified_tax_type':b.tax_type if b else None,'verification_status':b.verification_status if b else 'unverified',
         'declared_tax_type':p.tax_type if p else None,'entity_type':p.entity_type if p else None,
         'operating_industry':p.operating_industry if p else None,'business_description':p.business_description if p else None,
-        'has_employees':p.has_employees if p else None,'onboarding_completed':bool(p and p.onboarding_completed)}
+        'has_employees':p.has_employees if p else None,'onboarding_completed':bool(p and p.onboarding_completed),
+        **{k:getattr(b,k) if b else None for k in BusinessFilingInfo.model_fields}}
+
+@v2_router.put('/filing-info')
+def save_filing_info(body: BusinessFilingInfo, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    # 신고서 기재 정보만 바꾼다. 공제 판단과 무관해서 기존 분석은 그대로 둔다.
+    b=session.exec(select(BusinessProfile).where(BusinessProfile.user_id==user.id)).first()
+    if b is None:
+        raise AppException(404, 'BUSINESS_NOT_FOUND', '등록된 사업자 정보가 없습니다.')
+    for key, value in body.model_dump().items():
+        setattr(b, key, value)
+    session.add(b);session.commit()
+    return operating_profile(user,session)
 
 @v2_router.put('/profile')
 def save_operating_profile(body: OperatingProfileUpdate,user: User = Depends(get_current_user),session: Session = Depends(get_session)):

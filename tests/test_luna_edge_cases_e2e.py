@@ -12,8 +12,8 @@ from sqlmodel import Session
 from app.auth import service as auth_service
 from app.business.schemas import BusinessVerifyResponse
 from app.jobs import worker
-from app.ocr_pipeline import luna as luna_pipeline
-from app.receipts.luna_low_contract import normalize
+from app.receipts.ocr import luna as luna_pipeline
+from app.receipts.ocr.luna_low_contract import normalize
 
 
 def _make_png_bytes(color: tuple[int, int, int] = (240, 240, 240)) -> bytes:
@@ -24,7 +24,7 @@ def _make_png_bytes(color: tuple[int, int, int] = (240, 240, 240)) -> bytes:
 
 def _register_user(client, monkeypatch, email: str = "edge-e2e@example.com") -> dict[str, str]:
     from app.core.config import settings
-    monkeypatch.setattr(settings, "OCR_PIPELINE", "app.ocr_pipeline.luna:create_pipeline")
+    monkeypatch.setattr(settings, "OCR_PIPELINE", "app.receipts.ocr.luna:create_pipeline")
     monkeypatch.setattr(settings, "RECEIPT_RECOGNITION_BACKEND", "luna_low")
     monkeypatch.setattr(
         auth_service,

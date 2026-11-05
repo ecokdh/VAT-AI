@@ -1,6 +1,6 @@
 """judge 노드 프롬프트."""
 
-from app.analysis.contract import AnalysisRequest
+from app.deduction.analyzer import AnalysisRequest
 from app.deduction.graph.rules import CATEGORIES
 from app.deduction.rag.schemas import LawOut
 

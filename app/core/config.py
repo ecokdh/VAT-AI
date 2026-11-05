@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     S3_BUCKET: str = ""
     AWS_REGION: str = "ap-northeast-2"
     PDFKIT_WKHTMLTOPDF_PATH: str = ""
+    # 부가세 신고서(별지 제21호서식) 덧입히기용 한글 TTF. 비우면 맑은 고딕·나눔고딕을 찾는다.
+    VAT_FORM_FONT: str = ""
+    # 신고서 검증 모델 서버(training/serve.py) 주소. 비우면 검증 없이 PDF만 만든다.
+    FORM_VERIFIER_URL: str = ""
+    FORM_VERIFIER_TIMEOUT_SECONDS: float = 180.0
     MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024
     MAX_IMAGE_PIXELS: int = 25_000_000
     CLOVA_TIMEOUT_SECONDS: float = 10.0

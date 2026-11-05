@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field as PydanticField
+from pydantic import BaseModel, Field as PydanticField, field_validator
 
 
 class BusinessVerifyRequest(BaseModel):
@@ -24,6 +24,21 @@ class BusinessVerifyResponse(BaseModel):
     verified: bool
 
 
+class BusinessFilingInfo(BaseModel):
+    """신고서에 그대로 적는 사업자 정보. 비우면 None으로 저장한다."""
+    business_address: Optional[str] = PydanticField(default=None, max_length=255)
+    business_type: Optional[str] = PydanticField(default=None, max_length=100)
+    business_item: Optional[str] = PydanticField(default=None, max_length=100)
+    industry_code: Optional[str] = PydanticField(default=None, pattern=r"^\d{6}$")
+
+    @field_validator("business_address", "business_type", "business_item", "industry_code", mode="before")
+    @classmethod
+    def blank_to_none(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+        return value or None
+
+
 class BusinessProfileOut(BaseModel):
     id: str
     user_id: str
@@ -37,6 +52,10 @@ class BusinessProfileOut(BaseModel):
     verification_status: str
     verified_at: Optional[datetime] = None
     created_at: datetime
+    business_address: Optional[str] = None
+    business_type: Optional[str] = None
+    business_item: Optional[str] = None
+    industry_code: Optional[str] = None
 
 
 class SuspensionPeriod(BaseModel):

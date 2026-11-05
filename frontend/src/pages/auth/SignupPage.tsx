@@ -3,7 +3,8 @@ import { isAxiosError } from "axios";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "../../components/PageHeader";
 import { Icon } from "../../components/Icon";
-import { checkEmailAvailability, register } from "../../api/auth";
+import { checkEmailAvailability, emptyFilingInfo, register, validIndustryCode, type BusinessFilingInfo } from "../../api/auth";
+import { BusinessFilingFields } from "../../components/BusinessFilingFields";
 import { verifyBusiness, verifyBusinessIdentity, type BusinessVerificationResponse } from "../../api/business";
 
 import { TaxProfileFields, emptyTaxProfile } from "../../components/TaxProfileFields";
@@ -71,6 +72,7 @@ export function SignupPage() {
   const [identityBusy, setIdentityBusy] = useState(false);
   const [identityError, setIdentityError] = useState("");
   const [businessName, setBusinessName] = useState("");
+  const [filingInfo, setFilingInfo] = useState<BusinessFilingInfo>(emptyFilingInfo);
   const [businessNumber, setBusinessNumber] = useState("");
   const [verification, setVerification] = useState<BusinessVerificationResponse | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -115,6 +117,7 @@ export function SignupPage() {
     && identityVerified
     && !isVerifying
     && !!taxProfile.entity_type && !!taxProfile.industry_category && !!taxProfile.business_start_date
+    && validIndustryCode(filingInfo.industry_code)
     && taxProfile.taxable_sales_h1 != null && taxProfile.taxable_sales_h2 != null
     && (taxProfile.industry_category === "other" || !!taxProfile.industry_subtype)
     && (taxProfile.industry_category !== "manufacturing" || taxProfile.entity_type !== "corporation" || taxProfile.industry_subtype !== "other" || taxProfile.is_sme != null)
@@ -199,6 +202,7 @@ export function SignupPage() {
         privacy_accepted: privacyAccepted,
         marketing_accepted: marketingAccepted,
         tax_profile: taxProfile,
+        filing_info: filingInfo,
       });
       // Registration creates the account; the user signs in explicitly afterward.
       navigate("/login", { state: { signupEmail: email.trim(), signupComplete: true } });
@@ -318,6 +322,7 @@ export function SignupPage() {
             <p className="banner banner--info">국세청 조회 과세유형: {verification?.tax_type}. 아래 정보를 확인하면 가입과 함께 저장됩니다.</p>
             <TaxProfileFields taxProfile={taxProfile} taxType={verification?.tax_type_code === "02" ? "simplified" : "general"} updateProfile={updateProfile}/>
             <div className="identity-check"><p className="footnote">입력한 대표자명·사업자등록번호·개업일자를 국세청 등록정보와 대조합니다.</p><button type="button" className="btn btn--secondary" onClick={()=>void handleVerifyIdentity()} disabled={identityBusy || !name.trim() || !taxProfile.business_start_date || identityVerified}>{identityBusy?"진위확인 중…":identityVerified?"대표자 진위확인 완료":"대표자 진위확인"}</button>{identityError && <p className="form-field__hint form-field__hint--error" role="alert">{identityError}</p>}{identityVerified && <p className="form-field__hint" role="status">국세청 등록정보와 일치합니다.</p>}</div>
+            <BusinessFilingFields signup value={filingInfo} onChange={(key, value) => setFilingInfo(current => ({ ...current, [key]: value }))} />
             <label className="check-row"><input type="checkbox" checked={taxProfile.confirmed} onChange={e=>setTaxProfile(current=>({...current,confirmed:e.target.checked}))}/>입력한 사업자 정보를 확인했습니다.</label>
           </section>}
           <button className="btn btn--primary" onClick={nextStep} disabled={!businessStepValid}>다음</button>

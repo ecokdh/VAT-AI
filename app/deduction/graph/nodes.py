@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from app.analysis.contract import AnalysisRequest, LegalReference
+from app.deduction.analyzer import AnalysisRequest, LegalReference
 from app.deduction.graph.rules import CATEGORIES, match_rule
 from app.deduction.graph.state import ClassificationResult, DeductionState, JudgeOutput
 from app.deduction.rag.schemas import LawOut

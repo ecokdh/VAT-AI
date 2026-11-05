@@ -3,7 +3,7 @@ from datetime import date
 
 import pytest
 
-from app.analysis.contract import AnalysisRequest, BusinessFacts, TransactionFacts
+from app.deduction.analyzer import AnalysisRequest, BusinessFacts, TransactionFacts
 from app.deduction.graph.adapter import AnalysisFailedError, LangGraphAnalyzer
 from app.deduction.graph.graph import build_graph, classify
 from app.deduction.graph.prompts import build_input

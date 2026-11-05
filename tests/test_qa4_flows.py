@@ -124,24 +124,16 @@ def test_ocr_details_persist_without_confirming_transaction(db):
     assert session.exec(select(Transaction)).all() == []
 
 
-def test_pdf_checks_data_and_final_acknowledgement(db, monkeypatch):
+def test_pdf_requires_only_final_acknowledgement(db, monkeypatch):
     session, user = db
     estimate = {"period":"2026-H2", "status":"COMPLETE", "payable_estimate":1000}
     monkeypatch.setattr(jobs, "calculate_period_estimate", lambda *args: estimate)
-    profile = TaxProfileV2(user_id=user.id, confirmed_at=datetime.utcnow())
     row = Transaction(user_id=user.id, direction="sales", transaction_date=date(2026,9,1), vendor="QA", total_amount=11000, state="draft")
-    session.add_all([profile,row]); session.commit()
-    with pytest.raises(AppException, match="모두 완료"):
-        jobs.enqueue_pdf(session,user,"2026-H2",reviewed=True)
-    row.state="confirmed"; session.add(row); session.commit()
-    assert filing_readiness(session,user,"2026-H2",estimate)["ready"]
-    with pytest.raises(AppException):
+    session.add(row); session.commit()
+    assert not filing_readiness(session,user,"2026-H2",estimate)["ready"]
+    with pytest.raises(AppException, match="검토를 확인"):
         jobs.enqueue_pdf(session,user,"2026-H2")
     assert jobs.enqueue_pdf(session,user,"2026-H2",reviewed=True).job_type == "pdf"
-    session.add(Receipt(user_id=user.id,image_url="new.jpg",status="done",extraction_confirmed=True,date=date(2026,9,1)))
-    session.commit()
-    with pytest.raises(AppException):
-        jobs.enqueue_pdf(session,user,"2026-H2",reviewed=True)
 
 
 def test_2025_query_does_not_apply_2026_tax_rules(db):

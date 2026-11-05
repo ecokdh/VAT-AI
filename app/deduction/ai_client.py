@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from app.analysis.contract import AnalysisRequest
+from app.deduction.analyzer import AnalysisRequest
 from app.common.exceptions import AppException
 from app.deduction.graph import prompts
 from app.deduction.graph.state import JudgeOutput

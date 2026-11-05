@@ -11,7 +11,7 @@ from functools import partial
 
 from langgraph.graph import END, START, StateGraph
 
-from app.analysis.contract import AnalysisRequest
+from app.deduction.analyzer import AnalysisRequest
 from app.deduction.graph import nodes
 from app.deduction.graph.nodes import MAX_ATTEMPTS, CoreLaws, JudgeLLM, Retriever
 from app.deduction.graph.state import ClassificationResult, DeductionState

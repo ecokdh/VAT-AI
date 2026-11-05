@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { getAnalysisRun, listTransactions, type AnalysisRunApi, type TransactionApi } from "../../api/transactions";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { cancelAnalysisRun, getAnalysisRun, listTransactions, type AnalysisRunApi, type TransactionApi } from "../../api/transactions";
 import { PageHeader } from "../../components/PageHeader";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { parentRoute } from "../../hooks/navigation";
 
 type Reference = { source_id: string; title: string; locator?: string; url?: string; effective_date?: string };
 type Result = { transaction_id: number; description?: string; vendor?: string; transaction_date?: string; revision?: number; status: string; reason?: string; missing_information?: string[]; legal_references?: Reference[] };
@@ -11,6 +13,13 @@ function sourceUrl(value?: string) { try { const url = new URL(value ?? ""); ret
 
 export function AnalysisResultPage() {
   const { runId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  // 분석을 시작한 화면(보관함·전체 보기)으로 돌아간다. 직접 들어온 경우엔 매입 보관함으로 간다.
+  const backTo = (location.state as { from?: string } | null)?.from ?? parentRoute(location.pathname, location.search);
+  const [leaveTarget, setLeaveTarget] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
   const [run, setRun] = useState<AnalysisRunApi | null>(null);
   const [rows, setRows] = useState<TransactionApi[]>([]);
   const [error, setError] = useState("");
@@ -51,11 +60,27 @@ export function AnalysisResultPage() {
     const row = rows.find((transaction) => transaction.id === item.transaction_id);
     return item.description || (item.vendor ? `${item.transaction_date ?? ""} ${item.vendor}` : row?.description || (row ? `${row.transaction_date} ${row.vendor}` : `거래 #${item.transaction_id}`));
   }
-  const pending = !run || run.status === "PENDING" || run.status === "PROCESSING";
-  return <div className="page"><PageHeader title="공제 분석" /><div className="page__body">
+  const pending = !!runId && !error && (!run || run.status === "PENDING" || run.status === "PROCESSING");
+  // 분석 중에 나가려 하면 먼저 확인한다.
+  const leave = (path: string) => pending ? setLeaveTarget(path) : navigate(path);
+  // '예': 서버에 중단을 요청한 뒤 나간다. 실패하면 화면에 남아 다시 시도할 수 있게 한다.
+  async function cancelAndLeave() {
+    if (!runId || !leaveTarget) return;
+    setCancelling(true); setCancelError("");
+    try { await cancelAnalysisRun(runId); navigate(leaveTarget); }
+    catch { setCancelError("분석을 중단하지 못했습니다. 잠시 후 다시 시도해 주세요."); setCancelling(false); }
+  }
+  useEffect(() => {
+    if (!pending) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pending]);
+  return <div className="page"><PageHeader title="공제 분석" onBack={() => leave(backTo)} onMenuNavigate={leave} /><div className="page__body">
     {!runId ? <div className="banner banner--warning">매입 보관함에서 거래를 선택해 분석해 주세요.</div> : <>
       {error && <div className="banner banner--error" role="alert">{error}<button className="btn btn--secondary" onClick={() => { setError(""); setRetry((value) => value + 1); }}>상태 다시 확인</button></div>}
       {pending && !error && <section className="analysis-loading" role="status"><div className="analysis-spinner" /><h1 className="screen-title">공제 여부 분석 중</h1><p className="muted">거래 정보와 판단 근거를 확인하고 있어요.</p><ol><li>선택한 거래 확인</li><li>공제 요건 및 근거 확인</li><li>결과 정리</li></ol><p className="muted">{run?.status === "PENDING" ? "분석 순서를 기다리고 있습니다." : "작업이 끝나면 결과가 표시됩니다."}</p></section>}
+      {run?.status === "CANCELLED" && <div className="banner banner--warning" role="status">분석이 중단되었습니다. 필요하면 보관함에서 다시 분석해 주세요.</div>}
       {run?.status === "FAILED" && <div className="banner banner--error" role="alert">{run.error_message ?? "분석에 실패했습니다. 보관함에서 다시 요청해 주세요."}</div>}
       {invalid && <p role="alert">분석 결과 형식을 확인할 수 없습니다. 다시 조회해 주세요.</p>}
       {run?.status === "COMPLETED" && !invalid && <>
@@ -70,14 +95,17 @@ export function AnalysisResultPage() {
         })}
       </>}
     </>}
-    <Link className="btn btn--secondary" style={{ marginTop: 24 }} to="/storage/purchase">매입 보관함으로</Link>
+    <button type="button" className="btn btn--secondary" style={{ marginTop: 24 }} onClick={() => leave("/storage/purchase")}>매입 보관함으로</button>
   </div>
+  <ConfirmDialog open={!!leaveTarget} title="분석을 그만두시겠습니까?" confirmLabel="예" cancelLabel="아니요" busy={cancelling} onCancel={() => { setLeaveTarget(null); setCancelError(""); }} onConfirm={() => void cancelAndLeave()}>
+    {cancelError || "분석이 중단되고, 이번 분석 결과는 보관함에 반영되지 않습니다."}
+  </ConfirmDialog>
   <dialog ref={dialog} className="analysis-peek" aria-labelledby="analysis-detail-title" onCancel={() => setSelected(null)} onClose={() => setSelected(null)} onClick={(event) => { if (event.target === event.currentTarget) setSelected(null); }}>
     {selected && <div><header className="peek-header"><strong id="analysis-detail-title">분석 상세</strong><button className="icon-btn" aria-label="상세 닫기" onClick={() => setSelected(null)}>×</button></header><h2>{memo(selected)}</h2>
       <p className="banner banner--warning">{selected.status === "SKIPPED_STALE" ? "분석 중 거래가 변경되거나 삭제되어 제외했습니다. 보관함에서 다시 확인해 주세요." : selected.reason ?? "추가 확인이 필요합니다."}</p>
       {!!selected.missing_information?.length && <><h3>확인이 필요한 정보</h3><ul>{selected.missing_information.map((field) => <li key={field}>{field}</li>)}</ul></>}
       <h3>판례·세법 근거</h3>
-      {selected.legal_references?.length ? selected.legal_references.map((ref, index) => <article className="card" key={`${ref.source_id}-${index}`}><strong>{ref.title}</strong><p>{ref.locator}</p><p className="muted">출처: {ref.source_id}{ref.effective_date ? ` · 시행일 ${ref.effective_date}` : ""}</p>{sourceUrl(ref.url) && <a href={sourceUrl(ref.url)} target="_blank" rel="noreferrer" className="source-link">근거 원문 열기 ↗</a>}</article>) : <p className="muted">연결된 근거 자료가 없습니다. 이 결과는 공제 확정에 사용할 수 없습니다.</p>}
+      {selected.legal_references?.length ? selected.legal_references.map((ref, index) => <article className="card ref-card" key={`${ref.source_id}-${index}`}><strong>{ref.title}</strong><p>{ref.locator}</p><p className="muted">출처: {ref.source_id}{ref.effective_date ? ` · 시행일 ${ref.effective_date}` : ""}</p>{sourceUrl(ref.url) && <a href={sourceUrl(ref.url)} target="_blank" rel="noreferrer" className="source-link">근거 원문 열기 ↗</a>}</article>) : <p className="muted">연결된 근거 자료가 없습니다. 이 결과는 공제 확정에 사용할 수 없습니다.</p>}
     </div>}
   </dialog></div>;
 }

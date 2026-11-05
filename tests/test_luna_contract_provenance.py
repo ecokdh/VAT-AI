@@ -1,4 +1,4 @@
-from app.receipts.luna_low_contract import normalize, normalize_datetime_string
+from app.receipts.ocr.luna_low_contract import normalize, normalize_datetime_string
 
 
 def _raw(*amounts, vendor="인쇄상호", branch=None, business_number=None, datetime_value=None, items=None):

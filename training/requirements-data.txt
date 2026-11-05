@@ -1,0 +1,6 @@
+# 합성 데이터 생성(make_dataset.py)용. GPU 필요 없음. 2026-10-28 이 버전들로 확인함.
+pdfplumber==0.11.10
+pypdf==6.21.3
+pypdfium2==5.14.0
+reportlab==5.1.0
+pillow==13.0.0

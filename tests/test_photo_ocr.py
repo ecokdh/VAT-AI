@@ -7,8 +7,8 @@ import httpx
 import pytest
 
 from app.core.config import settings
-from app.receipts import luna_client, photo_ocr
-from app.receipts.subtotal_guard import DEFAULT_CONFIG, select_subtotal
+from app.receipts.ocr import luna_client, photo_ocr
+from app.receipts.ocr.subtotal_guard import DEFAULT_CONFIG, select_subtotal
 
 
 def raw_prediction():

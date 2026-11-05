@@ -19,3 +19,14 @@ test("직접 진입한 화면도 뒤로가기는 상위 화면으로 이동한�
   assert.equal(parentRoute("/storage/trash", "?direction=sales&period=2026-H2"), "/storage/sales?period=2026-H2");
   assert.equal(parentRoute("/analysis/1"), "/storage/purchase");
 });
+
+test("신고서 생성에서 들어간 화면은 뒤로가기로 신고서 생성에 돌아간다", () => {
+  assert.equal(parentRoute("/storage/purchase", "?status=review&period=2026-H1&from=reports"), "/reports?period=2026-H1");
+  assert.equal(parentRoute("/account", "?period=2026-H1&from=reports"), "/reports?period=2026-H1");
+  assert.equal(parentRoute("/storage/purchase", "?period=2026-H1"), "/dashboard?period=2026-H1");
+});
+
+test("영수증 전체 보기의 뒤로가기는 보관함으로 이동한다", () => {
+  assert.equal(parentRoute("/storage/purchase/receipts", "?period=2026-H1"), "/storage/purchase?period=2026-H1");
+  assert.equal(parentRoute("/storage/sales/receipts"), "/storage/sales");
+});

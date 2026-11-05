@@ -2,6 +2,7 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Optional
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -32,6 +33,8 @@ class Transaction(SQLModel, table=True):
     review_status: str = Field(default="not_analyzed", nullable=False, index=True)
     risk_level: Optional[str] = Field(default=None)
     deductible_vat: int = Field(default=0, nullable=False)
+    # 신고서 (12) 고정자산매입 칸으로 보낼지. 공제 판단과 무관해 바꿔도 분석을 다시 하지 않는다.
+    is_fixed_asset: bool = Field(default=False, nullable=False)
     deemed_input_supply: int = Field(default=0, nullable=False)
     deemed_input_eligible: Optional[bool] = Field(default=None)
     deemed_input_document_type: Optional[str] = Field(default=None)
@@ -52,6 +55,19 @@ class TransactionRevision(SQLModel, table=True):
     revision: int = Field(nullable=False)
     snapshot_json: str = Field(nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class FilingInput(SQLModel, table=True):
+    """신고기간마다 사용자가 직접 넣는 신고서 값. 지금은 (24) 예정고지세액만 있다."""
+
+    __tablename__ = "filing_inputs"
+    __table_args__ = (UniqueConstraint("user_id", "period", name="uq_filing_inputs_user_period"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False, index=True)
+    period: str = Field(nullable=False, max_length=20)
+    preliminary_notice_tax: Optional[int] = Field(default=None, ge=0)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class AnalysisRun(SQLModel, table=True):

@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from app.tax_engine.engine import TaxLine, calculate_estimate, period_bounds
+from app.vat_return.engine import TaxLine, calculate_estimate, period_bounds
 
 
 def line(**overrides):

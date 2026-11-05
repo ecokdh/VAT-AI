@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class AsyncJobOut(BaseModel):
     id: UUID
-    job_type: Literal["ocr", "pdf"]
+    job_type: Literal["ocr", "pdf", "vat_return"]
     status: Literal["PENDING", "PROCESSING", "COMPLETED", "FAILED"]
     result_json: Optional[str]
     error_code: Optional[str]

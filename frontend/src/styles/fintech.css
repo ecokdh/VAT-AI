@@ -11,6 +11,10 @@
 .icon-btn:hover { background: var(--color-surface-hover); }
 .page-header > .icon-btn:empty { visibility: hidden; }
 .brand-title { color: var(--color-text); font-size: 22px; font-weight: 800; letter-spacing: -1px; }
+.brand-title .brand-word { display: block; width: 104px; height: auto; }
+.brand-title .brand-word__vat { fill: #1f56e0; }
+.brand-title .brand-word__ai { fill: #38a6f5; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .profile-avatar { width: 48px; height: 48px; color: var(--color-text); background: var(--color-surface-muted); }
 .screen-title, .qa-page .screen-title { font-size: 26px; font-weight: 750; letter-spacing: -.9px; line-height: 1.45; margin: 8px 0 24px; word-break: keep-all; overflow-wrap: anywhere; }
 .qa-page .eyebrow { margin: 12px 0 8px; font-size: 13px; }
@@ -61,30 +65,44 @@ button:disabled { cursor: not-allowed; }
 
 /* Home: black headline amount on white, separate supporting balance and readiness. */
 .business-name { font-size: 14px; font-weight: 600; color: var(--color-text-muted); margin: 14px 0 8px; }
-.dashboard-page .screen-title { font-size: 25px; margin: 0 0 16px; }
-.dashboard-page .period-picker { margin: 20px 0 28px; }
+.dashboard-page .page-header { display: grid; grid-template-columns: 1fr auto 1fr; }
+.dashboard-header__actions { display: flex; gap: 8px; justify-self: end; }
+.dashboard-page .period-picker { margin: 8px 0 14px; }
 .dashboard-page .period-trigger { width: auto; min-height: 44px; padding: 10px 16px; border-radius: var(--radius-pill); font-size: 13px; gap: 18px; }
 .dashboard-page .period-picker > .form-field__label { font-size: 12px; }
-.dashboard-page .review-hero { background: white; color: var(--color-text); padding: 0; margin: 0 0 36px; }
+.dashboard-page .review-hero { background: white; color: var(--color-text); padding: 0; margin: 0 0 16px; }
 .review-hero > .section-heading { color: var(--color-text-muted); font-size: 14px; }
 .review-hero .icon-btn { background: var(--color-surface-muted); color: var(--color-text); width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
 .hero-amount { font-size: clamp(36px, 10vw, 48px); letter-spacing: -2px; font-weight: 800; line-height: 1.15; margin: 12px 0 14px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .hero-caption { color: var(--color-text-muted); opacity: 1; margin: 0 0 24px; font-size: 12px; }
-.dashboard-page .hero-secondary { padding: 20px; border: 0; border-radius: 24px 24px 0 0; background: var(--color-surface-muted); font-size: 13px; align-items: baseline; }
+.dashboard-page .hero-secondary { padding: 14px 20px; border: 0; border-radius: 24px 24px 0 0; background: var(--color-surface-muted); font-size: 13px; align-items: baseline; }
 .hero-secondary strong { color: var(--color-text); font-size: 19px; letter-spacing: -.6px; }
-.dashboard-page .readiness { margin: 0; padding: 0 20px 20px; border: 0; border-radius: 0 0 24px 24px; background: var(--color-surface-muted); color: var(--color-text-muted); }
+.dashboard-page .readiness { margin: 0; padding: 0 20px 14px; border: 0; border-radius: 0 0 24px 24px; background: var(--color-surface-muted); color: var(--color-text-muted); }
 .readiness .section-heading { padding-top: 16px; border-top: 1px solid var(--color-divider); font-size: 12px; }
 .readiness .section-heading strong { color: var(--color-text); font-weight: 650; }
 .readiness-track { height: 5px; background: #e3e3e7; margin: 14px 0 10px; }
 .readiness-track span { background: var(--color-sales); }
 .readiness p { font-size: 12px; opacity: 1; }
-.dashboard-page .overview-card { padding: 0; border: 0; background: white; margin: 0 0 28px !important; }
+.dashboard-page .overview-card { padding: 0; border: 0; background: white; margin: 0 0 16px !important; }
 .overview-card .section-heading > .muted { font-size: 12px; }
 .stat-grid { gap: 10px; padding: 20px 0 8px; }
 .summary-filters button, .stat-filters button { min-height: 100px; padding: 18px 6px; background: var(--color-surface-muted); border: 1px solid transparent; border-radius: 24px; }
 .summary-filters button strong, .stat-grid strong { font-size: 28px; font-weight: 750; letter-spacing: -1px; }
 .stat-grid small { font-size: 12px; line-height: 1.5; }
 .summary-filters button:hover { background: var(--color-surface-hover); }
+/* 대시보드는 휴대폰 한 화면(390×844)에 스크롤 없이 들어오도록 간격을 줄인다. */
+.dashboard-page .page-header { min-height: 68px; padding-top: calc(10px + env(safe-area-inset-top)); padding-bottom: 10px; }
+.dashboard-page .page__body { padding-bottom: 0; }
+.dashboard-page:has(+ .bottom-nav) { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+.dashboard-page .business-name { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: #0b1437; font-family: "Noto Sans KR", sans-serif; font-size: 19px; font-weight: 700; letter-spacing: -.4px; }
+.business-name__icon { flex-shrink: 0; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px; background: var(--color-primary-light); color: var(--color-primary); }
+.dashboard-page .hero-amount { margin: 6px 0; }
+.dashboard-page .hero-caption { margin-bottom: 8px; }
+.dashboard-page .readiness .section-heading { padding-top: 12px; }
+.dashboard-page .stat-grid { padding: 12px 0 4px; }
+.dashboard-page .summary-filters button { min-height: 76px; padding: 12px 6px; }
+.dashboard-page .overview-card > .muted { margin: 6px 0; }
+.dashboard-page .footnote { margin: 6px 0 0; }
 .stat-filters button[aria-pressed=true] { background: var(--color-primary-light); border-color: #cbdcff; }
 .stat-filters button[aria-pressed=true] strong { color: var(--color-primary); }
 .summary-transactions { border: 0; display: grid; gap: 10px; }
@@ -119,7 +137,13 @@ button:disabled { cursor: not-allowed; }
 .status-tabs button { min-height: 44px; padding: 10px 9px; border-radius: var(--radius-pill); }
 .status-tabs button[aria-pressed=true] { background: white; box-shadow: var(--shadow-card); color: var(--color-text); }
 .sort-select { min-height: 44px; font: inherit; font-size: 13px; }
-.qa-page .ledger-card { padding: 22px !important; margin: 14px 0 !important; border-radius: 26px; }
+.qa-page .ledger-card { padding: 14px 18px 10px !important; margin: 10px 0 !important; border-radius: 22px; }
+.ledger-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 6px 0 8px; }
+.ledger-meta:last-child { margin-bottom: 0; }
+.ledger-head small { margin-top: 4px; }
+.ledger-meta .status-label { margin: 0; font-size: 13px; }
+.ledger-meta .ledger-detail-link { min-height: 32px; margin: 0; }
+.qa-page .ledger-card > .btn--sm { min-height: 38px; padding: 8px 16px; }
 .ledger-head { gap: 12px; }
 .ledger-head strong { font-size: 15px; line-height: 1.5; }
 .ledger-head > strong { white-space: normal; text-align: right; max-width: 45%; }
@@ -214,7 +238,7 @@ dialog::backdrop, .period-dialog::backdrop, .navigation-dialog::backdrop { backg
   .screen-title, .qa-page .screen-title { font-size: 23px; }
   .hero-amount { font-size: 36px; }
   .summary-filters button { border-radius: 20px; }
-  .qa-page .ledger-card { padding: 18px !important; }
+  .qa-page .ledger-card { padding: 14px 16px 10px !important; }
   .period-dialog { padding-left: 18px; padding-right: 18px; }
   .field-grid, .review-grid, .review-item-numbers { grid-template-columns: minmax(0,1fr); }
 }
@@ -230,6 +254,14 @@ dialog::backdrop, .period-dialog::backdrop, .navigation-dialog::backdrop { backg
 .analysis-peek > .section-heading h2 { flex: 1; min-width: 0; font-size: 21px; line-height: 1.45; margin: 8px 0; overflow-wrap: anywhere; }
 .ledger-selection { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; margin: -10px -6px -10px -10px; cursor: pointer; }
 .ledger-selection input { margin: 0; }
+.attachment-row--select .ledger-selection { margin: 0 -12px 0 4px; }
+.fixed-asset-note { text-align: left; margin: -4px 0 14px; }
+.preliminary-notice-tax .form-field { margin: 0; }
+.preliminary-notice-tax .form-field__input-row .btn { width: 88px; flex-shrink: 0; }
+.preliminary-notice-tax .footnote { text-align: left; margin: 8px 0 0; }
+.business-filing-fields { margin: 24px 0 12px; }
+.business-filing-fields .footnote { text-align: left; margin: 0 0 12px; }
+.attachment-row--select .attachment-row__main { padding-right: 16px; }
 @media (max-width: 360px) {
   .page-header { grid-template-columns: minmax(44px,1fr) auto minmax(44px,1fr); gap: 8px; }
   .page-header:has(> div > button:nth-of-type(2)) { grid-template-columns: 44px minmax(0,1fr) 92px; }
@@ -244,3 +276,9 @@ dialog::backdrop, .period-dialog::backdrop, .navigation-dialog::backdrop { backg
 .capture-page button[aria-label="촬영"] { background: var(--color-primary) !important; }
 .capture-page button[aria-label="촬영"]:disabled { background: #505055 !important; }
 .capture-page .page-header > span.icon-btn { filter: grayscale(1); }
+
+/* 판례·세법 근거 카드: 작고 촘촘하게 */
+.analysis-peek .ref-card { padding: 10px 14px !important; margin: 6px 0 !important; border-radius: 14px; box-shadow: none; }
+.analysis-peek .ref-card strong { display: block; font-size: 14px; line-height: 1.4; }
+.analysis-peek .ref-card p { margin: 2px 0 0; font-size: 13px; line-height: 1.4; }
+.analysis-peek .ref-card a { display: inline-block; margin-top: 4px; font-size: 13px; }

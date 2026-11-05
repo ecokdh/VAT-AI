@@ -10,11 +10,12 @@ from app.core.config import settings
 from app.core.database import engine
 from app.auth.models import User
 from app.receipts.models import Receipt
-from app.receipts import luna_client, service as receipt_service
-from app.receipts.luna_low_contract import normalize, evaluate_classification
+from app.receipts import service as receipt_service
+from app.receipts.ocr import luna_client
+from app.receipts.ocr.luna_low_contract import normalize, evaluate_classification
 from app.receipts.storage import LocalFileStorage
-from app.ocr_pipeline.contract import OcrPipelineInput, OcrStageUpdate
-from app.ocr_pipeline.luna import LunaLowPipeline
+from app.receipts.ocr.contract import OcrPipelineInput, OcrStageUpdate
+from app.receipts.ocr.luna import LunaLowPipeline
 from app.jobs.models import AsyncJob
 from app.jobs.worker import process_async_job
 
@@ -374,7 +375,7 @@ def test_pipeline_and_worker_integration(tmp_path, monkeypatch):
             m=[{'role': 'payment', 'scope': 'unknown', 'label': '금액', 'value': 20000}],
             i=[],
         )
-        monkeypatch.setattr(settings, 'OCR_PIPELINE', 'app.ocr_pipeline.luna:create_pipeline')
+        monkeypatch.setattr(settings, 'OCR_PIPELINE', 'app.receipts.ocr.luna:create_pipeline')
         import hashlib
         img_sha = hashlib.sha256(b"fake-image-bytes").hexdigest()
         async def mock_recognize(*args):
@@ -457,7 +458,7 @@ def test_luna_failure_distinct_from_unsupported(tmp_path, monkeypatch):
         async def mock_timeout(*args):
             raise luna_client.LunaFailure("TIMEOUT")
         monkeypatch.setattr(luna_client, 'recognize', mock_timeout)
-        monkeypatch.setattr(settings, 'OCR_PIPELINE', 'app.ocr_pipeline.luna:create_pipeline')
+        monkeypatch.setattr(settings, 'OCR_PIPELINE', 'app.receipts.ocr.luna:create_pipeline')
 
         process_async_job(session, job)
         session.commit()

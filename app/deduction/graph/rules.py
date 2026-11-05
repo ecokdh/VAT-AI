@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from app.analysis.contract import LegalReference, TransactionFacts
+from app.deduction.analyzer import LegalReference, TransactionFacts
 
 
 # TODO: 기획서에 확정된 분류 목록이 없어 초안으로 둔다. 팀 확정 후 교체.

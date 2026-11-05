@@ -9,9 +9,10 @@ interface PageHeaderProps {
   showBack?: boolean;
   showAmountToggle?: boolean;
   showMenu?: boolean;
+  onMenuNavigate?: (path: string) => void;
 }
 
-export function PageHeader({ title, onBack, showBack = true, showAmountToggle = false, showMenu = true }: PageHeaderProps) {
+export function PageHeader({ title, onBack, showBack = true, showAmountToggle = false, showMenu = true, onMenuNavigate }: PageHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -27,7 +28,7 @@ export function PageHeader({ title, onBack, showBack = true, showAmountToggle = 
       <span className="page-header__title">{title}</span>
       <div style={{ display: "flex", gap: 4 }}>
         {showAmountToggle && <AmountVisibilityToggle />}
-        {showMenu && <AccountMenu />}
+        {showMenu && <AccountMenu onNavigate={onMenuNavigate} />}
       </div>
     </header>
   );

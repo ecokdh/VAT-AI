@@ -1,0 +1,111 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@600&display=swap");
+/* 로그인 화면 — 하늘색 글래스 스타일 */
+body:has(.login-page) { background: #e6eefc; }
+.page.login-page {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(180deg, #eef4ff 0%, #e3ecfc 100%);
+}
+.login-page .page__body { position: relative; }
+
+/* 모서리 장식 원 */
+.login-orbs span {
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #f4f8ff, #d3e1fb);
+  box-shadow: inset -6px -6px 18px rgb(255 255 255 / .8), 0 0 0 10px rgb(96 145 245 / .18), 0 18px 40px rgb(37 99 235 / .12);
+}
+.login-orbs span:nth-child(1) { width: 260px; height: 260px; top: -120px; left: -120px; }
+.login-orbs span:nth-child(2) { width: 130px; height: 130px; top: 190px; right: -70px; }
+.login-orbs span:nth-child(3) { width: 200px; height: 200px; bottom: -110px; left: -90px; }
+.login-orbs span:nth-child(4) { width: 240px; height: 240px; bottom: -130px; right: -110px; }
+
+/* 로고 타일 */
+.page.login-page .auth-intro { padding: calc(56px + env(safe-area-inset-top)) 0 32px; }
+.login-logo {
+  width: 128px;
+  height: 128px;
+  margin: 0 auto 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 40px;
+  border: 1px solid rgb(255 255 255 / .9);
+  background: linear-gradient(160deg, #ffffff 0%, #e9f0fd 100%);
+  box-shadow: inset 0 2px 0 #fff, inset 0 -6px 14px rgb(37 99 235 / .08), 0 22px 44px rgb(37 99 235 / .16);
+}
+.login-logo .brand-mark { width: 74px; height: 74px; filter: drop-shadow(0 8px 12px rgb(29 78 216 / .28)); }
+.login-logo .brand-mark__body { fill: #2f6bf0; }
+.login-logo .brand-mark__line { fill: #fff; opacity: .55; }
+.login-logo .brand-mark__spark { fill: #bfe6ff; }
+.login-logo .brand-mark__check { stroke: #fff; }
+.login-page .auth-title { line-height: 0; }
+.login-wordmark { width: 176px; height: auto; filter: drop-shadow(0 6px 12px rgb(37 99 235 / .2)); }
+.login-wordmark .brand-word__vat { fill: #1f56e0; }
+.login-wordmark .brand-word__ai { fill: #38a6f5; }
+.login-page .auth-description { margin-top: 18px; color: #34446b; font-family: "Noto Sans KR", sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.5px; }
+
+/* 입력창 */
+.login-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.login-field { position: relative; }
+.login-field > svg { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); color: #5b6785; pointer-events: none; }
+.login-page .login-field .input {
+  min-height: 60px;
+  padding-left: 56px;
+  border: 1px solid rgb(255 255 255 / .95);
+  border-radius: 20px;
+  background: rgb(255 255 255 / .6);
+  box-shadow: inset 0 1px 0 #fff, 0 8px 20px rgb(37 99 235 / .07);
+}
+.login-page .login-field .input:focus { border-color: #8db2f7; outline: 3px solid rgb(37 99 235 / .14); }
+.login-page .password-field button { top: 8px; color: #5b6785; }
+
+/* 이메일 저장 · 비밀번호 찾기 */
+.login-page .auth-preferences { font-size: 13px; }
+.login-page .auth-preferences label { color: #1f2a44; }
+.login-page .auth-preferences input {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1.5px solid #b7c8ec;
+  background: #fff;
+  cursor: pointer;
+}
+.login-page .auth-preferences input:checked {
+  border-color: transparent;
+  background: #2563eb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center / 14px no-repeat;
+  box-shadow: 0 4px 10px rgb(37 99 235 / .35);
+}
+.login-page .auth-preferences input:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.login-page .auth-preferences .text-link { color: #1d5ae8; font-size: 13px; font-weight: 700; text-decoration: none; }
+
+/* 버튼 */
+.login-page .login-submit {
+  position: relative;
+  width: 100%;
+  min-height: 60px;
+  font-size: 17px;
+  background: linear-gradient(90deg, #3d8bff 0%, #1f56e0 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .35), 0 14px 28px rgb(37 99 235 / .35);
+}
+.login-page .login-submit:disabled { opacity: .7; }
+.login-submit__arrow {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(255 255 255 / .18);
+}
+.login-page .btn--ghost {
+  border: 1px solid rgb(255 255 255 / .95);
+  background: rgb(255 255 255 / .55);
+  color: #1d4ed8;
+  box-shadow: 0 8px 20px rgb(37 99 235 / .07);
+}

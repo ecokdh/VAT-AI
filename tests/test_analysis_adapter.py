@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from app.auth.models import User
 from app.business.models import BusinessProfile
-from app.analysis.contract import AnalysisDecision, LegalReference
+from app.deduction.analyzer import AnalysisDecision, LegalReference
 from app.transactions import service
 from app.transactions.models import AnalysisRun
 from app.transactions.schemas import AnalysisRunCreate, TransactionCreate

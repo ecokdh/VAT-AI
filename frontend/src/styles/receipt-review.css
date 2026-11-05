@@ -50,5 +50,8 @@
 .review-section .muted,.business-profile-form .muted{color:var(--color-text-muted);}
 
 .basic-item-names{display:flex;flex-direction:column;gap:10px;}
+.basic-item-numbers{margin:16px 0 8px;}
+.basic-item-numbers>.review-field>span{margin-bottom:4px;}
+.review-all-button{margin-top:20px;}
 .basic-item-name{display:flex;align-items:center;gap:10px;min-width:0;}
 .basic-item-name>span{font-size:13px;color:var(--color-text-muted);min-width:16px;}

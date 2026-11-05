@@ -1,8 +1,8 @@
 import asyncio,copy,json
 import pytest
 from app.core.config import settings
-from app.receipts import ocr_client,luna_client
-from app.receipts.luna_low_contract import normalize
+from app.receipts.ocr import ocr_client,luna_client
+from app.receipts.ocr.luna_low_contract import normalize
 
 def sample():
     return {'h':{'vendor':'검토상점','branch':None,'business_number':None,'datetime':'2026-10-12 12:30:00'},'m':[{'role':'payment','scope':'unknown','label':'카드 결제','value':11000}],'i':[{'n':'상품','q':None,'u':None,'p':11000,'t':'item','parent':None}],'uncertain':[]}
@@ -151,8 +151,8 @@ def test_partial_fields_persist_and_are_exposed(client,monkeypatch):
     assert client.get('/receipts/'+str(body['id']),headers=headers).json()==body
 
 def test_worker_adapter_preserves_partial_and_reports_combined_stages(monkeypatch):
-    from app.ocr_pipeline import luna
-    from app.ocr_pipeline.contract import OcrPipelineInput
+    from app.receipts.ocr import luna
+    from app.receipts.ocr.contract import OcrPipelineInput
     raw=sample();raw['h']['datetime']=None
     async def fake(image,mime):return {'image_sha256':luna.hashlib.sha256(image).hexdigest(),'engine':'luna_low','document':normalize(raw),'confirmed':False}
     monkeypatch.setattr(luna,'recognize',fake);events=[]
@@ -164,9 +164,23 @@ def test_worker_adapter_preserves_partial_and_reports_combined_stages(monkeypatc
     assert any(e.stage.value=='transaction_extraction' and e.status.value=='completed' for e in events)
     assert json.loads(result.raw_text)['document']['items'][0]['quantity'] is None
 
+def test_worker_completes_text_stage_when_ocr_finishes_before_model(monkeypatch):
+    from app.receipts.ocr import luna
+    from app.receipts.ocr.contract import OcrPipelineInput
+    events=[]
+    async def fake(image,mime):
+        luna_client.on_ocr_done.get()()  # CLOVA 인식이 끝난 시점
+        seen=[(e.stage.value,e.status.value) for e in events]
+        assert seen[-2:]==[('text_recognition','completed'),('transaction_extraction','processing')]
+        return {'image_sha256':luna.hashlib.sha256(image).hexdigest(),'engine':'luna_low','document':normalize(sample()),'confirmed':False}
+    monkeypatch.setattr(luna,'recognize',fake)
+    luna.LunaLowPipeline().process(OcrPipelineInput(receipt_id=1,image_bytes=b'image',content_type='image/png'),events.append)
+    assert [e.progress_percent for e in events]==sorted(e.progress_percent for e in events)
+    assert luna_client.on_ocr_done.get() is None
+
 def test_worker_failure_has_no_automatic_fallback(monkeypatch):
-    from app.ocr_pipeline import luna
-    from app.ocr_pipeline.contract import OcrPipelineInput
+    from app.receipts.ocr import luna
+    from app.receipts.ocr.contract import OcrPipelineInput
     async def fail(*a):raise luna_client.LunaFailure('BUDGET_EXCEEDED')
     monkeypatch.setattr(luna,'recognize',fail)
     result=luna.LunaLowPipeline().process(OcrPipelineInput(receipt_id=1,image_bytes=b'image',content_type='image/png'),lambda e:None)

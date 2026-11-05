@@ -113,6 +113,18 @@ export function confirmReceiptExtraction(receiptId: number, input: ReceiptExtrac
   return apiClient.post<ReceiptProcessingApi>(`/v2/receipts/${receiptId}/confirm-extraction`, input).then((res) => res.data);
 }
 
+// 거래가 되기 전(분석 대기) 영수증을 보관함에서 고쳐 저장한다. 기존 용도·증빙 답변은 그대로 유지한다.
+export function saveReceiptEdits(receipt: ReceiptProcessingApi, document: ReceiptReview['document'], details: ReceiptDetails) {
+  const fields = document.fields, review = receipt.review;
+  const savedDetails: ReceiptDetails = { ...receipt.details };
+  delete savedDetails.items; // 품목은 document 기준으로 서버가 다시 만든다
+  return confirmReceiptExtraction(receipt.id, {
+    vendor: String(fields.vendor ?? "").trim(), amount: Number(fields.payment_amount ?? NaN), date: String(fields.transaction_datetime ?? "").slice(0, 10),
+    document, details: { ...savedDetails, ...details }, question_answers: review?.question_answers ?? {}, purpose: review?.purpose ?? null,
+    evidence_type: review?.evidence_type ?? "unknown", business_related: review?.business_related ?? null, tax_treatment: review?.tax_treatment ?? "unknown",
+  });
+}
+
 export function retryReceiptOcr(receiptId: number) {
   return apiClient.post<{ receipt_id: number; job_id: string; status: "PENDING"; attempt: number }>(`/v2/receipts/${receiptId}/retry`).then((res) => res.data);
 }

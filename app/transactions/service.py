@@ -1,16 +1,20 @@
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import update
 from sqlmodel import Session, select
 
 from app.auth.models import User
 from app.business.models import BusinessProfile, TaxProfileV2
 from app.common.exceptions import AppException
+from app.deduction.models import Deduction
 from app.deduction.schemas import ReportItem, ReportOut
 from app.receipts.models import Receipt
-from app.tax_engine.engine import (
+from app.sales_monthly.tax_lines import period_sales
+from app.vat_return.engine import (
     FIRST_HALF_PERIODS,
     PERIODS,
     RULE_VERSION,
@@ -19,7 +23,7 @@ from app.tax_engine.engine import (
     calculate_estimate,
     period_bounds,
 )
-from app.transactions.models import AnalysisRun, Transaction, TransactionRevision
+from app.transactions.models import AnalysisRun, FilingInput, Transaction, TransactionRevision
 from app.transactions.schemas import AnalysisRunCreate, TransactionCreate, TransactionUpdate
 
 
@@ -175,6 +179,99 @@ def update_transaction(
     return item
 
 
+def set_fixed_asset(session: Session, user_id: uuid.UUID, transaction_id: int, value: bool) -> Transaction:
+    # 신고서 칸 배정(10 일반매입 ↔ 12 고정자산매입)만 바뀌므로 revision·분석 결과는 건드리지 않는다.
+    item = _owned(session, user_id, transaction_id)
+    if item.direction != "purchase":
+        raise AppException(400, "VALIDATION_ERROR", "고정자산은 매입 거래에만 지정할 수 있습니다.")
+    item.is_fixed_asset = value
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item
+
+
+# 예정고지세액은 확정신고(1기·2기)에서만 차감한다.
+FINAL_PERIOD = re.compile(r"^\d{4}-H[12]$")
+
+
+def _filing_period(period: str) -> str:
+    if not FINAL_PERIOD.match(period):
+        raise AppException(400, "UNSUPPORTED_TAX_PERIOD", "예정고지세액은 확정 신고기간(1기·2기)에만 입력할 수 있습니다.")
+    return period
+
+
+def get_filing_input(session: Session, user_id: uuid.UUID, period: str) -> FilingInput | None:
+    return session.exec(select(FilingInput).where(FilingInput.user_id == user_id, FilingInput.period == _filing_period(period))).first()
+
+
+def save_filing_input(session: Session, user_id: uuid.UUID, period: str, preliminary_notice_tax: int | None) -> FilingInput:
+    item = get_filing_input(session, user_id, period) or FilingInput(user_id=user_id, period=period)
+    item.preliminary_notice_tax = preliminary_notice_tax
+    item.updated_at = _now()
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item
+
+
+EDITABLE_DETAILS = {"address", "phone", "payment_method", "approval_number", "receipt_number", "additional_fields"}
+
+
+def edit_receipt_document(session: Session, user_id: uuid.UUID, transaction_id: int, document, details=None) -> Transaction:
+    """보관함 '수정하기': 영수증 확인본(review)과 상세 정보를 고치고 거래 값도 같이 맞춘다."""
+    from datetime import date
+    from app.receipts.details import project_luna_details
+
+    item = _owned(session, user_id, transaction_id)
+    if item.deleted_at is not None:
+        raise AppException(409, "TRANSACTION_IN_TRASH", "휴지통에서 복원한 뒤 수정해 주세요.")
+    receipt = session.get(Receipt, item.receipt_id) if item.receipt_id else None
+    if receipt is None:
+        raise AppException(400, "RECEIPT_REQUIRED", "영수증이 연결된 거래만 수정할 수 있습니다.")
+    fields = document.fields
+    if not (fields.vendor or "").strip():
+        raise AppException(400, "VALIDATION_ERROR", "거래처를 입력해 주세요.")
+    try:
+        transaction_date = date.fromisoformat((fields.transaction_datetime or "")[:10])
+    except ValueError:
+        raise AppException(400, "VALIDATION_ERROR", "거래일을 확인해 주세요.")
+    amounts = {key: getattr(fields, key) for key in ("payment_amount", "supply_amount", "vat_amount")}
+    if amounts["payment_amount"] is None or any(v is not None and (v < 0 or int(v) != v) for v in amounts.values()):
+        raise AppException(400, "VALIDATION_ERROR", "결제액·공급가액·부가세를 0 이상의 원 단위로 입력해 주세요.")
+
+    corrected = document.model_dump(mode="json")
+    try:
+        raw = json.loads(receipt.ocr_raw or "{}")
+    except ValueError:
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    review = raw.get("review") or {}
+    previous = ((review.get("document") or raw.get("document") or {}).get("fields")) or {}
+    sources = review.get("field_sources") or {}
+    review.update(document=corrected, saved_at=_now().isoformat(),
+                  field_sources={k: "user_edit" if v != previous.get(k) else sources.get(k, "user_confirmed") for k, v in corrected["fields"].items()})
+    raw["review"] = review
+    receipt.ocr_raw = json.dumps(raw, ensure_ascii=False, separators=(",", ":"))
+    merged = project_luna_details(corrected, receipt.details)
+    if details is not None:
+        merged.update(details.model_dump(mode="json", include=EDITABLE_DETAILS, exclude_unset=True))
+    receipt.details_json = json.dumps(merged, ensure_ascii=False)
+    receipt.vendor, receipt.amount, receipt.date = fields.vendor.strip(), amounts["payment_amount"], transaction_date
+    session.add(receipt)
+
+    to_int = lambda v: None if v is None else int(v)
+    names = ", ".join(i.name for i in document.items if i.row_type == "item")
+    updated = update_transaction(session, user_id, transaction_id, TransactionUpdate(
+        vendor=fields.vendor.strip(), transaction_date=transaction_date, description=names or item.description,
+        total_amount=to_int(amounts["payment_amount"]), supply_amount=to_int(amounts["supply_amount"]), vat_amount=to_int(amounts["vat_amount"]),
+    ))
+    session.commit()  # 거래 값이 그대로여도 영수증 수정(사업자번호·품목 등)은 저장한다.
+    session.refresh(updated)
+    return updated
+
+
 def confirm_transaction(session: Session, user_id: uuid.UUID, transaction_id: int) -> Transaction:
     item = _owned(session, user_id, transaction_id)
     if item.deleted_at is not None:
@@ -230,22 +327,25 @@ def restore_from_trash(session: Session, user_id: uuid.UUID, transaction_id: int
     return item
 
 
-def request_permanent_delete(session: Session, user_id: uuid.UUID, transaction_id: int) -> Transaction:
+def delete_permanently(session: Session, user_id: uuid.UUID, transaction_id: int) -> None:
+    """휴지통에 있는 거래와 연결된 영수증·공제 판별·원본 사진을 지운다. 되돌릴 수 없고, 필요하면 다시 촬영한다."""
+    from app.receipts import service as receipt_service
+
     item = _owned(session, user_id, transaction_id)
     if item.deleted_at is None:
-        raise AppException(409, "TRANSACTION_NOT_IN_TRASH", "영구 삭제 요청 전에 휴지통으로 이동해 주세요.")
-    if item.retention_status == "required":
-        raise AppException(409, "RETENTION_PERIOD_ACTIVE", "법적 보존 기간이 남아 있어 영구 삭제할 수 없습니다.")
-    if item.retention_status != "not_required":
-        raise AppException(409, "RETENTION_STATUS_UNCONFIRMED", "증빙의 보존 의무를 확인할 수 없어 영구 삭제할 수 없습니다.")
-    # This endpoint records a request for the retention review process. It does
-    # not physically erase the linked legacy receipt or its source file.
-    if item.permanent_delete_requested_at is None:
-        item.permanent_delete_requested_at = _now()
-        session.add(item)
-        session.commit()
-        session.refresh(item)
-    return item
+        raise AppException(409, "TRANSACTION_NOT_IN_TRASH", "영구 삭제 전에 휴지통으로 이동해 주세요.")
+    receipt = session.get(Receipt, item.receipt_id) if item.receipt_id else None
+    for revision in session.exec(select(TransactionRevision).where(TransactionRevision.transaction_id == item.id)).all():
+        session.delete(revision)
+    session.delete(item)
+    session.flush()  # 영수증을 가리키는 거래부터 지운다.
+    if receipt:
+        for deduction in session.exec(select(Deduction).where(Deduction.receipt_id == receipt.id)).all():
+            session.delete(deduction)
+        session.delete(receipt)
+    session.commit()
+    if receipt:
+        receipt_service._delete_after_failure(receipt.image_url)  # 사진 정리는 best effort
 
 
 def create_analysis_run(
@@ -281,6 +381,45 @@ def get_analysis_run(session: Session, user_id: uuid.UUID, run_id: uuid.UUID) ->
     if run is None:
         raise AppException(404, "NOT_FOUND", "분석 작업을 찾을 수 없습니다.")
     return run
+
+
+def cancel_analysis_run(session: Session, user_id: uuid.UUID, run_id: uuid.UUID) -> AnalysisRun:
+    # 대기·진행 중인 작업만 중단한다. 이미 끝난 작업은 그대로 돌려준다.
+    # 진행 중이던 작업은 워커가 상태를 확인해 결과를 반영하지 않고 멈춘다.
+    # 조건부 UPDATE라서 워커가 막 완료한 작업을 CANCELLED로 덮어쓰지 않는다.
+    run = get_analysis_run(session, user_id, run_id)
+    session.execute(
+        update(AnalysisRun)
+        .where(AnalysisRun.id == run.id, AnalysisRun.status.in_(("PENDING", "PROCESSING")))
+        .values(status="CANCELLED", finished_at=datetime.now(timezone.utc))
+    )
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+def period_transactions(session: Session, user_id: uuid.UUID, start, end, tax_profile: TaxProfileV2 | None) -> list[Transaction]:
+    """세액 계산·신고서가 함께 쓰는 '이 기간에 반영할 확정 거래'(개업일~폐업일 밖은 뺀다).
+
+    확인 저장한 월간 매출 정산서의 결제수단별 행도 매출 거래로 함께 넣는다.
+    """
+    rows = list(
+        session.exec(
+            select(Transaction).where(
+                Transaction.user_id == user_id,
+                Transaction.state == "confirmed",
+                Transaction.deleted_at.is_(None),
+                Transaction.transaction_date >= start,
+                Transaction.transaction_date < end,
+            )
+        ).all()
+    )
+    rows += period_sales(session, user_id, start, end)
+    if tax_profile and tax_profile.business_start_date:
+        rows = [row for row in rows if row.transaction_date >= tax_profile.business_start_date]
+    if tax_profile and tax_profile.business_end_date:
+        rows = [row for row in rows if row.transaction_date <= tax_profile.business_end_date]
+    return rows
 
 
 def calculate_period_estimate(
@@ -330,21 +469,7 @@ def calculate_period_estimate(
         start, end = period_bounds(period, tax_type)
     except ValueError as exc:
         raise AppException(400, "UNSUPPORTED_TAX_PERIOD", str(exc)) from exc
-    rows = list(
-        session.exec(
-            select(Transaction).where(
-                Transaction.user_id == user.id,
-                Transaction.state == "confirmed",
-                Transaction.deleted_at.is_(None),
-                Transaction.transaction_date >= start,
-                Transaction.transaction_date < end,
-            )
-        ).all()
-    )
-    if tax_profile and tax_profile.business_start_date:
-        rows = [row for row in rows if row.transaction_date >= tax_profile.business_start_date]
-    if tax_profile and tax_profile.business_end_date:
-        rows = [row for row in rows if row.transaction_date <= tax_profile.business_end_date]
+    rows = period_transactions(session, user.id, start, end, tax_profile)
     deemed_sales_fact = None
     if tax_profile and tax_profile.confirmed_at:
         deemed_sales_fact = tax_profile.deemed_related_taxable_sales_h1 if period in FIRST_HALF_PERIODS else tax_profile.deemed_related_taxable_sales_h2 if period in SECOND_HALF_PERIODS else None

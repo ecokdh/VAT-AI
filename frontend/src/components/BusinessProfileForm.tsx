@@ -1,10 +1,15 @@
 import {useEffect,useState} from 'react';
 import {apiClient} from '../api/client';
-type Profile={business_name:string|null;business_number:string|null;verified_tax_type:string|null;verification_status:string;declared_tax_type:string|null;entity_type:string|null;operating_industry:string|null;business_description:string|null;has_employees:boolean|null;onboarding_completed:boolean};
+import {validIndustryCode,type BusinessFilingInfo} from '../api/auth';
+import {BusinessFilingFields} from './BusinessFilingFields';
+type Profile=BusinessFilingInfo&{business_name:string|null;business_number:string|null;verified_tax_type:string|null;verification_status:string;declared_tax_type:string|null;entity_type:string|null;operating_industry:string|null;business_description:string|null;has_employees:boolean|null;onboarding_completed:boolean};
 export function BusinessProfileForm(){
  const [p,setP]=useState<Profile|null>(null),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
  useEffect(()=>{apiClient.get<Profile>('/v2/business/profile').then(r=>setP(r.data)).catch(()=>setMessage('사업 정보를 불러오지 못했습니다.'));},[]);
  async function save(){if(!p)return;setBusy(true);setMessage('');try{const {data}=await apiClient.put<Profile>('/v2/business/profile',{declared_tax_type:p.declared_tax_type,entity_type:p.entity_type,operating_industry:p.operating_industry,business_description:p.business_description,has_employees:p.has_employees});setP(data);setMessage(data.onboarding_completed?'사업 정보를 저장했습니다.':'저장했습니다. 미입력 정보는 나중에 확인해 주세요.');}catch{setMessage('사업 정보를 저장하지 못했습니다. 입력값을 확인해 주세요.');}finally{setBusy(false);}}
+ // 신고서 기재 정보는 공제 분석과 무관해 따로 저장한다(사업 프로필 저장은 기존 분석을 다시 확인하게 만든다).
+ const [filingMessage,setFilingMessage]=useState(''),[filingBusy,setFilingBusy]=useState(false);
+ async function saveFiling(){if(!p)return;setFilingBusy(true);setFilingMessage('');try{const {data}=await apiClient.put<Profile>('/v2/business/filing-info',{business_address:p.business_address,business_type:p.business_type,business_item:p.business_item,industry_code:p.industry_code});setP(data);setFilingMessage('신고서 기재 정보를 저장했습니다.');}catch{setFilingMessage('신고서 기재 정보를 저장하지 못했습니다. 입력값을 확인해 주세요.');}finally{setFilingBusy(false);}}
  function update(key:keyof Profile,value:unknown){setP(v=>v?{...v,[key]:value}:v);}
  return <section className="review-section business-profile-form"><h2>내 사업 프로필</h2><p className="muted">거래 용도를 확인할 때 사용하는 정보입니다. 변경하면 기존 공제 분석을 다시 확인합니다.</p>{message&&<p role="status">{message}</p>}{p&&<fieldset disabled={busy}>
  <label className="review-field"><span>상호</span><input className="input" value={p.business_name??''} readOnly aria-describedby="business-name-note"/></label><p id="business-name-note" className="footnote">가입 시 등록한 상호명입니다.</p>
@@ -15,5 +20,7 @@ export function BusinessProfileForm(){
  <label className="review-field"><span>실제 하는 일</span><textarea className="input" maxLength={1000} placeholder="예: 동네 카페 운영" value={p.business_description??''} onChange={e=>update('business_description',e.target.value||null)}/></label>
  <label className="review-field"><span>직원 유무</span><select className="input" value={p.has_employees===null?'':p.has_employees?'yes':'no'} onChange={e=>update('has_employees',e.target.value===''?null:e.target.value==='yes')}><option value="">미확인</option><option value="yes">직원 있음</option><option value="no">직원 없음</option></select></label>
  <button type="button" className="btn btn--primary" onClick={()=>void save()}>{busy?'저장 중…':'사업 프로필 저장'}</button>
- </fieldset>}</section>;
+ </fieldset>}
+ {p&&<fieldset disabled={filingBusy}><BusinessFilingFields value={p} onChange={(key,value)=>update(key,value)}/>{filingMessage&&<p role="status">{filingMessage}</p>}
+ <button type="button" className="btn btn--secondary" disabled={!validIndustryCode(p.industry_code)} onClick={()=>void saveFiling()}>{filingBusy?'저장 중…':'신고서 기재 정보 저장'}</button></fieldset>}</section>;
 }

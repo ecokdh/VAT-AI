@@ -11,8 +11,7 @@ from app.deduction.models import Deduction  # noqa: F401
 from app.deduction.rag.models import LawEmbedding  # noqa: F401
 from app.transactions.models import Transaction, TransactionRevision, AnalysisRun  # noqa: F401
 from app.jobs.models import AsyncJob  # noqa: F401
-
-from app.team_benchmark.models import TeamMember, BenchmarkCase  # noqa: F401
+from app.sales_monthly.models import MonthlySalesDocument  # noqa: F401
 
 engine = create_engine(settings.DB_URL)
 

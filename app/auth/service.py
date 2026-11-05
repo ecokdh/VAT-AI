@@ -28,6 +28,10 @@ def _to_business_out(profile: BusinessProfile) -> BusinessProfileOut:
         verification_status=profile.verification_status,
         verified_at=profile.verified_at,
         created_at=profile.created_at,
+        business_address=profile.business_address,
+        business_type=profile.business_type,
+        business_item=profile.business_item,
+        industry_code=profile.industry_code,
     )
 
 
@@ -97,6 +101,7 @@ def register_user(db: Session, data: RegisterRequest) -> AuthResponse:
             end_date=verification.end_date,
             verification_status="identity_verified",
             verified_at=datetime.utcnow(),
+            **(data.filing_info.model_dump() if data.filing_info else {}),
         )
         db.add(profile)
         if data.tax_profile is not None:

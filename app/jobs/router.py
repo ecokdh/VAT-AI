@@ -102,6 +102,16 @@ def create_pdf_job(
     return service.enqueue_pdf(session, user, period, reviewed)
 
 
+@router.post("/vat-return-jobs", response_model=AsyncJobOut, status_code=202)
+def create_vat_return_job(
+    period: str = Query(...),
+    reviewed: bool = Query(False),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    return service.enqueue_vat_return(session, user, period, reviewed)
+
+
 @router.get("/jobs/{job_id}", response_model=AsyncJobOut)
 def get_job(
     job_id: UUID,
@@ -118,16 +128,17 @@ def download_pdf(
     session: Session = Depends(get_session),
 ):
     job = service.get_job(session, user.id, job_id)
-    if job.job_type != "pdf" or job.status != "COMPLETED" or not job.result_json:
+    if job.job_type not in ("pdf", "vat_return") or job.status != "COMPLETED" or not job.result_json:
         raise AppException(409, "PDF_NOT_READY", "PDF 작업이 아직 완료되지 않았습니다.")
     key = json.loads(job.result_json)["file_key"]
+    filename = f"vat-return-{job_id}.pdf" if job.job_type == "vat_return" else f"vat-ai-review-{job_id}.pdf"
     storage = receipt_service.storage
     if isinstance(storage, S3FileStorage):
         return RedirectResponse(storage.presigned_url(key), status_code=307)
     return Response(
         content=storage.read(key),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="vat-ai-review-{job_id}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

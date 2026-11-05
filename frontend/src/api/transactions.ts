@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import { getReceipt, type ReceiptDetails, type ReceiptReview } from "./receipts";
 
 export interface TransactionApi {
   id: number;
@@ -11,6 +12,8 @@ export interface TransactionApi {
   total_amount: number;
   supply_amount: number | null;
   vat_amount: number | null;
+  evidence_type: string;
+  is_fixed_asset: boolean;
   state: string;
   review_status: string;
   analysis_reason: string | null;
@@ -22,7 +25,7 @@ export interface TransactionApi {
 
 export interface AnalysisRunApi {
   id: string;
-  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED";
   result_json: string | null;
   error_code: string | null;
   error_message: string | null;
@@ -64,7 +67,7 @@ export interface TaxProfileApi {
 
 export interface AsyncJobApi {
   id: string;
-  job_type: "ocr" | "pdf";
+  job_type: "ocr" | "pdf" | "vat_return";
   status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
   result_json: string | null;
   error_code: string | null;
@@ -101,6 +104,34 @@ export async function confirmTransaction(id: number): Promise<TransactionApi> {
   return data;
 }
 
+// 보관함 '수정하기': 영수증 확인본과 거래 값을 함께 고친다.
+export async function editTransactionReceipt(id: number, document: ReceiptReview["document"], details?: ReceiptDetails): Promise<TransactionApi> {
+  const { data } = await apiClient.put<TransactionApi>(`/v2/transactions/${id}/receipt-document`, { document, details });
+  return data;
+}
+
+// 보관함에서 영수증을 누르면 별도 확인 화면 없이, 추출 결과 확인에서 저장한 값 그대로 거래를 만들고 확정한다.
+export async function confirmTransactionFromReceipt(receiptId: number): Promise<TransactionApi> {
+  const receipt = await getReceipt(receiptId);
+  const fields = receipt.recognition?.document?.fields;
+  const number = (value: unknown) => typeof value === "number" ? Math.round(value) : null;
+  const tax = receipt.review?.tax_treatment ?? "unknown";
+  const transaction = await createTransactionFromReceipt(receiptId, {
+    direction: receipt.direction,
+    transaction_date: receipt.date ?? "",
+    vendor: (receipt.vendor ?? "").trim(),
+    description: receipt.details?.items?.map((item) => item.name).join(", ") ?? "",
+    purpose: receipt.review?.purpose?.trim() || null,
+    evidence_type: tax === "exempt" ? "tax_free_receipt" : receipt.review?.evidence_type ?? "unknown",
+    business_related: receipt.review?.business_related ?? null,
+    total_amount: Math.round(receipt.amount ?? 0),
+    supply_amount: number(fields?.supply_amount),
+    vat_amount: number(fields?.vat_amount),
+    tax_treatment: tax,
+  });
+  return confirmTransaction(transaction.id);
+}
+
 export async function listTrash(): Promise<TransactionApi[]> {
   const { data } = await apiClient.get<TransactionApi[]>("/v2/trash");
   return data;
@@ -118,6 +149,32 @@ export async function moveTransactionToTrash(id: number): Promise<TransactionApi
 
 export async function createAnalysisRun(transactionIds: number[]): Promise<AnalysisRunApi> {
   const { data } = await apiClient.post<AnalysisRunApi>("/v2/analysis-runs", { transaction_ids: transactionIds });
+  return data;
+}
+
+// 신고서 (12) 고정자산매입 칸 배정용. 공제 분석 결과는 바뀌지 않는다.
+export async function setFixedAsset(transactionId: number, isFixedAsset: boolean): Promise<TransactionApi> {
+  const { data } = await apiClient.put<TransactionApi>(`/v2/transactions/${transactionId}/fixed-asset`, { is_fixed_asset: isFixedAsset });
+  return data;
+}
+
+export interface FilingInputApi {
+  period: string;
+  preliminary_notice_tax: number | null;
+}
+
+export async function getFilingInput(period: string): Promise<FilingInputApi> {
+  const { data } = await apiClient.get<FilingInputApi>(`/v2/filing-inputs/${period}`);
+  return data;
+}
+
+export async function saveFilingInput(period: string, preliminaryNoticeTax: number | null): Promise<FilingInputApi> {
+  const { data } = await apiClient.put<FilingInputApi>(`/v2/filing-inputs/${period}`, { preliminary_notice_tax: preliminaryNoticeTax });
+  return data;
+}
+
+export async function cancelAnalysisRun(runId: string): Promise<AnalysisRunApi> {
+  const { data } = await apiClient.post<AnalysisRunApi>(`/v2/analysis-runs/${runId}/cancel`);
   return data;
 }
 
@@ -146,6 +203,18 @@ export async function createPdfJob(period: string): Promise<AsyncJobApi> {
   return data;
 }
 
+// 부가세 신고서(별지 제21호서식) PDF. 완료되면 result_json에 검증 결과가 들어 있다.
+export async function createVatReturnJob(period: string): Promise<AsyncJobApi> {
+  const { data } = await apiClient.post<AsyncJobApi>("/v2/vat-return-jobs", null, { params: { period, reviewed: true } });
+  return data;
+}
+
+export interface VatReturnResult {
+  payable: number;
+  notes: string[];
+  verification: { status: "skipped" | "error" | "passed" | "mismatch"; message: string; mismatches?: { field: string; label: string; expected: string; read: string }[] };
+}
+
 export async function getAsyncJob(id: string): Promise<AsyncJobApi> {
   const { data } = await apiClient.get<AsyncJobApi>(`/v2/jobs/${id}`);
   return data;
@@ -161,9 +230,9 @@ export async function restoreTransaction(id: number): Promise<TransactionApi> {
   return data;
 }
 
-export async function requestPermanentDelete(id: number): Promise<TransactionApi> {
-  const { data } = await apiClient.post<TransactionApi>(`/v2/trash/${id}/permanent-delete-request`);
-  return data;
+// 휴지통의 거래와 연결된 영수증·사진을 지운다. 되돌릴 수 없다.
+export async function deleteTransactionPermanently(id: number): Promise<void> {
+  await apiClient.delete(`/v2/trash/${id}`);
 }
 
 export interface FilingReadiness {
