@@ -3,14 +3,12 @@
 결제수단별 행 하나가 매출 거래 하나다. 과세 행에 공급가액이 인쇄되지 않았으면
 합계금액을 공급대가로 보고 공급가액 = 합계금액 × 100/110(원 단위 반올림)으로 계산한다.
 """
-import json
 import re
 import uuid
 from datetime import date
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from app.sales_monthly.models import MonthlySalesDocument
 from app.transactions.models import Transaction
 from app.vat_return.engine import STANDARD_RATE
 
@@ -45,12 +43,12 @@ def row_lines(document: dict) -> list[dict]:
 
 
 def summarize(document: dict) -> dict:
-    """확인 화면용: 행별 반영값과 예상 매출세액(세액 계산과 같은 공급가액 × 10%), 빠진 행 수."""
+    """Legacy review preview only; no monthly settlement is reportable sales input."""
     lines = row_lines(document)
-    standard = [l for l in lines if l["tax_treatment"] == "standard"]
-    return {"lines": lines, "output_vat": sum(l["supply_amount"] * STANDARD_RATE // 100 for l in standard),
-            "excluded_count": sum(l["tax_treatment"] == "unknown" for l in lines),
-            "month_valid": sales_month(document) is not None}
+    return {"lines": [], "output_vat": None,
+            "excluded_count": len(lines), "month_valid": sales_month(document) is not None,
+            "reportable": False,
+            "message": "POS 월정산은 세액 계산과 신고 매출에서 제외됩니다. 신고용 매출 집계에 홈택스 자료와 확인된 보완 매출을 연결해 주세요."}
 
 
 def sales_month(document: dict) -> date | None:
@@ -61,20 +59,5 @@ def sales_month(document: dict) -> date | None:
 
 
 def period_sales(session: Session, user_id: uuid.UUID, start: date, end: date) -> list[Transaction]:
-    """기간 안의 확인 저장된 정산서를 확정 매출 거래 형태로 돌려준다."""
-    docs = session.exec(select(MonthlySalesDocument).where(
-        MonthlySalesDocument.user_id == user_id, MonthlySalesDocument.status == "reviewed",
-        MonthlySalesDocument.deleted_at.is_(None))).all()
-    rows = []
-    for doc in docs:
-        document = json.loads(doc.review_json)
-        month = sales_month(document)
-        if month is None or not start <= month < end:
-            continue
-        vendor = document["사업장"].get("상호") or "월간 매출 정산서"
-        rows += [Transaction(user_id=user_id, direction="sales", state="confirmed", transaction_date=month,
-                             vendor=vendor, description=line["name"], evidence_type=line["evidence_type"],
-                             tax_treatment=line["tax_treatment"], total_amount=line["total_amount"],
-                             supply_amount=line["supply_amount"], vat_amount=line["vat_amount"])
-                 for line in row_lines(document)]
-    return rows
+    """Deprecated compatibility hook: a POS monthly settlement is never reportable sales."""
+    return []

@@ -18,7 +18,7 @@ from app.transactions.models import Transaction
 KST = timezone(timedelta(hours=9))
 CARD_EVIDENCE = {"card_receipt", "cash_receipt"}
 PENDING_REVIEW = {"caution", "stale", "not_analyzed", "insufficient_info"}
-ALWAYS_PRINTED = (9, 16, 18)  # 합계 칸은 0이어도 적는다.
+ALWAYS_PRINTED = (1, 3, 4, 9, 16, 18)  # 매출 구분과 합계 칸은 확인된 0도 표시한다.
 
 
 def _deductible(row: Transaction) -> bool:
@@ -50,6 +50,8 @@ def _won(n: int) -> str:
 def build_vat_return(session: Session, user: User, period: str) -> dict:
     """신고서 칸 값({필드 id: 인쇄 문자열})과 칸별 금액, 빈칸·제외 사유를 돌려준다."""
     estimate = transactions.calculate_period_estimate(session, user, period, None)
+    if estimate.get("sales_aggregate_status") != "확정":
+        raise AppException(409, "SALES_AGGREGATE_NOT_FINALIZED", "신고용 매출 집계를 먼저 검증하고 확정해 주세요.")
     if estimate["status"] == "UNAVAILABLE":
         raise AppException(409, "VAT_RETURN_UNAVAILABLE", estimate["notes"][0])
     if estimate["tax_type"] != "general":
@@ -59,6 +61,8 @@ def build_vat_return(session: Session, user: User, period: str) -> dict:
     tax_profile = session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id == user.id)).first()
     start, end = period_bounds(period, "general")
     rows = transactions.period_transactions(session, user.id, start, end, tax_profile)
+    sales_aggregate = estimate["sales_aggregate"]
+    sales_totals = sales_aggregate["lines"]
 
     r: dict = defaultdict(lambda: [0, 0])  # 줄 번호 → [금액, 세액]
     notes: list[str] = []
@@ -68,15 +72,13 @@ def build_vat_return(session: Session, user: User, period: str) -> dict:
         r[row_no][0] += amount
         r[row_no][1] += tax
 
+    # 신고 매출 칸은 대시보드 예상세액과 같은 확정 집계 스냅샷에서 채운다.
+    for line_no in (1, 3, 4):
+        amounts = sales_totals.get(str(line_no), {})
+        add(line_no, amounts.get("supply_amount", 0), amounts.get("vat_amount", 0))
+
     for row in rows:
-        if row.direction == "sales":
-            if row.tax_treatment == "standard" and row.supply_amount is not None:
-                line = 1 if row.evidence_type == "tax_invoice" else 3 if row.evidence_type in CARD_EVIDENCE else 4
-                add(line, row.supply_amount, row.supply_amount * STANDARD_RATE // 100)
-            elif row.tax_treatment == "zero" and row.supply_amount is not None:
-                add(5 if row.evidence_type == "tax_invoice" else 6, row.supply_amount, 0)
-            elif row.tax_treatment != "exempt":  # 면세 매출은 과세표준이 아니다.
-                skipped_sales += 1
+        if row.direction != "purchase":
             continue
         if _deductible(row):
             if row.evidence_type == "tax_invoice":
@@ -101,6 +103,10 @@ def build_vat_return(session: Session, user: User, period: str) -> dict:
              r[10][1] - r[11][1] + sum(r[i][1] for i in range(12, 16))]
     r[18] = [r[16][0] - r[17][0], r[16][1] - r[17][1]]
     payable = r[9][1] - r[18][1]
+    if r[9][0] != sales_totals.get("9", {}).get("supply_amount", 0) or r[9][1] != estimate["output_vat"]:
+        raise AppException(409, "VAT_RETURN_SALES_TOTAL_MISMATCH", "신고서 (9)와 확정 신고용 매출 집계의 합계가 다릅니다.")
+    if r[9][0] != sales_totals.get("35", {}).get("tax_base", 0):
+        raise AppException(409, "VAT_RETURN_TAX_BASE_MISMATCH", "신고서 (9)와 (35)의 과세표준이 일치하지 않습니다.")
     final = period.endswith(("H1", "H2"))
     filing = transactions.get_filing_input(session, user.id, period) if final else None
     if filing and filing.preliminary_notice_tax:
@@ -151,4 +157,7 @@ def build_vat_return(session: Session, user: User, period: str) -> dict:
     }
     values = {**{k: v for k, v in header.items() if v}, **values}
     return {"period": period, "values": values,
-            "rows": {str(k): v for k, v in r.items() if v != [0, 0]}, "payable": total_due, "notes": notes}
+            "rows": {str(k): v for k, v in r.items() if v != [0, 0]}, "payable": total_due, "notes": notes,
+            "sales_aggregate_id": estimate["sales_aggregate_id"],
+            "sales_aggregate_revision": sales_aggregate.get("revision"),
+            "sales_aggregate_fingerprint": sales_aggregate.get("input_fingerprint")}

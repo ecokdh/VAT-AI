@@ -9,6 +9,7 @@ import { listReceiptInbox, saveReceiptEdits, type ReceiptProcessingApi } from ".
 import { useMaskedFormat } from "../../hooks/useMaskedFormat";
 import { inPeriod, isPeriod, needsReview } from "../../hooks/useReviewOverview";
 import { filterLedger, matchesReviewStatus, reviewLabel, reviewStatusClass } from "../../hooks/reviewState";
+import { parseSalesPeriod } from "../../hooks/salesPeriod";
 import { AnalysisResult } from "../../components/AnalysisResult";
 import { PeriodPicker } from "../../components/PeriodPicker";
 import { PageHeader } from "../../components/PageHeader";
@@ -16,7 +17,7 @@ import { DeleteConfirmation } from "../../components/DeleteConfirmation";
 import { ReceiptPreview } from "../../components/ReceiptPreview";
 import { ReceiptDocumentDetails } from "../../components/ReceiptDocumentDetails";
 import { SlidePanel } from "../../components/SlidePanel";
-import { type SavedDocument, linesTotal } from "../../components/MonthlySalesReview";
+import type { SavedDocument } from "../../components/MonthlySalesReview";
 import { apiClient } from "../../api/client";
 
 const PREVIEW_COUNT = 5;
@@ -36,7 +37,7 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   const [monthly, setMonthly] = useState<SavedDocument[]>([]);
   const [simplified, setSimplified] = useState(false);
   const requestedPeriod = params.get("period");
-  const validPeriod = isPeriod(requestedPeriod) ? requestedPeriod : "all";
+  const validPeriod = isPeriod(requestedPeriod) ? requestedPeriod : (!purchase && parseSalesPeriod(requestedPeriod)) || "all";
   const period = simplified && validPeriod !== "all" ? `${validPeriod.slice(0,4)}-YEAR` : validPeriod;
   const [month, setMonth] = useState("");
   const [order, setOrder] = useState("newest");
@@ -146,7 +147,7 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
     <PeriodPicker value={period} simplified={simplified} allowAll onChange={period=>updateFilters({period})}/>
     {combined && <p className="banner banner--info">홈 요약에서 선택한 매입·매출 거래를 함께 표시합니다.</p>}
     <div className="stat-grid stat-filters">{[["all","전체 거래",total],["review","확인 필요",review],["done",purchase ? "분석 완료" : "확정 거래",total-review]].map(([key,label,count]) => <button key={key} aria-pressed={status === key} onClick={() => filter(String(key))}><small>{label}</small><strong>{count}건</strong></button>)}</div>
-    {!purchase && <section className="sales-total"><small className="muted">확정 매출 합계</small><strong>{fmt.won(periodRows.filter(r=>r.state === "confirmed").reduce((sum,r)=>sum+r.total_amount,0) + reviewedMonthly.reduce((sum,r)=>sum+linesTotal(r),0))}</strong><small className="muted">확정 거래·확인한 정산서 기준 · 공급대가 합계</small></section>}
+    {!purchase && <p className="banner banner--info">보관된 증빙 목록입니다. <NavLink to={`/storage/sales?period=${period}`}>신고용 매출 확인</NavLink>에서 홈택스 집계를 확인하세요.</p>}
     {message && <p className="banner banner--info" role="status">{message}</p>}
     <div className="section-heading"><h2 className="section-title">거래 목록</h2><select className="sort-select" aria-label="거래 정렬" value={order} onChange={e=>setOrder(e.target.value)}><option value="newest">최신순</option><option value="oldest">오래된순</option><option value="amount">금액순</option></select></div>
     <div className="month-filter" aria-label="거래 월"><button aria-pressed={!month} onClick={()=>{setMonth("");setSelected([]);}}>전체</button>{Array.from({length:12},(_,i)=>String(i+1)).map(m=><button key={m} aria-pressed={month===m} onClick={()=>{setMonth(m);setSelected([]);}}>{m}월</button>)}</div>
@@ -154,7 +155,7 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
     {loading ? <p className="center-note" role="status">거래를 불러오는 중입니다.</p> : <>
       {!filtered.length && !receipts.length && !monthlyVisible.length && <div className="empty-card"><strong>표시할 거래가 없어요</strong><p className="muted">신고 기간·월·상태를 바꾸거나 증빙을 추가해 주세요.</p></div>}
       {monthlyVisible.map(r=><article className="card ledger-card" key={`monthly-${r.id}`}><div className="ledger-head"><div><strong>{monthlyName(r)}</strong><small>{r.document.거래일 || "거래월 확인 필요"} · 월간 매출 정산서</small></div><strong>{monthlyAmount(r)}</strong></div>
-      <div className="ledger-meta"><span className={`status-label ${r.status === 'reviewed' ? 'status-label--done' : 'status-label--review'}`}>{r.status === 'reviewed' ? '✓ 매출 합계 반영' : '◷ 정산서 확인 필요'}</span><button type="button" className="ledger-detail-link" onClick={()=>setMonthlyDetail(r)}>거래 상세정보 <span aria-hidden>›</span></button></div></article>)}
+      <div className="ledger-meta"><span className={`status-label ${r.status === 'reviewed' ? 'status-label--done' : 'status-label--review'}`}>{r.status === 'reviewed' ? '✓ 증빙 확인 완료' : '◷ 증빙 확인 필요'}</span><button type="button" className="ledger-detail-link" onClick={()=>setMonthlyDetail(r)}>거래 상세정보 <span aria-hidden>›</span></button></div></article>)}
       {shownReceipts.map(r=><article className="card ledger-card" key={`receipt-${r.id}`}><div className="ledger-head"><div><strong>{r.vendor || "거래처 확인 필요"}</strong><small>{r.date ?? "거래일 확인 필요"}{combined && ` · ${r.direction === "sales" ? "매출" : "매입"}`}</small></div><strong>{r.amount == null ? "금액 확인 필요" : fmt.won(r.amount)}</strong></div>
       <div className="ledger-meta"><span className="status-label status-label--review">◷ 분석 대기</span><button type="button" className="ledger-detail-link" onClick={()=>{setReceiptEditing(false);setReceiptDetail(r);}}>거래 상세정보 <span aria-hidden>›</span></button></div></article>)}
       {shownRows.map(item=>{const waiting = isWaiting(item); return <article key={item.id} className="card ledger-card"><div className="ledger-head">{isSelectable(item) && <label className="ledger-selection"><input type="checkbox" aria-label={`${item.description || item.vendor} 분석 선택`} checked={visibleSelected.includes(item.id)} onChange={e=>setSelected(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/></label>}<div><strong>{item.description || item.vendor}</strong><small>{item.transaction_date}{combined && ` · ${item.direction === "sales" ? "매출" : "매입"}`}</small></div><strong>{fmt.won(item.total_amount)}</strong></div>
@@ -166,13 +167,13 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
     </>}
     {!(purchase && judgedTab) && <div className="vault-actions">{purchase && analyzeTab && <><p className="muted">{includeWaiting ? `분석 대기 ${waitingCount}건` : `다시 분석할 거래 ${visibleSelected.length}건`}</p><button className="btn btn--primary" disabled={!(waitingCount + visibleSelected.length) || busy} onClick={()=>void analyzeAll()}>{busy?"분석 준비 중":"거래 분석하기"}</button></>}<button className="btn btn--secondary" onClick={()=>navigate(`/capture?direction=${direction}`)}>＋ {purchase?"매입":"매출"} 증빙 추가</button></div>}
     <div className="section-heading utility-row"><button className="text-link" onClick={()=>navigate(`/storage/trash?direction=${direction}`)}>휴지통</button><button className="text-link" disabled={loading} onClick={()=>void refresh()}>새로고침</button></div>
-    <p className="footnote">거래 정보를 확인·확정한 후 세액 계산에 반영합니다.</p>
+    <p className="footnote">{purchase ? "거래 정보를 확인·확정한 후 세액 계산에 반영합니다." : "신고용 매출은 홈택스 매출 검증 화면에서 관리합니다."}</p>
   </main>
   {scrolled && <button className="scroll-top" aria-label="맨 위로 이동" onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}>↑</button>}
   {(deleteTarget || monthlyDelete) && <DeleteConfirmation name={monthlyDelete ? monthlyName(monthlyDelete) : deleteTarget ? deleteTarget.description || deleteTarget.vendor : ""} busy={deleting} error={deleteError} onCancel={()=>{setDeleteTarget(null);setMonthlyDelete(null);}} onConfirm={()=>void remove()} />}
   <SlidePanel open={!!monthlyDetail} label="정산서 상세" title={monthlyDetail ? monthlyName(monthlyDetail) : ""} onClose={()=>setMonthlyDetail(null)}>{monthlyDetail && <><p>{monthlyDetail.document.거래일 || "거래월 확인 필요"} · 월간 매출 정산서</p><div className="peek-amount-row"><strong className="peek-amount">{monthlyAmount(monthlyDetail)}</strong><button type="button" className="text-link" onClick={()=>navigate(`/receipts/monthly/${monthlyDetail.id}/review`)}>수정하기</button></div>
-    <p className={`status-label ${monthlyDetail.status === 'reviewed' ? 'status-label--done' : 'status-label--review'}`}>{monthlyDetail.status === 'reviewed' ? '✓ 매출 합계 반영' : '◷ 정산서 확인 필요'}</p>
-    <div className="field-row"><span>사업자등록번호</span><span>{monthlyDetail.document.사업장.사업자등록번호 ?? "확인 필요"}</span></div><div className="field-row"><span>세액 계산 반영 매출</span><span>{fmt.won(linesTotal(monthlyDetail))}</span></div>
+    <p className={`status-label ${monthlyDetail.status === 'reviewed' ? 'status-label--done' : 'status-label--review'}`}>{monthlyDetail.status === 'reviewed' ? '✓ 증빙 확인 완료' : '◷ 증빙 확인 필요'}</p>
+    <div className="field-row"><span>사업자등록번호</span><span>{monthlyDetail.document.사업장.사업자등록번호 ?? "확인 필요"}</span></div>
     <ReceiptPreview id={monthlyDetail.id} monthly controls/>
     <button type="button" className="text-link danger" onClick={()=>{setDeleteError("");setMonthlyDelete(monthlyDetail);}}>거래 삭제</button></>}</SlidePanel>
   <SlidePanel open={!!detail} label={resultMode ? "분석 결과" : "거래 상세"} title={detail ? detail.description || detail.vendor : ""} onClose={()=>setDetail(null)}>{detail && (resultMode ? <AnalysisResult transaction={detail}/> : <><p>{detail.transaction_date} · {detail.vendor}</p><div className="peek-amount-row"><strong className="peek-amount">{fmt.won(detail.total_amount)}</strong>{detail.receipt_id && <button type="button" className="text-link" onClick={()=>setEditing(v=>!v)}>{editing ? "수정 취소" : "수정하기"}</button>}</div>

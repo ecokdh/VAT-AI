@@ -180,6 +180,7 @@ def _review_pdf_html(snapshot: dict) -> str:
         for key, label in labels.items()
     )
     notes = "".join(f"<li>{escape(str(note))}</li>" for note in snapshot.get("notes", []))
+    draft_notice = "<div class=\"notice\"><strong>초안 · 신고용 매출 집계 미확정</strong><br>출처 자료와 미해결 검토 항목을 확인한 뒤 집계를 확정해 주세요.</div>" if snapshot.get("draft") else ""
     return f"""<!doctype html><html lang="ko"><meta charset="utf-8"><style>
     body {{ font-family: sans-serif; margin: 36px; color: #20242a; }} h1 {{ font-size: 22px; }}
     .notice {{ border: 1px solid #d98b00; padding: 12px; margin: 20px 0; }}
@@ -187,7 +188,7 @@ def _review_pdf_html(snapshot: dict) -> str:
     li {{ margin: 8px 0; }}
     </style><body><h1>VAT-AI 신고 전 검토 자료</h1>
     <p>{escape(str(snapshot.get('period', '')))} · {escape(str(snapshot.get('tax_type', '')))} · 상태 {escape(str(snapshot.get('status', '')))}</p>
-    <div class="notice">이 자료는 사용자의 참고를 위한 예상치이며 세무 신고서가 아닙니다. VAT-AI는 홈택스에 자동 제출하지 않습니다.</div>
+    {draft_notice}<div class="notice">이 자료는 사용자의 참고를 위한 예상치이며 세무 신고서가 아닙니다. VAT-AI는 홈택스에 자동 제출하지 않습니다.</div>
     <table>{rows}</table><h2>검토 안내</h2><ul>{notes or '<li>추가 안내가 없습니다.</li>'}</ul></body></html>"""
 
 

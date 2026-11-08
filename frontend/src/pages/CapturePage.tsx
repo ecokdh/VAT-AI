@@ -9,11 +9,15 @@ import { enqueueReceiptOcr } from "../api/receipts";
 import { apiClient } from "../api/client";
 import { MonthlyProcessing } from "../components/MonthlySalesReview";
 import type { StageStatuses } from "../components/ProcessingTimeline";
+import { parseSalesPeriod, salesPeriodQuery } from "../hooks/salesPeriod";
 
 export function CapturePage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const direction = params.get("direction");
+  const salesPeriod = direction === "sales" ? parseSalesPeriod(params.get("period")) : undefined;
+  const periodSuffix = salesPeriod ? `?${salesPeriodQuery(salesPeriod)}` : "";
+  const backToStorage = `/storage/${direction}${periodSuffix}`;
   const fileOnly = params.get("source") === "file";
   const hasDirection = direction === "purchase" || direction === "sales";
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -159,14 +163,14 @@ export function CapturePage() {
     <div className="stack-gap-sm" style={{ marginTop: 28 }}>{(["purchase", "sales"] as const).map((value) => <button className="card capture-choice" key={value} onClick={() => setParams({ direction: value })}><Icon name="folder" size={30} /><span><strong>{value === "purchase" ? "매입" : "매출"}</strong><small>{value === "purchase" ? "사업을 위해 지출한 거래" : "고객에게 판매한 거래"}</small></span><span>›</span></button>)}</div>
   </div></div>;
 
-  if(guide!=="ready")return <div className="page qa-page"><PageHeader title="증빙 촬영 안내" onBack={()=>navigate(`/storage/${direction}`)}/>{guide==="show"?<CaptureGuide seconds={seconds}/>:<div className="page__body">{guide==="error"?<p className="banner banner--error">촬영 안내 정보를 불러오지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.</p>:<p role="status">촬영을 준비하고 있습니다.</p>}</div>}</div>;
-  if(monthly)return <MonthlyProcessing statuses={monthly.statuses} preview={preview} onDone={()=>navigate(`/receipts/monthly/${monthly.id}/review`,{replace:true})}/>;
+  if(guide!=="ready")return <div className="page qa-page"><PageHeader title="증빙 촬영 안내" onBack={()=>navigate(backToStorage)}/>{guide==="show"?<CaptureGuide seconds={seconds}/>:<div className="page__body">{guide==="error"?<p className="banner banner--error">촬영 안내 정보를 불러오지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.</p>:<p role="status">촬영을 준비하고 있습니다.</p>}</div>}</div>;
+  if(monthly)return <MonthlyProcessing statuses={monthly.statuses} preview={preview} onDone={()=>navigate(`/receipts/monthly/${monthly.id}/review${periodSuffix}`,{replace:true})}/>;
   if(pendingFile)return <div className="page qa-page"><PageHeader title="촬영한 증빙 확인" onBack={()=>setPendingFile(null)}/><main className="page__body"><h1 className="screen-title">글자가 선명하게 보이나요?</h1><p className="muted">영수증 전체가 보이고 금액·날짜를 읽을 수 있는지 확인해 주세요.</p><img className="capture-preview" src={preview} alt="분석할 증빙 미리보기"/>{error&&<p className="banner banner--error" role="alert">{error}</p>}<div className="btn-row"><button className="btn btn--secondary" disabled={isUploading} onClick={()=>{setPendingFile(null);setError("");}}>다시 촬영·선택</button><button className="btn btn--primary" disabled={isUploading} onClick={()=>void uploadAndNavigate(pendingFile)}>{isUploading?"증빙 분석 중…":"선명해요 · 분석하기"}</button></div></main></div>;
-  if(fileOnly)return <div className="page qa-page"><PageHeader title="영수증 사진 선택" onBack={()=>navigate(`/storage/${direction}`)}/><main className="page__body"><h1 className="screen-title">다른 영수증 사진을 선택해 주세요</h1><p className="muted">영수증 전체와 금액·날짜가 선명하게 보이는 사진을 선택해 주세요.</p><input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} style={{display:'none'}}/><button className="btn btn--primary" onClick={openFilePicker}>앨범 및 파일 선택</button><button className="btn btn--secondary" onClick={()=>setParams({direction:direction!})}>직접 촬영하기</button></main></div>;
+  if(fileOnly)return <div className="page qa-page"><PageHeader title="영수증 사진 선택" onBack={()=>navigate(backToStorage)}/><main className="page__body"><h1 className="screen-title">다른 영수증 사진을 선택해 주세요</h1><p className="muted">영수증 전체와 금액·날짜가 선명하게 보이는 사진을 선택해 주세요.</p><input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} style={{display:'none'}}/><button className="btn btn--primary" onClick={openFilePicker}>앨범 및 파일 선택</button><button className="btn btn--secondary" onClick={()=>setParams(previous => { const next = new URLSearchParams(previous); next.delete("source"); return next; })}>직접 촬영하기</button></main></div>;
   return (
     <div className="page capture-page" style={{ background: "#0c0c10" }}>
       <header className="page-header" style={{ background: "transparent" }}>
-        <button className="icon-btn" style={{ color: "#fff" }} aria-label="보관함으로 돌아가기" onClick={() => navigate(`/storage/${direction}`)}>
+        <button className="icon-btn" style={{ color: "#fff" }} aria-label="보관함으로 돌아가기" onClick={() => navigate(backToStorage)}>
           ‹
         </button>
         <span className="page-header__title" style={{ color: "#fff" }}>

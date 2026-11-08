@@ -132,3 +132,7 @@ class TaxEstimateOut(BaseModel):
     uncalculated_transaction_count: int
     rule_version: str
     notes: list[str]
+    sales_aggregate_id: Optional[int] = None
+    sales_aggregate_status: Optional[str] = None
+    sales_aggregate: Optional[dict] = None
+    draft: bool = False

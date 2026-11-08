@@ -13,7 +13,7 @@ from app.common.exceptions import AppException
 from app.deduction.models import Deduction
 from app.deduction.schemas import ReportItem, ReportOut
 from app.receipts.models import Receipt
-from app.sales_monthly.tax_lines import period_sales
+from app.sales_filing import service as sales_filing
 from app.vat_return.engine import (
     FIRST_HALF_PERIODS,
     PERIODS,
@@ -399,14 +399,16 @@ def cancel_analysis_run(session: Session, user_id: uuid.UUID, run_id: uuid.UUID)
 
 
 def period_transactions(session: Session, user_id: uuid.UUID, start, end, tax_profile: TaxProfileV2 | None) -> list[Transaction]:
-    """세액 계산·신고서가 함께 쓰는 '이 기간에 반영할 확정 거래'(개업일~폐업일 밖은 뺀다).
+    """세액 계산·신고서가 함께 쓰는 확정 매입 거래.
 
-    확인 저장한 월간 매출 정산서의 결제수단별 행도 매출 거래로 함께 넣는다.
+    매출 거래와 POS 월정산은 여기서 합산하지 않는다. 신고 매출은 sales_filing의
+    기간별 확정 집계 한 곳에서만 가져온다.
     """
     rows = list(
         session.exec(
             select(Transaction).where(
                 Transaction.user_id == user_id,
+                Transaction.direction == "purchase",
                 Transaction.state == "confirmed",
                 Transaction.deleted_at.is_(None),
                 Transaction.transaction_date >= start,
@@ -414,7 +416,6 @@ def period_transactions(session: Session, user_id: uuid.UUID, start, end, tax_pr
             )
         ).all()
     )
-    rows += period_sales(session, user_id, start, end)
     if tax_profile and tax_profile.business_start_date:
         rows = [row for row in rows if row.transaction_date >= tax_profile.business_start_date]
     if tax_profile and tax_profile.business_end_date:
@@ -439,7 +440,8 @@ def calculate_period_estimate(
         return {"period": period, "tax_type": tax_type, "status": "UNAVAILABLE", "output_vat": None,
                 "eligible_input_vat": None, "deemed_input_vat": None, "payable_estimate": None,
                 "included_transaction_count": 0, "caution_transaction_count": 0, "uncalculated_transaction_count": 0,
-                "rule_version": RULE_VERSION, "notes": ["2025년 거래를 조회할 수 있습니다. 현재 계산 규칙은 2026년 전용이므로 2025년 예상세액과 PDF 생성은 제공하지 않습니다."]}
+                "rule_version": RULE_VERSION, "notes": ["2025년 거래를 조회할 수 있습니다. 현재 계산 규칙은 2026년 전용이므로 2025년 예상세액과 PDF 생성은 제공하지 않습니다."],
+                "sales_aggregate_id": None, "sales_aggregate_status": None, "sales_aggregate": None, "draft": True}
     tax_profile = session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id == user.id)).first()
     if tax_profile and tax_profile.tax_type_change_date:
         change_date = tax_profile.tax_type_change_date
@@ -460,16 +462,47 @@ def calculate_period_estimate(
                 "uncalculated_transaction_count": 0,
                 "rule_version": RULE_VERSION,
                 "notes": ["과세기간 중 과세유형이 변경되어 적용 시점별 규칙 검토가 필요합니다. 자동 계산을 보류했습니다."],
+                "sales_aggregate_id": None,
+                "sales_aggregate_status": None,
+                "sales_aggregate": None,
+                "draft": True,
             }
         if change_date >= range_end and tax_profile.changed_to_tax_type:
             tax_type = "general" if tax_profile.changed_to_tax_type == "simplified" else "simplified"
         elif change_date <= range_start and tax_profile.changed_to_tax_type:
             tax_type = "general" if tax_profile.changed_to_tax_type == "general" else "simplified"
+    if tax_type != "general":
+        # Simplified taxation is outside this sales aggregation's supported scope.
+        try:
+            period_bounds(period, "simplified")
+        except ValueError as exc:
+            raise AppException(400, "UNSUPPORTED_TAX_PERIOD", str(exc)) from exc
+        return {
+            "period": period, "tax_type": tax_type, "status": "UNAVAILABLE", "output_vat": None,
+            "eligible_input_vat": None, "deemed_input_vat": None, "payable_estimate": None,
+            "included_transaction_count": 0, "caution_transaction_count": 0, "uncalculated_transaction_count": 0,
+            "rule_version": RULE_VERSION, "notes": ["매출 집계는 일반과세자 1사업장만 지원합니다. 간이과세 신고는 검토가 필요합니다."],
+            "sales_aggregate_id": None, "sales_aggregate_status": "검토 필요", "sales_aggregate": None, "draft": True,
+        }
     try:
         start, end = period_bounds(period, tax_type)
     except ValueError as exc:
         raise AppException(400, "UNSUPPORTED_TAX_PERIOD", str(exc)) from exc
     rows = period_transactions(session, user.id, start, end, tax_profile)
+    sales_case = sales_filing.refresh(session, user, period)
+    sales_aggregate = json.loads(sales_case.aggregate_json or "{}")
+    sales_lines: list[TaxLine] = []
+    if sales_case.status == "확정":
+        for line_number, evidence_type in ((1, "tax_invoice"), (3, "card_receipt"), (4, "other")):
+            amounts = sales_aggregate.get("lines", {}).get(str(line_number), {})
+            if not amounts or not amounts.get("supply_amount"):
+                continue
+            sales_lines.append(TaxLine(
+                direction="sales", state="confirmed", review_status="analyzed", risk_level="SAFE",
+                transaction_date=start, total_amount=amounts["total_amount"],
+                supply_amount=amounts["supply_amount"], vat_amount=amounts["vat_amount"],
+                tax_treatment="standard", evidence_type=evidence_type,
+            ))
     deemed_sales_fact = None
     if tax_profile and tax_profile.confirmed_at:
         deemed_sales_fact = tax_profile.deemed_related_taxable_sales_h1 if period in FIRST_HALF_PERIODS else tax_profile.deemed_related_taxable_sales_h2 if period in SECOND_HALF_PERIODS else None
@@ -502,9 +535,13 @@ def calculate_period_estimate(
                 deemed_input_document_type=row.deemed_input_document_type,
             )
             for row in rows
-        ],
+        ] + sales_lines,
     )
     notes = list(estimate.notes)
+    if sales_case.status != "확정":
+        questions = json.loads(sales_case.issues_json or "[]")
+        notes.append(f"신고용 매출 집계가 {sales_case.status} 상태입니다. 확인 전에는 매출세액과 납부 예상액을 표시하지 않습니다.")
+        notes.extend(item["question"] for item in questions[:5])
     if tax_profile and tax_profile.confirmed_at and tax_profile.suspension_periods_json != "[]":
         suspensions = json.loads(tax_profile.suspension_periods_json)
         if any(
@@ -515,14 +552,23 @@ def calculate_period_estimate(
     return {
         "period": period,
         "tax_type": tax_type,
-        "status": estimate.status,
-        "output_vat": estimate.output_vat,
+        "status": estimate.status if sales_case.status == "확정" else "UNAVAILABLE",
+        "output_vat": estimate.output_vat if sales_case.status == "확정" else None,
         "eligible_input_vat": estimate.eligible_input_vat,
         "deemed_input_vat": estimate.deemed_input_vat,
-        "payable_estimate": estimate.payable_estimate,
+        "payable_estimate": estimate.payable_estimate if sales_case.status == "확정" else None,
         "included_transaction_count": estimate.included_transaction_count,
         "caution_transaction_count": estimate.caution_transaction_count,
         "uncalculated_transaction_count": estimate.uncalculated_transaction_count,
         "rule_version": RULE_VERSION,
         "notes": notes,
+        "sales_aggregate_id": sales_case.id,
+        "sales_aggregate_status": sales_case.status,
+        "sales_aggregate": {
+            "revision": sales_case.revision,
+            "input_fingerprint": sales_case.input_fingerprint,
+            "lines": sales_aggregate.get("lines", {}),
+            "deduplicated_rows": sales_aggregate.get("deduplicated_rows", []),
+        },
+        "draft": sales_case.status != "확정",
     }

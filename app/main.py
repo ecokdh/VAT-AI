@@ -15,6 +15,7 @@ from app.receipts.router import router as receipts_router
 from app.transactions.router import router as transactions_v2_router
 from app.jobs.router import router as jobs_v2_router
 from app.sales_monthly.router import router as monthly_sales_router
+from app.sales_filing.router import router as sales_filing_router
 
 app = FastAPI(title="VAT-AI")
 
@@ -36,6 +37,7 @@ app.include_router(deduction_router)
 app.include_router(transactions_v2_router)
 app.include_router(jobs_v2_router)
 app.include_router(monthly_sales_router)
+app.include_router(sales_filing_router)
 app.include_router(rag_router)
 from app.team_benchmark.router import router as team_benchmark_router
 app.include_router(team_benchmark_router)

@@ -63,8 +63,9 @@ def _standard_output_vat(line: TaxLine) -> int | None:
         return 0
     if line.tax_treatment != "standard" or line.supply_amount is None:
         return None
-    # All values are whole won. Per line, 10% VAT is exact for integer supplies.
-    return line.supply_amount * STANDARD_RATE // 100
+    # A reportable sales aggregate carries the observed tax amount as well as its base.
+    # Source reconciliation verifies the 10% relation before the line reaches this engine.
+    return line.vat_amount if line.vat_amount is not None else line.supply_amount * STANDARD_RATE // 100
 
 
 def calculate_estimate(

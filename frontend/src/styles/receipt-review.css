@@ -55,3 +55,37 @@
 .review-all-button{margin-top:20px;}
 .basic-item-name{display:flex;align-items:center;gap:10px;min-width:0;}
 .basic-item-name>span{font-size:13px;color:var(--color-text-muted);min-width:16px;}
+.stored-sales-fields { margin: .5rem 0; }
+.stored-sales-fields > div {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: .5rem;
+  padding: .35rem 0;
+  border-bottom: 1px solid var(--line, #dce3ec);
+  overflow-wrap: anywhere;
+}
+.stored-sales-fields dd { margin: 0; }
+.page.receipt-review-page.sales-evidence-page { max-width: var(--page-max-width); }
+.sales-evidence-page .review-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.sales-evidence-page .review-photo { position: static; }
+.cash-sales-tools { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-block: 12px 24px; }
+.cash-sales-columns { display: grid; grid-template-columns: minmax(0, 1fr) 3.5rem minmax(0, 1.35fr); gap: 8px; padding: 12px 8px; align-items: center; }
+.cash-sales-columns > :nth-child(2) { text-align: center; }
+.cash-sales-columns > :nth-child(3) { text-align: right; }
+.cash-sales-columns > small { grid-column: 1 / -1; }
+div.cash-sales-columns { background: var(--color-surface-muted); border-radius: 12px; font-weight: 600; }
+.cash-sales-row { border-bottom: 1px solid var(--color-divider); }
+.cash-sales-row summary { min-height: 44px; cursor: pointer; position: relative; padding-right: 24px; }
+div.cash-sales-columns { padding-right: 24px; }
+.cash-sales-row summary::-webkit-details-marker { display: none; }
+.cash-sales-row summary::after { content: "⌄"; position: absolute; right: 8px; }
+.cash-sales-row[open] summary::after { transform: rotate(180deg); }
+.cash-sales-breakdown { margin: 0 0 8px; padding: 12px; background: var(--color-surface-muted); border-radius: 12px; }
+.cash-sales-breakdown > div { display: flex; justify-content: space-between; gap: 8px; }
+.cash-sales-breakdown dd { margin: 0; }
+.sales-edit-month { border-bottom: 1px solid var(--color-divider); }
+.sales-edit-month > summary, .sales-edit-entry > summary { min-height: 44px; padding: 10px 0; cursor: pointer; overflow-wrap: anywhere; }
+.sales-edit-entry { margin-inline-start: 12px; }
+.sales-edit-month .review-grid { padding-bottom: 12px; }
+.sales-detail-business { display: grid; gap: 4px; }
+.sales-detail-business small { color: var(--color-text-muted); }

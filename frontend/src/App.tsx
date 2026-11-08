@@ -11,6 +11,7 @@ import { AnalysisResultPage } from "./pages/receipts/AnalysisResultPage";
 import { PurchaseStoragePage } from "./pages/storage/PurchaseStoragePage";
 import { PurchaseTransactionStoragePage } from "./pages/storage/PurchaseTransactionStoragePage";
 import { SalesStoragePage } from "./pages/storage/SalesStoragePage";
+import { SalesFilingPage } from "./pages/storage/SalesFilingPage";
 import { TrashPage } from "./pages/storage/TrashPage";
 import { ReceiptListPage } from "./pages/storage/ReceiptListPage";
 import { ReportPage } from "./pages/reports/ReportPage";
@@ -41,7 +42,8 @@ export default function App() {
       <Route path="/analysis/:runId" element={<AnalysisResultPage />} />
       <Route path="/storage/purchase" element={<PurchaseTransactionStoragePage />} />
       <Route path="/storage/purchase-legacy" element={<PurchaseStoragePage />} />
-      <Route path="/storage/sales" element={<SalesStoragePage />} />
+      <Route path="/storage/sales" element={<SalesFilingPage />} />
+      <Route path="/storage/sales/archive" element={<SalesStoragePage />} />
       <Route path="/storage/purchase/receipts" element={<ReceiptListPage />} />
       <Route path="/storage/sales/receipts" element={<ReceiptListPage />} />
       <Route path="/storage/trash" element={<TrashPage />} />
