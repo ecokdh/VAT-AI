@@ -1,4 +1,5 @@
 import {TransactionQuestions} from "../../components/TransactionQuestions";
+import { TeamBenchmarkTab } from "../../components/TeamBenchmarkTab";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { getMe } from "../../api/auth";
@@ -141,7 +142,7 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   }
   return <div className="page qa-page"><PageHeader title={combined ? "확인할 거래" : purchase ? "매입 보관함" : "매출 보관함"} showAmountToggle /><main className="page__body">
     <p className="eyebrow muted">{purchase ? "매입 증빙 및 공제 분석" : "매출 증빙 및 거래 관리"}</p><h1 className="screen-title">{combined ? "매입·매출을 함께 확인하세요" : purchase ? "내 매입 거래를 관리하세요" : "내 매출 내역을 확인하세요"}</h1>
-    <nav className="vault-tabs" aria-label="보관함 종류"><NavLink to={`/storage/purchase?period=${period}`}>매입</NavLink><NavLink to={`/storage/sales?period=${period}`}>매출</NavLink></nav>
+    <nav className="vault-tabs" aria-label="보관함 종류"><NavLink to={`/storage/purchase?period=${period}`}>매입</NavLink><NavLink to={`/storage/sales?period=${period}`}>매출</NavLink><TeamBenchmarkTab /></nav>
     <PeriodPicker value={period} simplified={simplified} allowAll onChange={period=>updateFilters({period})}/>
     {combined && <p className="banner banner--info">홈 요약에서 선택한 매입·매출 거래를 함께 표시합니다.</p>}
     <div className="stat-grid stat-filters">{[["all","전체 거래",total],["review","확인 필요",review],["done",purchase ? "분석 완료" : "확정 거래",total-review]].map(([key,label,count]) => <button key={key} aria-pressed={status === key} onClick={() => filter(String(key))}><small>{label}</small><strong>{count}건</strong></button>)}</div>

@@ -1,0 +1,17 @@
+.monthly-sales { margin: 20px 0; padding: 20px; }
+.monthly-sales__heading h2 { margin: 4px 0 0; }
+.monthly-sales__upload { display: grid; gap: 10px; margin-top: 16px; }
+.monthly-sales__upload label { font-weight: 700; }
+.monthly-sales__upload input { max-width: 100%; }
+.monthly-sales__upload button { justify-self: start; }
+.monthly-sales__result { margin-top: 20px; }
+.monthly-sales__result h3 { margin: 22px 0 8px; font-size: 1rem; }
+.monthly-sales__fields { margin: 0; }
+.monthly-sales__fields > label { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 8px 0; border-bottom: 1px solid #e7ebf0; }
+.monthly-sales__fields span { color: #526171; }
+.monthly-sales__fields input, .monthly-sales__fields select { width: 55%; min-width: 0; padding: 8px; border: 1px solid #cbd4df; border-radius: 6px; background: #fff; text-align: right; }
+.monthly-sales__row { padding: 0 12px; margin: 8px 0; border: 1px solid #e7ebf0; border-radius: 10px; }
+.monthly-sales__image { display: block; width: 100%; max-height: 420px; object-fit: contain; margin-top: 12px; }
+.monthly-sales__list { display: grid; gap: 8px; }
+.monthly-sales__list button { text-align: left; padding: 12px; border: 1px solid #cbd4df; border-radius: 8px; background: white; }
+.monthly-sales__result > button { margin-top: 20px; }

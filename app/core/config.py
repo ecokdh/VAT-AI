@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,6 +50,13 @@ class Settings(BaseSettings):
     CLOVA_OCR_API_URL: str = ""
     CLOVA_OCR_SECRET_KEY: str = ""
     OCR_PIPELINE: str = ""
+
+    @field_validator("OCR_PIPELINE")
+    @classmethod
+    def normalize_legacy_ocr_pipeline(cls, value: str) -> str:
+        if value == "app.ocr_pipeline.luna:create_pipeline":
+            return "app.receipts.ocr.luna:create_pipeline"
+        return value
     # legacy keeps the current Luna low contract. relation_v1 is the experiment path.
     RECEIPT_STRUCTURE_PATH: str = "legacy"
 

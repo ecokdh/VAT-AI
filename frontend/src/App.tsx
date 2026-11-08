@@ -15,6 +15,7 @@ import { TrashPage } from "./pages/storage/TrashPage";
 import { ReceiptListPage } from "./pages/storage/ReceiptListPage";
 import { ReportPage } from "./pages/reports/ReportPage";
 import { BottomNav } from "./components/BottomNav";
+import { TeamBenchmarkPage } from "./pages/TeamBenchmarkPage";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { SplashScreen } from "./components/SplashScreen";
 import { AccountPage, AboutPage } from "./pages/AccountPage";
@@ -44,6 +45,7 @@ export default function App() {
       <Route path="/storage/purchase/receipts" element={<ReceiptListPage />} />
       <Route path="/storage/sales/receipts" element={<ReceiptListPage />} />
       <Route path="/storage/trash" element={<TrashPage />} />
+      <Route path="/storage/team" element={<TeamBenchmarkPage />} />
       <Route path="/reports" element={<ReportPage />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes><BottomNav /><SplashScreen /></>
