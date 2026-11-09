@@ -87,25 +87,39 @@ def empty_object(schema):
     return {name: None for name in schema["properties"]}
 
 
+def compact_header(value):
+    return re.sub(r"\s+", "", text(value))
+
+
+def header_columns(row, titles):
+    labels = list(map(compact_header, row))
+    required = list(map(compact_header, titles))
+    if all(labels.count(title) == 1 for title in required):
+        return [labels.index(title) for title in required]
+    return None
+
+
+def mapped_cells(row, columns):
+    return [row[column] if column < len(row) else None for column in columns]
+
+
 def normalize_card(rows):
-    columns = CARD
-    compact = lambda value: re.sub(r"\s+", "", text(value))
-    header = next((i for i, row in enumerate(rows[:30])
-                   if list(map(compact, row[:len(columns)])) == list(map(compact, columns))), None)
+    header = next(((index, columns) for index, row in enumerate(rows)
+                   if (columns := header_columns(row, CARD)) is not None), None)
     if header is None:
         raise invalid("승인년월이 있는 카드 월별 표를 올려 주세요. 승인분기 요약 파일은 이 입력에서 사용할 수 없습니다.")
+    header, columns = header
     base = service.LEGACY_SCHEMA["properties"]
     row_schema = service.SCHEMA["properties"]["매출증빙"]["properties"]["내역"]["items"]
     evidence = []
     totals = []
-    for sheet_line, raw in enumerate(rows[header + 1:], header + 2):
+    for sheet_line, sheet_row in enumerate(rows[header + 1:], header + 2):
+        raw = mapped_cells(sheet_row, columns)
         if not any(text(value) for value in raw):
             continue
-        if len(raw) < len(columns):
-            raise invalid(f"엑셀 {sheet_line}행의 열이 부족합니다.")
         row = {**empty_object(row_schema), **dict.fromkeys(EXTRA_FIELDS)}
         try:
-            if compact(raw[0]) == "합계":
+            if "합계" in map(compact_header, raw[:3]):
                 totals.append([amount(value, optional=True) for value in raw[3:8]])
                 continue
             seq, month, category = amount(raw[0]), text(raw[1]), text(raw[2])
@@ -115,8 +129,6 @@ def normalize_card(rows):
             row.update({"범위": "집계", "순번": seq, "일자또는월": month, "자료구분": category,
                         "원문항목": category, "결제수단": "카드", "건수": count, "합계금액": total,
                         "카드금액": card, "구매전용카드금액": purchase, "비과세금액": exempt})
-            if row["합계금액"] == 0 and (row["건수"] == 0 and row["비과세금액"] == 0):
-                row["과세구분"] = "과세"
             evidence.append(row)
         except (ValueError, OverflowError):
             raise invalid(f"엑셀 {sheet_line}행의 날짜·구분·금액 형식을 확인해 주세요.") from None
@@ -140,31 +152,47 @@ def normalize_card(rows):
 
 
 def normalize_pg(rows):
-    def compact(value):
-        return re.sub(r"\s+", "", text(value))
-
-    header = next((i for i, row in enumerate(rows[:30])
-                   if [compact(value) for value in row if text(value)] == list(map(compact, PG))
-                   and list(map(compact, row[:5])) == list(map(compact, PG))), None)
+    split = ("계", "신용카드", "기타결제수단")
+    split_titles = [*PG[:3], *split, PG[4]]
+    header = None
+    for index, raw in enumerate(rows):
+        columns = header_columns(raw, PG)
+        if columns is not None:
+            lower = mapped_cells(rows[index + 1], range(len(raw))) if index + 1 < len(rows) else []
+            if any(compact_header(value) in split for value in lower):
+                labels = [
+                    sub if compact_header(top) in {"", "매출금액"} and compact_header(sub) in split else top
+                    for top, sub in zip(raw, lower)
+                ]
+                split_columns = header_columns(labels, split_titles)
+                if split_columns is None:
+                    raise invalid("판매·결제대행의 계·신용카드·기타결제수단 열 제목을 확인해 주세요.")
+                header = (index + 2, split_columns, True)
+            else:
+                header = (index + 1, columns, False)
+            break
     if header is None:
-        raise invalid("판매(결제)대행 표에서 승인년월·건수·매출금액·대행업체 상호가 있는 5열 엑셀을 올려 주세요.")
+        raise invalid("승인년월·건수·매출금액·대행업체 상호가 있는 판매·결제대행 엑셀을 올려 주세요.")
+    first_row, columns, has_split = header
+    total_fields = ("건수", "합계금액", "카드금액", "기타결제금액") if has_split else ("건수", "합계금액")
     row_schema = service.SCHEMA["properties"]["매출증빙"]["properties"]["내역"]["items"]
     evidence, identities = [], set()
     control = None
-    for line, raw in enumerate(rows[header + 1:], header + 2):
-        if not any(map(text, raw)):
+    for line, raw in enumerate(rows[first_row:], first_row + 1):
+        cells = mapped_cells(raw, columns)
+        if not any(map(text, cells)):
             continue
         try:
-            seq, month, count, total, provider = raw[:5]
-            if any(map(text, raw[5:])):
+            seq, month, *amount_cells, provider = cells
+            amounts = tuple(map(amount, amount_cells))
+            count, total = amounts[:2]
+            if count < 0 or (has_split and total != sum(amounts[2:])):
                 raise ValueError
-            count, total = amount(count), amount(total)
-            if count < 0:
-                raise ValueError
-            if compact(seq) == "합계":
-                if control is not None or text(month) or text(provider):
+            identifiers = {compact_header(value) for value in (seq, month, provider)}
+            if "합계" in identifiers:
+                if control is not None or identifiers - {"", "합계"}:
                     raise ValueError
-                control = (count, total)
+                control = amounts
                 continue
             seq = amount(seq)
             month = month.strftime("%Y-%m") if isinstance(month, (date, datetime)) else text(month)
@@ -173,17 +201,19 @@ def normalize_pg(rows):
                 raise ValueError
         except (ValueError, OverflowError):
             raise invalid(f"엑셀 {line}행의 순번·승인년월·건수·매출금액·대행업체 상호를 확인해 주세요.") from None
-        identity = (month, compact(provider).casefold())
+        identity = (month, compact_header(provider).casefold())
         if identity in identities:
             raise invalid(f"엑셀 {line}행에 같은 승인월·대행업체가 중복됐습니다.")
         identities.add(identity)
         row = {**empty_object(row_schema), **dict.fromkeys(EXTRA_FIELDS)}
         row.update({"범위": "집계", "순번": seq, "일자또는월": month, "업체명": provider,
                     "원문항목": provider, "건수": count, "합계금액": total})
+        if has_split:
+            row.update(zip(total_fields[2:], amounts[2:]))
         evidence.append(row)
     if not evidence:
         raise invalid("가져올 판매·결제대행 월별 행이 없습니다.")
-    if control != (sum(row["건수"] for row in evidence), sum(row["합계금액"] for row in evidence)):
+    if control != tuple(sum(row[key] for row in evidence) for key in total_fields):
         raise invalid("판매·결제대행 합계행의 건수·금액을 월별 내역과 확인해 주세요.")
     base = service.LEGACY_SCHEMA["properties"]
     return {
@@ -202,7 +232,7 @@ def normalize_cash_summary(rows):
     start = end = None
     business_number = business_name = None
     control_rows = []
-    in_table = False
+    columns = None
     identities = set()
 
     def validate_totals():
@@ -233,30 +263,33 @@ def normalize_cash_summary(rows):
                         raise ValueError
                 except ValueError:
                     raise invalid("현금영수증 누계의 조회기간을 확인해 주세요.") from None
-        for index, value in enumerate(values[:-1]):
-            if value in {"사업자번호", "사업자등록번호"} and values[index + 1]:
-                business_number = values[index + 1]
-            if value == "상호" and values[index + 1]:
-                business_name = values[index + 1]
+        populated = [(index, value) for index, value in enumerate(values) if value]
+        if columns is None and section is None:
+            labels = [value for _, value in populated]
+            for label, value in zip(labels, labels[1:]):
+                if label in {"사업자번호", "사업자등록번호"}:
+                    business_number = value
+                if label == "상호":
+                    business_name = value
         if "발행내역" in compact and not compact.startswith("조회기간"):
             validate_totals()
             block = []
             section = first
-            in_table = False
+            columns = None
             continue
-        if values[:6] == CASH:
+        if [value for _, value in populated] == CASH:
             if not section:
                 raise invalid("월별 표 위에 사업자발행내역 등 발행 구역 제목을 포함해 주세요.")
-            in_table = True
+            columns = [index for index, _ in populated]
             continue
-        if not in_table:
+        if columns is None or compact.rstrip(".") == "조회된결과가없습니다":
             continue
         try:
-            cells = (*raw[:6], *(None,) * max(0, 6 - len(raw)))
+            cells = [raw[index] if index < len(raw) else None for index in columns]
             if "합계" in compact:
                 control_rows.append((compact, [amount(value, optional=True) for value in cells[1:]]))
                 continue
-            month = cells[0].strftime("%Y-%m") if isinstance(cells[0], (date, datetime)) else values[0]
+            month = cells[0].strftime("%Y-%m") if isinstance(cells[0], (date, datetime)) else text(cells[0])
             if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
                 raise ValueError
             count, total, supply, vat, fee = [amount(value, optional=index == 4) for index, value in enumerate(cells[1:])]
@@ -271,8 +304,7 @@ def normalize_cash_summary(rows):
             row = {**empty_object(row_schema), **dict.fromkeys(EXTRA_FIELDS)}
             row.update({"범위": "집계", "원문항목": section, "발행구분": section, "일자또는월": month,
                         "결제수단": "현금영수증", "건수": count, "합계금액": total,
-                        "공급가액": supply, "부가세": vat, "봉사료": fee,
-                        "과세구분": "과세" if count == total == supply == vat == fee == 0 else None})
+                        "공급가액": supply, "부가세": vat, "봉사료": fee})
             block.append(row)
             evidence.append(row)
         except (ValueError, OverflowError):
@@ -389,8 +421,64 @@ REVIEW_FIELDS = {
                      "승인번호", "발급수단", "용도구분", "거래구분", "발급결과", "원승인번호"},
     "매출세금계산서": {"작성일", "승인번호", "발급일", "전송일", "공급자사업자번호", "공급받는자사업자번호",
                   "합계금액", "공급가액", "부가세", "전자세금계산서분류", "세금계산서종류", "발급유형"},
-    "홈택스판매결제대행": {"순번", "일자또는월", "건수", "합계금액", "업체명", "결제수단"},
+    "홈택스판매결제대행": {"순번", "일자또는월", "건수", "합계금액", "카드금액", "기타결제금액", "업체명", "결제수단"},
 }
+
+
+def storage_document(document):
+    evidence = document["매출증빙"]
+    kind = evidence["문서유형"]
+    if kind == "홈택스현금영수증":
+        if evidence["기준일종류"] != "거래년월":
+            return document
+        fields = {"발행구분", "건수", "합계금액", "공급가액", "부가세", "봉사료"}
+    elif kind in {"홈택스카드", "매출세금계산서", "홈택스판매결제대행"}:
+        fields = REVIEW_FIELDS[kind]
+    else:
+        return document
+    fields = fields | {"범위", "일자또는월", "원문항목"}
+    if kind in {"홈택스카드", "홈택스현금영수증"}:
+        fields.add("결제수단")
+    elif kind == "홈택스판매결제대행":
+        fields.discard("결제수단")
+        if not any(row.get(key) is not None for row in evidence["내역"] for key in ("카드금액", "기타결제금액")):
+            fields -= {"카드금액", "기타결제금액"}
+    # Preserve values recorded by older versions even outside the current sheet layout.
+    rows = [
+        {key: value for key, value in row.items() if key in fields or value is not None}
+        for row in evidence["내역"]
+    ]
+    legacy_defaults = {
+        "거래일": None,
+        "집계합계": empty_object(service.LEGACY_SCHEMA["properties"]["집계합계"]),
+        "매출집계_유형별": [],
+        "세무조정_필수항목": empty_object(service.LEGACY_SCHEMA["properties"]["세무조정_필수항목"]),
+    }
+    return {
+        **{key: value for key, value in document.items() if key not in legacy_defaults or value != legacy_defaults[key]},
+        "매출증빙": {**evidence, "내역": rows},
+    }
+
+
+def restore_document(document):
+    if not isinstance(document, dict) or not isinstance(document.get("매출증빙"), dict):
+        return document
+    evidence = document["매출증빙"]
+    if not isinstance(evidence.get("내역"), list) or not all(isinstance(row, dict) for row in evidence["내역"]):
+        return document
+    base = service.LEGACY_SCHEMA["properties"]
+    row_schema = service.SCHEMA["properties"]["매출증빙"]["properties"]["내역"]["items"]
+    return {
+        "거래일": None,
+        "집계합계": empty_object(base["집계합계"]),
+        "매출집계_유형별": [],
+        "세무조정_필수항목": empty_object(base["세무조정_필수항목"]),
+        **document,
+        "매출증빙": {
+            **evidence,
+            "내역": [{**empty_object(row_schema), **dict.fromkeys(EXTRA_FIELDS), **row} for row in evidence["내역"]],
+        },
+    }
 
 
 def validate_review(document, original):
@@ -464,6 +552,11 @@ def validate_review(document, original):
                 row["원문항목"] = group
                 if kind == "홈택스판매결제대행" and row["결제수단"] not in PG_PAYMENTS | {None}:
                     raise ValueError
+                if kind == "홈택스판매결제대행":
+                    card, other = row.get("카드금액"), row.get("기타결제금액")
+                    if any(value is not None for value in (card, other, original_row.get("카드금액"), original_row.get("기타결제금액"))):
+                        if card is None or other is None or row["합계금액"] != card + other:
+                            reject(f"{label} 자료의 매출금액이 신용카드와 기타결제수단의 합과 다릅니다.")
                 if kind == "홈택스카드" and (row["카드금액"] is None or row["구매전용카드금액"] is None):
                     raise ValueError
             else:

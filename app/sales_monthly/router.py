@@ -29,10 +29,14 @@ def owned(session, user, document_id):
 def output(item):
     reviewed = json.loads(item.review_json)
     is_spreadsheet = item.contract_version == spreadsheet.VERSION
+    original = json.loads(item.raw_prediction_json)
+    if is_spreadsheet:
+        reviewed = spreadsheet.restore_document(reviewed)
+        original = spreadsheet.restore_document(original)
     warnings = service.prepare_review(reviewed)['warnings']
     if is_spreadsheet:
         warnings += json.loads(item.ocr_json).get("warnings", [])
-    return {'id':item.id, 'status':item.status, 'created_at':item.created_at.isoformat(), 'updated_at':item.updated_at.isoformat(), 'deleted_at':item.deleted_at.isoformat() if item.deleted_at else None, 'document':reviewed, 'raw_prediction':json.loads(item.raw_prediction_json), 'warnings':warnings, 'lines':tax_lines.row_lines(reviewed), 'file_type': 'spreadsheet' if is_spreadsheet else 'image'}
+    return {'id':item.id, 'status':item.status, 'created_at':item.created_at.isoformat(), 'updated_at':item.updated_at.isoformat(), 'deleted_at':item.deleted_at.isoformat() if item.deleted_at else None, 'document':reviewed, 'raw_prediction':original, 'warnings':warnings, 'lines':tax_lines.row_lines(reviewed), 'file_type': 'spreadsheet' if is_spreadsheet else 'image'}
 
 def listed(session, user, in_trash):
     deleted = MonthlySalesDocument.deleted_at.is_not(None) if in_trash else MonthlySalesDocument.deleted_at.is_(None)
@@ -111,7 +115,9 @@ def save_review(document_id: int, payload: ReviewInput, user: User = Depends(get
             document = {**document, '매출증빙': previous['매출증빙']}
     try:
         if item.contract_version == spreadsheet.VERSION:
-            spreadsheet.validate_review(document, json.loads(item.raw_prediction_json))
+            document = spreadsheet.restore_document(document)
+            spreadsheet.validate_review(document, spreadsheet.restore_document(json.loads(item.raw_prediction_json)))
+            document = spreadsheet.storage_document(document)
         else:
             service.validate_document(document, legacy_allowed=True)
     except (LunaFailure, KeyError, TypeError):
@@ -142,7 +148,7 @@ async def import_spreadsheet(
     mime = spreadsheet.MIME[extension]
     stored = receipt_service.storage.save(user.id, data, mime, extension)
     try:
-        serialized = json.dumps(document, ensure_ascii=False)
+        serialized = json.dumps(spreadsheet.storage_document(document), ensure_ascii=False)
         item = MonthlySalesDocument(
             user_id=user.id, image_key=stored.key, image_mime=mime, image_sha256=digest,
             raw_prediction_json=serialized, review_json=serialized,

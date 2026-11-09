@@ -29,9 +29,25 @@ type Submit = (path: string, body?: object, method?: "post" | "put") => Promise<
 const field = (data: FormData, name: string) => String(data.get(name) ?? "").trim();
 const amount = (data: FormData, name: string) => field(data, name) ? Number(field(data, name)) : null;
 
+const sourceIconPaths = {
+  hometax_card: "M3 6h18v12H3z M3 10h18 M6 14h4",
+  hometax_cash_receipt: "M5 3h14v18l-3-2-4 2-4-2-3 2z M8 8h8 M8 12h8",
+  hometax_sales_invoice: "M5 3h9l5 5v13H5z M14 3v5h5 M8 12h8 M8 16h8",
+  pg: "M3 9l2-5h14l2 5 M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z M5 14v6h14v-6",
+  unissued_sales: "M5 3h14v18H5z M8 8h8 M8 12h8 M8 16h4",
+};
+
+function SourceLabel({source, title, status, tone}: {source: Source[0]; title: string; status: string; tone?: "ready" | "review"}) {
+  return <span className="sales-source-label">
+    <span className="sales-source-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round"><path d={sourceIconPaths[source]} /></svg></span>
+    <span className="sales-source-name"><strong>{title}</strong><small className="sales-source-status" data-tone={tone}>{status}</small></span>
+  </span>;
+}
+
 function SourceForm({source, saved, docs, submit, busy, period, needsReview}: {
   source: Source; saved?: Check; docs: SavedDocument[]; submit: Submit; busy: boolean; period: SalesPeriod; needsReview: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const spreadsheetSource = source[0] === "hometax_card" ? "card" : source[0] === "hometax_cash_receipt" ? "cash" : source[0] === "hometax_sales_invoice" ? "invoice" : "pg";
   const linked = saved?.document_ids ?? [];
   const range = SALES_PERIODS[period];
@@ -48,35 +64,42 @@ function SourceForm({source, saved, docs, submit, busy, period, needsReview}: {
     });
   });
   const visible = linked.length ? docs.filter(doc => linked.includes(doc.id)) : pending ? [pending] : [];
-  return <details className="sales-source">
-    <summary><strong>{source[1]}</strong><span className={needsReview ? "sales-source__review" : undefined}>
-      {linked.length ? needsReview ? "검증 보류" : "연결됨" : pending ? "연결 전" : saved?.status === "해당 없음 확인" ? "해당 없음" : "자료 없음"}
-    </span></summary>
-    <div className="sales-source__content">
-      {visible.map(doc => {
+  const status = linked.length ? needsReview ? "검증 보류" : "연결됨" : pending ? "연결 전" : saved?.status === "해당 없음 확인" ? "해당 없음" : "자료 없음";
+  const documentPath = (doc: SavedDocument) => `/receipts/monthly/${doc.id}/review?${salesPeriodQuery(period)}${linked.includes(doc.id) ? "" : "&connect=1"}`;
+  const direct = visible.length === 1 ? visible[0] : undefined;
+  const controls = `sales-source-${source[0]}`;
+  return <section className="sales-source sales-source--row">
+    <div className="sales-source-row">
+      <SourceLabel source={source[0]} title={source[1]} status={status} tone={linked.length ? needsReview ? "review" : "ready" : undefined} />
+      <div className="sales-source-actions">
+        {direct && <Link to={documentPath(direct)}>{linked.length ? "상세 보기" : "확인하고 연결"}</Link>}
+        <button type="button" className={!linked.length && !direct ? "sales-source-upload" : undefined} aria-expanded={open} aria-controls={controls} onClick={() => setOpen(value => !value)}>
+          {open ? "닫기" : linked.length ? visible.length > 1 ? "자료 관리" : "엑셀 교체" : "엑셀 올리기"}
+        </button>
+      </div>
+    </div>
+    <div className="sales-source__content" id={controls} hidden={!open}>
+      {!direct && visible.map(doc => {
         const evidence = doc.document.매출증빙;
         const connected = linked.includes(doc.id);
         const dates = evidence?.기간시작 === range.start && evidence?.기간종료 === range.end ? range.label
           : evidence?.기간시작 && evidence.기간종료 ? `${evidence.기간시작} ~ ${evidence.기간종료}` : "조회기간 확인 전";
         return <Link className="sales-document-card" key={doc.id}
-          to={`/receipts/monthly/${doc.id}/review?${salesPeriodQuery(period)}${connected ? "" : "&connect=1"}`}>
+          to={documentPath(doc)}>
           <span className="sales-document-card__info">
             <strong>{spreadsheetSource === "invoice" ? "전자세금계산서 매출 목록" : source[1]}</strong>
             <small>{dates} · {evidence?.내역.length ?? 0}{spreadsheetSource === "invoice" ? "건" : "행"}</small>
           </span>
-          <span className="sales-document-card__action">{connected ? "상세 보기" : "확인하고 연결"} <span aria-hidden="true">›</span></span>
+          <span className="sales-document-card__action">{connected ? "상세 보기" : "확인하고 연결"}</span>
         </Link>;
       })}
-      {linked.length > 0 ? <details className="sales-source-option">
-        <summary>엑셀 교체</summary>
-        <SpreadsheetUpload source={spreadsheetSource} period={period} replacing />
-      </details> : <SpreadsheetUpload source={spreadsheetSource} period={period} replacing={false} />}
+      <SpreadsheetUpload source={spreadsheetSource} period={period} replacing={linked.length > 0} />
     {!linked.length && saved?.status !== "해당 없음 확인" && <button type="button" className="btn btn--secondary" disabled={busy}
       onClick={() => void submit(`/sources/${source[0]}`, {
         status: "해당 없음 확인", document_ids: [], reason: "사업자가 선택한 신고기간에 해당 매출이 없음을 확인함.",
       }, "put")}>해당 매출 없음</button>}
     </div>
-  </details>;
+  </section>;
 }
 
 const spreadsheetLabels = {
@@ -135,8 +158,8 @@ function UnissuedSalesForm({saved, docs, hasManualEntries, submit, busy, period}
       document_ids: data.getAll("docs").map(Number),
     }, "put");
   }
-  return <details className="sales-source">
-    <summary><strong>증빙 미발급 매출</strong><span>{label}</span></summary>
+  return <details className="sales-source sales-source--unissued">
+    <summary className="sales-source-row"><SourceLabel source="unissued_sales" title="증빙 미발급 매출" status={label} /><span className="sales-source-summary-action">내역 입력</span></summary>
     <fieldset className="sales-choices">
       <legend>이번 신고기간에 현금이나 계좌이체로 받고, 현금영수증과 세금계산서를 모두 발급하지 않은 판매가 있었나요?</legend>
       <label><input type="radio" name="unissued-answer" checked={answer === "no"} onChange={() => setAnswer("no")} /> 없어요</label>

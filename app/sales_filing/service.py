@@ -20,7 +20,7 @@ from app.business.models import BusinessProfile, TaxProfileV2
 from app.common.exceptions import AppException
 from app.sales_filing.models import SalesFilingWorkflow
 from app.sales_monthly.models import MonthlySalesDocument
-from app.sales_monthly.spreadsheet import PG_PAYMENTS
+from app.sales_monthly.spreadsheet import PG_PAYMENTS, VERSION as SPREADSHEET_VERSION, restore_document
 from app.vat_return.engine import STANDARD_RATE, period_bounds
 
 SOURCE_STATUSES = {"확인 완료", "해당 없음 확인", "자료 없음", "검토 필요"}
@@ -213,13 +213,18 @@ def _evidence_reference(row: dict[str, Any]) -> str | None:
     return None
 
 
+def _saved_document(doc: MonthlySalesDocument, raw: str) -> dict[str, Any]:
+    document = _loads(raw, {})
+    return restore_document(document) if doc.contract_version == SPREADSHEET_VERSION else document
+
+
 def _normalize_document_rows(
     *, source: str, document_id: int, doc: MonthlySalesDocument,
     check: dict[str, Any], profile: BusinessProfile | None,
     start: date, end: date, period: str, resolutions: dict[str, dict[str, Any]], issues: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     try:
-        document = _loads(doc.review_json, {})
+        document = _saved_document(doc, doc.review_json)
         evidence = document.get("매출증빙") or {}
     except AttributeError:
         document, evidence = {}, {}
@@ -281,7 +286,7 @@ def _normalize_document_rows(
         return []
 
     output: list[dict[str, Any]] = []
-    original_rows = ((_loads(doc.raw_prediction_json, {}).get("매출증빙") or {}).get("내역") or []
+    original_rows = ((_saved_document(doc, doc.raw_prediction_json).get("매출증빙") or {}).get("내역") or []
                      if doc.contract_version.startswith("hometax-spreadsheet-") else [])
     for index, raw in enumerate(rows):
         if not isinstance(raw, dict):
@@ -327,8 +332,15 @@ def _normalize_document_rows(
                     "문서 분류 또는 양수 수정세금계산서의 원거래를 확인해 주세요.",
                     source=source, documents=[document_id], row=index, impact=raw.get("합계금액")))
                 continue
-        if source == "hometax_card" and "구매전용카드금액" in raw:
-            if raw.get("자료구분") != "신용카드 자료" or raw.get("구매전용카드금액") != 0 or raw.get("비과세금액") is None:
+        card_sheet = source == "hometax_card" and "구매전용카드금액" in raw
+        if card_sheet:
+            exempt = raw.get("비과세금액")
+            if (
+                raw.get("자료구분") != "신용카드 자료"
+                or raw.get("구매전용카드금액") != 0
+                or not isinstance(exempt, int)
+                or exempt < 0
+            ):
                 issues.append(_issue("CARD_SPREADSHEET_CLASSIFICATION_REQUIRED", ref,
                     f"문서 {document_id} {index + 1}행의 카드 자료구분·구매전용카드·비과세 금액을 확인해 주세요.",
                     source=source, documents=[document_id], row=index, impact=raw.get("합계금액")))
@@ -365,7 +377,11 @@ def _normalize_document_rows(
                 issues.append(issue)
                 continue
             pg_amounts = corrected
-        if treatment not in TAXABLE_VALUES:
+        cash_summary = source == "hometax_cash_receipt" and document_basis == "거래년월"
+        cash_amounts_confirmed = cash_summary and isinstance(raw.get("부가세"), int) and (
+            raw["부가세"] != 0 or raw.get("합계금액") == raw.get("공급가액") == raw["부가세"] == 0
+        )
+        if treatment not in TAXABLE_VALUES and not ((card_sheet or cash_amounts_confirmed) and not treatment):
             issues.append(_issue("OUT_OF_SCOPE_TAX_TREATMENT", ref, f"문서 {document_id} {index + 1}행에 면세·영세율 또는 미확인 과세 구분이 있습니다. 해당 자료를 검토해 주세요.", source=source, documents=[document_id], row=index, impact=raw.get("합계금액")))
             continue
         if (raw.get("비과세금액") or 0) > 0 or (raw.get("봉사료") or 0) > 0:
@@ -409,7 +425,7 @@ def _normalize_document_rows(
             continue
         supply, vat, total = values
         card_part, other_part = raw.get("카드금액"), raw.get("기타결제금액")
-        if (card_part is not None or other_part is not None) and (card_part or 0) + (other_part or 0) != total:
+        if not pg_sheet and (card_part is not None or other_part is not None) and (card_part or 0) + (other_part or 0) != total:
             issues.append(_issue("PAYMENT_COMPONENT_MISMATCH", ref, f"문서 {document_id} {index + 1}행의 카드·기타 결제 구성액이 합계 {total:,}원과 맞는지 확인해 주세요.", source=source, documents=[document_id], row=index, impact=total))
             continue
         if vat != supply * STANDARD_RATE // 100:
@@ -812,7 +828,7 @@ def refresh(session: Session, user: User, period: str) -> SalesFilingWorkflow:
     document_observation = {
         str(document_id): {
             "sha256": doc.image_sha256,
-            "review_sha256": _fingerprint(_loads(doc.review_json, {})),
+            "review_sha256": _fingerprint(_saved_document(doc, doc.review_json)),
             "status": doc.status,
             "deleted_at": doc.deleted_at.isoformat() if doc.deleted_at else None,
             "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,

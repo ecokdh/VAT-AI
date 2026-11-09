@@ -17,11 +17,11 @@ type SalesEvidence = { 문서유형: string; 기간시작: string | null; 기간
 export type MonthlyDocument = { 사업장: Values; 거래일: string | null; 집계합계: Values; 매출집계_유형별: Values[]; 세무조정_필수항목: Values; 매출증빙?: SalesEvidence };
 const SALES_EVIDENCE_TYPES = ["홈택스카드", "홈택스현금영수증", "매출세금계산서", "매출계산서", "홈택스판매결제대행", "플랫폼정산", "기타매출장", "확인필요"];
 const EVIDENCE_AMOUNTS = new Set(["합계금액", "공급가액", "부가세", "비과세금액", "봉사료", "카드금액", "구매전용카드금액", "기타결제금액", "취소환불액", "수수료", "실입금액"]);
-const CARD_SHEET_FIELDS = ["순번", "일자또는월", "자료구분", "건수", "합계금액", "카드금액", "구매전용카드금액", "비과세금액", "과세구분"];
+const CARD_SHEET_FIELDS = ["순번", "일자또는월", "자료구분", "건수", "합계금액", "카드금액", "구매전용카드금액", "비과세금액"];
 const CASH_SHEET_FIELDS = ["일자또는월", "승인번호", "발급수단", "용도구분", "거래구분", "공급가액", "부가세", "봉사료", "합계금액", "발급결과", "원승인번호", "과세구분"];
-const CASH_SUMMARY_FIELDS = ["발행구분", "일자또는월", "건수", "합계금액", "공급가액", "부가세", "봉사료", "과세구분"];
+const CASH_SUMMARY_FIELDS = ["발행구분", "일자또는월", "건수", "합계금액", "공급가액", "부가세", "봉사료"];
 const INVOICE_SHEET_FIELDS = ["작성일", "승인번호", "발급일", "전송일", "공급자사업자번호", "공급받는자사업자번호", "합계금액", "공급가액", "부가세", "전자세금계산서분류", "세금계산서종류", "발급유형", "과세구분"];
-const PG_SHEET_LABELS: Record<string, string> = {"순번": "순번", "일자또는월": "승인년월", "건수": "건수", "합계금액": "매출금액", "업체명": "판매(결제)대행업체 상호"};
+const PG_SHEET_LABELS: Record<string, string> = {"순번": "순번", "일자또는월": "승인년월", "건수": "건수", "합계금액": "매출금액", "카드금액": "신용카드", "기타결제금액": "기타결제수단", "업체명": "판매(결제)대행업체 상호"};
 const FILING_SOURCE: Record<string, string> = {
   홈택스카드: "hometax_card", 홈택스현금영수증: "hometax_cash_receipt", 매출세금계산서: "hometax_sales_invoice",
   홈택스판매결제대행: "pg", 플랫폼정산: "pg",
@@ -239,7 +239,9 @@ export function MonthlySalesReviewPage() {
   const isCashSummary = evidence?.문서유형 === "홈택스현금영수증" && evidence.내역[0]?.범위 === "집계";
   const isInvoiceSheet = isSpreadsheet && evidence?.문서유형 === "매출세금계산서";
   const isPgSheet = isSpreadsheet && evidence?.문서유형 === "홈택스판매결제대행";
-  const sheetFields = isPgSheet ? [...Object.keys(PG_SHEET_LABELS), "과세구분", "결제수단"] : isInvoiceSheet ? INVOICE_SHEET_FIELDS : evidence?.문서유형 === "홈택스카드" ? CARD_SHEET_FIELDS : isCashSummary ? CASH_SUMMARY_FIELDS : CASH_SHEET_FIELDS;
+  const hasPgSplit = isPgSheet && stored?.raw_prediction.매출증빙?.내역.some(row => row.카드금액 != null || row.기타결제금액 != null);
+  const pgFields = Object.keys(PG_SHEET_LABELS).filter(name => hasPgSplit || (name !== "카드금액" && name !== "기타결제금액"));
+  const sheetFields = isPgSheet ? [...pgFields, "과세구분", "결제수단"] : isInvoiceSheet ? INVOICE_SHEET_FIELDS : evidence?.문서유형 === "홈택스카드" ? CARD_SHEET_FIELDS : isCashSummary ? CASH_SUMMARY_FIELDS : CASH_SHEET_FIELDS;
   const groups = Object.entries((summary?.lines ?? []).reduce<Record<string, number>>((sum, l) => ({ ...sum, [l.evidence_type]: (sum[l.evidence_type] ?? 0) + l.total_amount }), {}));
 
   if (isSpreadsheet && stored?.status === "reviewed" && !connectSource && !editingSheet && doc && evidence) {
