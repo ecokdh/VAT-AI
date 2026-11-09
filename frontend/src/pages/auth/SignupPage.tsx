@@ -9,6 +9,7 @@ import { verifyBusiness, verifyBusinessIdentity, type BusinessVerificationRespon
 
 import { TaxProfileFields, emptyTaxProfile } from "../../components/TaxProfileFields";
 import type { TaxProfileInput } from "../../api/transactions";
+import "../../styles/signup.css";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const specialCharacterPattern = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/;
@@ -243,16 +244,16 @@ export function SignupPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page signup-page">
       <PageHeader showMenu={false} title="사업자 회원가입" onBack={() => step === 1 ? navigate("/login") : setStep((step - 1) as 1 | 2)} />
       <div className="page__body">
-        <div style={{ display: "flex", justifyContent: "space-between", margin: "8px 0 20px", fontSize: 13, color: "var(--color-primary)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", margin: "0 0 12px", fontSize: 13, color: "var(--color-primary)" }}>
           <span>{step} / 3</span>
           <span>{step === 1 ? "계정 정보 입력" : step === 2 ? "사업자번호 확인" : "약관 동의"}</span>
         </div>
 
         {step === 1 && <>
-          <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.35, marginBottom: 20 }}>
+          <div style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.35, marginBottom: 14 }}>
             부가가치세 신고,<br />VAT-AI와 시작해 보세요
           </div>
           <div className="form-field"><label className="form-field__label" htmlFor="signup-nickname">닉네임</label><input id="signup-nickname" className="input" autoComplete="nickname" maxLength={20} value={nickname} onChange={e=>setNickname(e.target.value)}/><p className="form-field__hint">홈에서 사용할 이름입니다. 2~20자로 입력해 주세요.</p></div>
@@ -291,7 +292,6 @@ export function SignupPage() {
             {passwordConfirmation && passwordConfirmation !== password && <div className="form-field__hint form-field__hint--error" role="alert">비밀번호가 일치하지 않습니다.</div>}
           </div>
           <button className="btn btn--primary" onClick={nextStep} disabled={!accountStepValid}>다음</button>
-          <div className="muted" style={{ marginTop: 18, textAlign: "center", fontSize: 13 }}>이미 계정이 있으신가요? <button className="btn btn--ghost" style={{ padding: 4 }} onClick={() => navigate("/login")}>로그인하기</button></div>
         </>}
 
         {step === 2 && <>

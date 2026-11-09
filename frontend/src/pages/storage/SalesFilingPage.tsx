@@ -319,7 +319,7 @@ export function SalesFilingPage() {
         {filing.status === "확정" && <Link className="btn btn--primary" to={`/reports?period=${period}`}>신고서 보기</Link>}
       </div>
       <div className="section-heading utility-row">
-        <Link className="text-link" to={`/storage/sales/archive?${salesPeriodQuery(period)}`}>기존 증빙 보관함</Link>
+        <Link className="text-link" to="/storage/trash?direction=sales">휴지통</Link>
         <button className="text-link" disabled={busy} onClick={() => void submit("/validate")}>새로고침</button>
       </div>
     </>}

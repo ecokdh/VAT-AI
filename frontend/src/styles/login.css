@@ -7,35 +7,22 @@ body:has(.login-page) { background: #e6eefc; }
   isolation: isolate;
   background: linear-gradient(180deg, #eef4ff 0%, #e3ecfc 100%);
 }
-.login-page .page__body { position: relative; }
-
-/* 모서리 장식 원 */
-.login-orbs span {
-  position: absolute;
-  z-index: -1;
-  border-radius: 50%;
-  background: linear-gradient(145deg, #f4f8ff, #d3e1fb);
-  box-shadow: inset -6px -6px 18px rgb(255 255 255 / .8), 0 0 0 10px rgb(96 145 245 / .18), 0 18px 40px rgb(37 99 235 / .12);
-}
-.login-orbs span:nth-child(1) { width: 260px; height: 260px; top: -120px; left: -120px; }
-.login-orbs span:nth-child(2) { width: 130px; height: 130px; top: 190px; right: -70px; }
-.login-orbs span:nth-child(3) { width: 200px; height: 200px; bottom: -110px; left: -90px; }
-.login-orbs span:nth-child(4) { width: 240px; height: 240px; bottom: -130px; right: -110px; }
+.page.login-page .page__body { position: relative; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
 
 /* 로고 타일 */
-.page.login-page .auth-intro { padding: calc(56px + env(safe-area-inset-top)) 0 32px; }
+.page.login-page .auth-intro { padding: calc(32px + env(safe-area-inset-top)) 0 24px; }
 .login-logo {
-  width: 128px;
-  height: 128px;
-  margin: 0 auto 26px;
+  width: 104px;
+  height: 104px;
+  margin: 0 auto 18px;
   display: grid;
   place-items: center;
-  border-radius: 40px;
+  border-radius: 32px;
   border: 1px solid rgb(255 255 255 / .9);
   background: linear-gradient(160deg, #ffffff 0%, #e9f0fd 100%);
   box-shadow: inset 0 2px 0 #fff, inset 0 -6px 14px rgb(37 99 235 / .08), 0 22px 44px rgb(37 99 235 / .16);
 }
-.login-logo .brand-mark { width: 74px; height: 74px; filter: drop-shadow(0 8px 12px rgb(29 78 216 / .28)); }
+.login-logo .brand-mark { width: 60px; height: 60px; filter: drop-shadow(0 8px 12px rgb(29 78 216 / .28)); }
 .login-logo .brand-mark__body { fill: #2f6bf0; }
 .login-logo .brand-mark__line { fill: #fff; opacity: .55; }
 .login-logo .brand-mark__spark { fill: #bfe6ff; }
@@ -108,4 +95,16 @@ body:has(.login-page) { background: #e6eefc; }
   background: rgb(255 255 255 / .55);
   color: #1d4ed8;
   box-shadow: 0 8px 20px rgb(37 99 235 / .07);
+}
+
+/* 화면 높이가 낮은 폰(주소창 포함 기준)에서도 스크롤 없이 한 화면 */
+@media (max-height: 660px) {
+  .page.login-page .page__body { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .page.login-page .auth-intro { padding: calc(16px + env(safe-area-inset-top)) 0 14px; }
+  .login-logo { width: 72px; height: 72px; margin-bottom: 12px; border-radius: 22px; }
+  .login-logo .brand-mark { width: 42px; height: 42px; }
+  .login-wordmark { width: 150px; }
+  .login-page .auth-description { margin-top: 10px; }
+  .login-page .login-field .input, .login-page .login-submit, .login-page .btn--ghost { min-height: 52px; }
+  .login-page .auth-preferences { margin-bottom: 12px; }
 }

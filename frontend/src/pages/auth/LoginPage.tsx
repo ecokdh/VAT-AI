@@ -51,7 +51,6 @@ export function LoginPage() {
 
   return (
     <div className="page auth-page login-page">
-      <div className="login-orbs" aria-hidden="true"><span /><span /><span /><span /></div>
       {showLoading && <LoginLoadingScreen />}
       <div className="page__body">
         <div className="auth-intro">

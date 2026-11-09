@@ -1,0 +1,34 @@
+/* 홈 — 모바일 한 화면에 들어가도록 간격 축소 */
+.page.dashboard-page .page-header { min-height: 56px; padding-top: calc(6px + env(safe-area-inset-top)); padding-bottom: 6px; }
+.page.dashboard-page .page-header .icon-btn { width: 44px; height: 44px; }
+.page.dashboard-page .business-name { margin: 2px 0; font-size: 17px; }
+.page.dashboard-page .period-picker { margin: 4px 0 8px; }
+.page.dashboard-page .period-trigger { min-height: 38px; padding: 6px 14px; }
+.page.dashboard-page .review-hero { margin-bottom: 10px; }
+.page.dashboard-page .hero-amount { margin: 2px 0 16px; font-size: 34px; }
+.page.dashboard-page .hero-caption { margin-bottom: 6px; }
+.page.dashboard-page .hero-secondary { padding: 10px 16px; }
+.page.dashboard-page .hero-secondary strong { font-size: 17px; }
+.page.dashboard-page .readiness { padding: 0 16px 10px; }
+.page.dashboard-page .readiness .section-heading { padding-top: 8px; }
+.page.dashboard-page .readiness-track { margin: 8px 0 6px; }
+.page.dashboard-page .overview-card { margin-bottom: 10px !important; }
+.page.dashboard-page .stat-grid { padding: 8px 0 0; }
+.page.dashboard-page .summary-filters button { min-height: 60px; padding: 8px 4px; }
+.page.dashboard-page .summary-filters button strong { font-size: 22px; }
+.page.dashboard-page .summary-filters button small { margin-top: 2px; }
+.page.dashboard-page .page__body > .btn--primary { min-height: 48px; padding-top: 11px; padding-bottom: 11px; }
+
+/* 화면에 남는 세로 공간을 카드 사이 간격으로 고르게 나눈다 */
+.page.dashboard-page .page__body { display: flex; flex-direction: column; padding-bottom: 16px; }
+.page.dashboard-page .review-hero,
+.page.dashboard-page .page__body > .btn--primary { margin-top: auto; }
+.page.dashboard-page .overview-card { margin-top: auto !important; } /* fintech.css의 margin !important를 덮어쓴다 */
+
+/* 화면 높이가 낮은 폰(주소창 포함 기준): 보조 문구를 숨겨 한 화면에 */
+@media (max-height: 740px) {
+  .page.dashboard-page .period-picker > .form-field__label,
+  .page.dashboard-page .hero-caption,
+  .page.dashboard-page .readiness p,
+  .page.dashboard-page .page__body > .footnote { display: none; }
+}

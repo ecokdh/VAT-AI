@@ -6,7 +6,7 @@ const INTERVALS: Record<string, [number, number, string]> = {
  Q3:[7,9,"3분기 (7~9월)"], H2:[7,12,"2기 확정 (7~12월)"], YEAR:[1,12,"연간 (1~12월)"],
 };
 export const isPeriod = (value: string | null): value is string => !!value && /^(2025|2026)-(Q1|H1|Q3|H2|YEAR)$/.test(value);
-export const periodOptions = (simplified: boolean) => [2026,2025].flatMap(year => (simplified ? ["YEAR"] : ["Q1","H1","Q3","H2"]).map(part=>`${year}-${part}`));
+export const periodOptions = (simplified: boolean) => [2026,2025].flatMap(year => (simplified ? ["YEAR"] : ["H1","H2"]).map(part=>`${year}-${part}`));
 export const defaultPeriod = () => new Date().getMonth() < 6 ? "2026-H1" : "2026-H2";
 export const periodLabel = (period: string) => isPeriod(period) ? `${period.slice(0,4)}년 ${INTERVALS[period.slice(5)][2]}` : period;
 export const inPeriod = (date: string | null, period: string) => {

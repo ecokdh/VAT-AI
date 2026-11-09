@@ -1,0 +1,22 @@
+/* 회원가입 — 모바일 한 화면에 들어가도록 간격 축소 */
+.page.signup-page .page-header { min-height: 64px; padding-top: calc(8px + env(safe-area-inset-top)); padding-bottom: 8px; }
+.page.signup-page .page-header .icon-btn { width: 44px; height: 44px; }
+.page.signup-page .page__body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+.page.signup-page .form-field { margin-bottom: 12px; }
+.page.signup-page .form-field__label { margin-bottom: 6px; }
+.page.signup-page .form-field__hint { margin-top: 4px; }
+.page.signup-page .input { min-height: 48px; padding-top: 11px; padding-bottom: 11px; }
+.page.signup-page .btn--sm { min-height: 48px; }
+.page.signup-page .btn--primary { min-height: 50px; padding-top: 12px; padding-bottom: 12px; }
+
+/* 화면 높이가 낮은 폰(주소창 포함 기준)에서도 스크롤 없이 한 화면 */
+@media (max-height: 620px) {
+  .page.signup-page .page-header { min-height: 52px; padding-top: calc(4px + env(safe-area-inset-top)); padding-bottom: 4px; }
+  .page.signup-page .page-header .icon-btn { width: 40px; height: 40px; }
+  .page.signup-page .page__body { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .page.signup-page .form-field { margin-bottom: 8px; }
+  .page.signup-page .form-field__label { margin-bottom: 4px; }
+  .page.signup-page .input { min-height: 42px; padding-top: 8px; padding-bottom: 8px; }
+  .page.signup-page .btn--sm { min-height: 42px; }
+  .page.signup-page .btn--primary { min-height: 46px; padding-top: 10px; padding-bottom: 10px; }
+}

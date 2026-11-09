@@ -7,6 +7,7 @@ import { AccountMenu } from "../components/AccountMenu";
 import { ProfilePhoto } from "../components/ProfileAvatar";
 import { BrandWordmark } from "../components/BrandMark";
 import { Icon } from "../components/Icon";
+import "../styles/dashboard.css";
 
 export function DashboardPage() {
  const navigate=useNavigate(); const fmt=useMaskedFormat(); const view=useReviewOverview();

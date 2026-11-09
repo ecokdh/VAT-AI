@@ -37,6 +37,7 @@ a {
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh; /* 모바일 주소창을 뺀 실제 화면 높이 */
 }
 
 @keyframes spin {
