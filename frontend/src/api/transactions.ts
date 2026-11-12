@@ -44,6 +44,7 @@ export interface TaxEstimateApi {
   caution_transaction_count: number;
   uncalculated_transaction_count: number;
   notes: string[];
+  sales_aggregate_status?: string | null;
 }
 
 export interface TaxProfileApi {

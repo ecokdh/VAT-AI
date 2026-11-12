@@ -47,7 +47,8 @@ export function ReportPage() {
   const [reviewedKey,setReviewedKey]=useState("");
   const reviewKey=JSON.stringify([period,estimate,view.readiness,view.transactions]);
   const reviewed=reviewedKey===reviewKey;
-  const canGenerate=!view.loading&&!view.error&&reviewed;
+  const salesFinalized = estimate?.sales_aggregate_status === "확정";
+  const canGenerate = !view.loading && !view.error && reviewed && salesFinalized && estimate?.status !== "UNAVAILABLE";
   const setReviewed=(value:boolean)=>setReviewedKey(value?reviewKey:"");
   const [returnBusy,setReturnBusy]=useState(false);
   const [returnResult,setReturnResult]=useState<VatReturnResult|null>(null);
@@ -74,7 +75,7 @@ export function ReportPage() {
       const job = await waitForJob(await createVatReturnJob(period), 240);
       if (job.status === "FAILED") throw new Error(job.error_message ?? "신고서 생성에 실패했습니다.");
       if (job.status !== "COMPLETED" || !job.result_json) { setPdfMessage("작업은 계속 처리 중입니다. 잠시 후 다시 시도해 주세요."); return; }
-      saveBlob(await downloadPdfJob(job.id), `부가세신고서-${period}.pdf`);
+      saveBlob(await downloadPdfJob(job.id), `부가세신고서-${periodLabel(period)}.pdf`);
       setReturnResult(JSON.parse(job.result_json));
       setPdfMessage("부가세 신고서 PDF를 다운로드했습니다.");
     } catch (cause) {
@@ -89,14 +90,20 @@ export function ReportPage() {
     <label className="form-field"><span className="form-field__label">신고 대상 기간</span><select className="input" value={period} onChange={e=>{view.setPeriod(e.target.value);setReviewed(false);}}>{periodOptions(view.user?.business?.tax_type_code==="02").map(p=><option key={p} value={p}>{periodLabel(p)}</option>)}</select></label>
     {(error || view.error) && <p className="banner banner--error" role="alert">{error || view.error}</p>}
     {view.loading && <p role="status">신고 준비 상태를 불러오는 중입니다.</p>}
-    <section className="report-total"><small className="muted">예상 납부세액</small><strong>{estimate?.payable_estimate==null?"확인 필요":fmt.won(estimate.payable_estimate)}</strong><p className="muted">확정 거래 기준 · 검토를 위한 참고용 추정치</p></section>
+    <section className="report-total">
+      <small className="muted">예상 납부세액</small>
+      <strong>{view.loading?"불러오는 중":view.salesPending?"매출 확인 필요":estimate?.payable_estimate==null?"확인 필요":fmt.won(estimate.payable_estimate)}</strong>
+      <p className="muted">{!view.loading&&view.salesPending?"신고용 매출 집계가 끝나면 예상 납부세액을 계산해요.":"확정 거래 기준 · 검토를 위한 참고용 추정치"}</p>
+    </section>
     {estimate ? <details className="card"><summary>계산 내역 자세히 보기</summary>{[["매출세액",estimate.output_vat],["일반 매입 공제액",estimate.eligible_input_vat],["의제매입 공제액",estimate.deemed_input_vat]].map(([label,value])=><div className="field-row" key={String(label)}><span>{label}</span><strong>{value==null?"확인 필요":fmt.won(Number(value))}</strong></div>)}{estimate.notes.map(note=><p className="muted" key={note}>{note}</p>)}</details> : <button className="banner banner--warning" onClick={()=>navigate("/account")}>사업자 과세유형 및 설정을 확인해 주세요 ›</button>}
     {isFinalPeriod(period) && <PreliminaryNoticeTaxField key={period} period={period} />}
     <section className="card overview-card"><h2 className="section-title">신고 준비 현황</h2><div className="stat-grid">{[["공제",view.readiness?.deductible??0],["불공제",view.readiness?.nondeductible??0],["확인 필요",view.unconfirmed+view.pending]].map(([label,count])=><div key={label}><strong>{count}</strong><small>{label}</small></div>)}</div><div className="action-list"><button onClick={()=>go(`/storage/${view.firstDirection}?status=review`)}><span><strong>미확정 거래 {view.unconfirmed}건</strong><small>OCR 결과와 거래 정보를 확인해요</small></span><span>›</span></button><button onClick={()=>go("/storage/purchase?status=review")}><span><strong>확인 필요 {view.pending}건</strong><small>분석 전·판단 보류 거래를 확인해요</small></span><span>›</span></button></div></section>
     <section className="card review-checklist"><h2 className="section-title">신고 전 체크리스트</h2>
-      {([["business","사업자정보·과세유형 확인","/account"],["transactions","매입·매출 거래 확정",`/storage/${view.firstDirection}?status=review`],["deductions","공제·불공제 판단 확인","/storage/purchase?status=review"],["estimate","예상세액 계산 완료",null]] as const).map(([key,label,path])=><div className="checklist-row" key={key}><span className={view.readiness?.checks[key]?"status-label--done":"muted"}>{view.readiness?.checks[key]?"✓":"○"} {label}</span>{!view.readiness?.checks[key]&&path&&<button className="text-link" onClick={()=>go(path)}>확인하기</button>}</div>)}
+      {([["business","사업자정보·과세유형 확인","/account"],["transactions","등록한 거래 확정",`/storage/${view.firstDirection}?status=review`],["deductions","공제·불공제 판단 확인","/storage/purchase?status=review"],["estimate","예상세액 계산 완료",null]] as const).map(([key,label,path])=><div className="checklist-row" key={key}><span className={view.readiness?.checks[key]?"status-label--done":"muted"}>{view.readiness?.checks[key]?"✓":"○"} {label}</span>{!view.readiness?.checks[key]&&path&&<button className="text-link" onClick={()=>go(path)}>확인하기</button>}</div>)}
       <label className="check-row"><input type="checkbox" checked={reviewed} disabled={view.loading} onChange={e=>setReviewed(e.target.checked)}/>예상세액 및 계산 근거를 검토했습니다.</label>
-      {!canGenerate&&<p className="footnote">검토 확인에 체크하면 PDF 생성 버튼이 활성화됩니다.</p>}
+      {salesFinalized && !reviewed && <p className="footnote">계산 근거를 검토한 뒤 PDF를 만들 수 있습니다.</p>}
+      {!view.loading && !salesFinalized && /^2026-H[12]$/.test(period) && <p className="footnote">이 기간의 신고용 매출이 확정되면 PDF를 만들 수 있습니다.</p>}
+      {!view.loading && !salesFinalized && !/^2026-H[12]$/.test(period) && <p className="footnote">신고서 생성은 2026년 반기별 일반과세 신고를 지원합니다.</p>}
     </section>
     <button className="btn btn--primary" disabled={returnBusy || !canGenerate} onClick={()=>void createVatReturn()}>{returnBusy?"신고서 만드는 중…":"부가세 신고서 PDF 생성"}</button>{pdfMessage && <p role="status">{pdfMessage}</p>}
     {returnResult && <section className="card vat-return-result" role="status">

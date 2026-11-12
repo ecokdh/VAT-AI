@@ -73,5 +73,13 @@ class Settings(BaseSettings):
     MAX_IMAGE_PIXELS: int = 25_000_000
     CLOVA_TIMEOUT_SECONDS: float = 10.0
 
+    def openai_key(self) -> str:
+        if self.OPENAI_API_KEY or not self.LUNA_API_KEY_FILE:
+            return self.OPENAI_API_KEY
+
+        from dotenv import dotenv_values
+
+        return dotenv_values(self.LUNA_API_KEY_FILE).get("OPENAI_API_KEY") or ""
+
 
 settings = Settings()

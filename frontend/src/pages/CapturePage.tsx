@@ -10,6 +10,7 @@ import { apiClient } from "../api/client";
 import { MonthlyProcessing } from "../components/MonthlySalesReview";
 import type { StageStatuses } from "../components/ProcessingTimeline";
 import { parseSalesPeriod, salesPeriodQuery } from "../hooks/salesPeriod";
+import { withPeriod } from "../hooks/navigation";
 
 export function CapturePage() {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ export function CapturePage() {
   const direction = params.get("direction");
   const salesPeriod = direction === "sales" ? parseSalesPeriod(params.get("period")) : undefined;
   const periodSuffix = salesPeriod ? `?${salesPeriodQuery(salesPeriod)}` : "";
-  const backToStorage = `/storage/${direction}${periodSuffix}`;
+  const backToStorage = salesPeriod ? `/storage/${direction}${periodSuffix}` : withPeriod(`/storage/${direction}`, params.get("period"));
   const fileOnly = params.get("source") === "file";
   const hasDirection = direction === "purchase" || direction === "sales";
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -104,7 +105,7 @@ export function CapturePage() {
         return;
       }
       const receipt = await enqueueReceiptOcr(file, direction);
-      navigate(`/receipts/${receipt.receipt_id}/processing`, { replace: true });
+      navigate(withPeriod(`/receipts/${receipt.receipt_id}/processing`, params.get("period")), { replace: true });
     } catch (requestError) {
       setMonthly(null);
       const message = isAxiosError(requestError)
@@ -160,7 +161,7 @@ export function CapturePage() {
 
   if (!hasDirection) return <div className="page"><PageHeader title="증빙 등록" /><div className="page__body">
     <h1 className="screen-title">어떤 거래의 증빙인가요?</h1><p className="muted">보관할 곳을 선택한 뒤 촬영하거나 파일을 올려주세요.</p>
-    <div className="stack-gap-sm" style={{ marginTop: 28 }}>{(["purchase", "sales"] as const).map((value) => <button className="card capture-choice" key={value} onClick={() => setParams({ direction: value })}><Icon name="folder" size={30} /><span><strong>{value === "purchase" ? "매입" : "매출"}</strong><small>{value === "purchase" ? "사업을 위해 지출한 거래" : "고객에게 판매한 거래"}</small></span><span>›</span></button>)}</div>
+    <div className="stack-gap-sm" style={{ marginTop: 28 }}>{(["purchase", "sales"] as const).map((value) => <button className="card capture-choice" key={value} onClick={() => setParams(previous => { const next = new URLSearchParams(previous); next.set("direction", value); return next; })}><Icon name="folder" size={30} /><span><strong>{value === "purchase" ? "매입" : "매출"}</strong><small>{value === "purchase" ? "사업을 위해 지출한 거래" : "고객에게 판매한 거래"}</small></span><span>›</span></button>)}</div>
   </div></div>;
 
   if(guide!=="ready")return <div className="page qa-page"><PageHeader title="증빙 촬영 안내" onBack={()=>navigate(backToStorage)}/>{guide==="show"?<CaptureGuide seconds={seconds}/>:<div className="page__body">{guide==="error"?<p className="banner banner--error">촬영 안내 정보를 불러오지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.</p>:<p role="status">촬영을 준비하고 있습니다.</p>}</div>}</div>;

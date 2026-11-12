@@ -18,7 +18,7 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
     try:
         from openai import OpenAI
 
-        response = OpenAI(api_key=settings.OPENAI_API_KEY).embeddings.create(
+        response = OpenAI(api_key=settings.openai_key()).embeddings.create(
             model=settings.EMBEDDING_MODEL,
             input=texts,
         )

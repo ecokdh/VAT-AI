@@ -10,6 +10,7 @@ import { useMaskedFormat } from "../../hooks/useMaskedFormat";
 import { inPeriod, isPeriod, needsReview } from "../../hooks/useReviewOverview";
 import { filterLedger, matchesReviewStatus, reviewLabel, reviewStatusClass } from "../../hooks/reviewState";
 import { parseSalesPeriod } from "../../hooks/salesPeriod";
+import { withPeriod } from "../../hooks/navigation";
 import { AnalysisResult } from "../../components/AnalysisResult";
 import { PeriodPicker } from "../../components/PeriodPicker";
 import { PageHeader } from "../../components/PageHeader";
@@ -37,7 +38,7 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   const [monthly, setMonthly] = useState<SavedDocument[]>([]);
   const [simplified, setSimplified] = useState(false);
   const requestedPeriod = params.get("period");
-  const validPeriod = isPeriod(requestedPeriod) ? requestedPeriod : (!purchase && parseSalesPeriod(requestedPeriod)) || "all";
+  const validPeriod = isPeriod(requestedPeriod) ? requestedPeriod : parseSalesPeriod(requestedPeriod) ?? "all";
   const period = simplified && validPeriod !== "all" ? `${validPeriod.slice(0,4)}-YEAR` : validPeriod;
   const [month, setMonth] = useState("");
   const [order, setOrder] = useState("newest");
@@ -78,7 +79,7 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
     try {
       const [rows, receipts, monthlyDocs] = await Promise.all([combined ? Promise.all([listTransactions("purchase"),listTransactions("sales")]).then(groups=>groups.flat()) : listTransactions(direction), listReceiptInbox(), direction === 'sales' ? apiClient.get<SavedDocument[]>('/sales/monthly').then(r=>r.data) : Promise.resolve([])]);
       if(run !== refreshRun.current) return;
-      setTransactions(rows); setInbox(receipts.filter(r => combined || r.direction === direction)); setMonthly(monthlyDocs);
+      setTransactions(rows); setInbox(receipts.filter(r => combined || r.direction === direction)); setMonthly(monthlyDocs.filter(doc => doc.file_type !== "spreadsheet"));
       setSelected(ids => ids.filter(id => rows.some(r => r.id === id)));
     } catch { if(run === refreshRun.current) setMessage("거래를 불러오지 못했습니다. 다시 시도해 주세요."); }
     finally { if(run === refreshRun.current) setLoading(false); }
@@ -88,8 +89,8 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   useEffect(() => { const scroll = () => setScrolled(window.scrollY > 300); window.addEventListener("scroll", scroll); return () => window.removeEventListener("scroll", scroll); }, []);
   const periodRows = transactions.filter(r => period === "all" || inPeriod(r.transaction_date, period));
   const periodInbox = inbox.filter(r => period === "all" || !r.date || inPeriod(r.date, period));
-  const periodMonthly=monthly.filter(r=>{const m=r.document.거래일;return period==='all'||!m||(/^\d{4}-\d{2}$/.test(m)&&inPeriod(`${m}-01`,period));});
-  // 확인 저장한 정산서(reviewed)는 매출 합계에 들어가고, 저장 전 정산서만 확인 필요로 센다.
+  const periodMonthly=monthly.filter(r=>{const m=r.document.거래일;return period==='all'||!m||inPeriod(/^\d{4}-\d{2}$/.test(m) ? `${m}-01` : m,period);});
+  // 검토 전 증빙만 확인 필요로 센다.
   const reviewedMonthly = periodMonthly.filter(r=>r.status === 'reviewed');
   const review = periodRows.filter(needsReview).length + periodInbox.length + periodMonthly.length - reviewedMonthly.length;
   const total = periodRows.length + periodInbox.length + periodMonthly.length;
@@ -120,7 +121,7 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
     const note = failed.length ? `${failed.join(", ")}은(는) 거래 정보를 확인할 수 없어 분석에서 제외했습니다.` : "";
     try {
       if (!unique.length) { await refresh(); setMessage(note || "분석할 거래가 없습니다."); return; }
-      const run = await createAnalysisRun(unique); navigate(`/analysis/${run.id}`, { state: { from: location.pathname + location.search } });
+      const run = await createAnalysisRun(unique); navigate(withPeriod(`/analysis/${run.id}`, period), { state: { from: withPeriod(location.pathname + location.search, period) } });
     } catch { setMessage("분석 작업을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요."); }
     finally { setBusy(false); }
   }
@@ -165,8 +166,8 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
       </article>;})}
       {hiddenCount > 0 && <button type="button" className="btn btn--secondary view-all" onClick={()=>navigate(`/storage/${direction}/receipts?${new URLSearchParams({ period, month, status, order })}`)}>전체 보기 ({receipts.length + filtered.length}건)</button>}
     </>}
-    {!(purchase && judgedTab) && <div className="vault-actions">{purchase && analyzeTab && <><p className="muted">{includeWaiting ? `분석 대기 ${waitingCount}건` : `다시 분석할 거래 ${visibleSelected.length}건`}</p><button className="btn btn--primary" disabled={!(waitingCount + visibleSelected.length) || busy} onClick={()=>void analyzeAll()}>{busy?"분석 준비 중":"거래 분석하기"}</button></>}<button className="btn btn--secondary" onClick={()=>navigate(`/capture?direction=${direction}`)}>＋ {purchase?"매입":"매출"} 증빙 추가</button></div>}
-    <div className="section-heading utility-row"><button className="text-link" onClick={()=>navigate(`/storage/trash?direction=${direction}`)}>휴지통</button><button className="text-link" disabled={loading} onClick={()=>void refresh()}>새로고침</button></div>
+    {!(purchase && judgedTab) && <div className="vault-actions">{purchase && analyzeTab && <><p className="muted">{includeWaiting ? `분석 대기 ${waitingCount}건` : `다시 분석할 거래 ${visibleSelected.length}건`}</p><button className="btn btn--primary" disabled={!(waitingCount + visibleSelected.length) || busy} onClick={()=>void analyzeAll()}>{busy?"분석 준비 중":"거래 분석하기"}</button></>}<button className="btn btn--secondary" onClick={()=>navigate(withPeriod(`/capture?direction=${direction}`, period))}>＋ {purchase?"매입":"매출"} 증빙 추가</button></div>}
+    <div className="section-heading utility-row"><button className="text-link" onClick={()=>navigate(withPeriod(`/storage/trash?direction=${direction}`, period))}>휴지통</button><button className="text-link" disabled={loading} onClick={()=>void refresh()}>새로고침</button></div>
     <p className="footnote">{purchase ? "거래 정보를 확인·확정한 후 세액 계산에 반영합니다." : "신고용 매출은 홈택스 매출 검증 화면에서 관리합니다."}</p>
   </main>
   {scrolled && <button className="scroll-top" aria-label="맨 위로 이동" onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}>↑</button>}

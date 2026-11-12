@@ -77,7 +77,7 @@ def judge_with_laws(
 
     from app.core.config import settings
 
-    response = OpenAI(api_key=settings.OPENAI_API_KEY).responses.parse(
+    response = OpenAI(api_key=settings.openai_key()).responses.parse(
         model=MODEL_NAME,
         instructions=prompts.INSTRUCTIONS,
         input=prompts.build_input(request, laws, errors),

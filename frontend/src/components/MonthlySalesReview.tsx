@@ -232,7 +232,7 @@ export function MonthlySalesReviewPage() {
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {setError("원본 엑셀을 내려받지 못했습니다.");}
   }
-  function retake() { if (!dirty || window.confirm("수정한 내용이 아직 저장되지 않았습니다. 다시 촬영할까요?")) navigate("/capture?direction=sales"); }
+  function retake() { if (!dirty || window.confirm("수정한 내용이 아직 저장되지 않았습니다. 다시 촬영할까요?")) navigate(`/capture?direction=sales${period ? `&${salesPeriodQuery(period)}` : ""}`); }
 
   const rows = doc?.매출집계_유형별 ?? [];
   const evidence = doc?.매출증빙;
@@ -378,7 +378,7 @@ export function MonthlySalesReviewPage() {
                 {!!summary?.excluded_count && <p className="muted">과세구분이 비어 있는 {summary.excluded_count}개 결제수단은 계산에서 빠집니다.</p>}
                 {summary?.lines.some(l => l.supply_estimated) && <p className="muted">공급가액이 인쇄되지 않은 과세 매출은 합계금액 × 100/110으로 계산했습니다.</p>}
                 {summary && !summary.lines.length && <p className="muted">합계금액이 있는 결제수단이 없어 반영할 매출이 없습니다.</p>}
-                <p className="muted">저장하면 이 금액이 매출세액과 신고서에 들어갑니다.</p>
+                <p className="muted">저장한 증빙은 매출 보관함에서 확인할 수 있습니다. 신고서는 해당 기간의 확정 매출을 사용합니다.</p>
               </section>
             </>}
             {detailed && <><button type="button" className="text-link" onClick={() => setSearch({})}>← 기본 정보로 돌아가기</button>

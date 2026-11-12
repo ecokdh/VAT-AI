@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { cancelAnalysisRun, getAnalysisRun, listTransactions, type AnalysisRunApi, type TransactionApi } from "../../api/transactions";
 import { PageHeader } from "../../components/PageHeader";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { parentRoute } from "../../hooks/navigation";
+import { parentRoute, withPeriod } from "../../hooks/navigation";
 
 type Reference = { source_id: string; title: string; locator?: string; url?: string; effective_date?: string };
 type Result = { transaction_id: number; description?: string; vendor?: string; transaction_date?: string; revision?: number; status: string; reason?: string; missing_information?: string[]; legal_references?: Reference[] };
@@ -17,6 +17,8 @@ export function AnalysisResultPage() {
   const location = useLocation();
   // 분석을 시작한 화면(보관함·전체 보기)으로 돌아간다. 직접 들어온 경우엔 매입 보관함으로 간다.
   const backTo = (location.state as { from?: string } | null)?.from ?? parentRoute(location.pathname, location.search);
+  const period = new URLSearchParams(location.search).get("period") ?? new URLSearchParams(backTo.split("?")[1]).get("period");
+  const purchaseVault = withPeriod("/storage/purchase", period);
   const [leaveTarget, setLeaveTarget] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
@@ -95,7 +97,7 @@ export function AnalysisResultPage() {
         })}
       </>}
     </>}
-    <button type="button" className="btn btn--secondary" style={{ marginTop: 24 }} onClick={() => leave("/storage/purchase")}>매입 보관함으로</button>
+    <button type="button" className="btn btn--secondary" style={{ marginTop: 24 }} onClick={() => leave(purchaseVault)}>매입 보관함으로</button>
   </div>
   <ConfirmDialog open={!!leaveTarget} title="분석을 그만두시겠습니까?" confirmLabel="예" cancelLabel="아니요" busy={cancelling} onCancel={() => { setLeaveTarget(null); setCancelError(""); }} onConfirm={() => void cancelAndLeave()}>
     {cancelError || "분석이 중단되고, 이번 분석 결과는 보관함에 반영되지 않습니다."}

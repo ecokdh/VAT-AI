@@ -1,3 +1,11 @@
+export function withPeriod(path: string, period: string | null) {
+  if (!period) return path;
+  const [pathname, search] = path.split("?", 2);
+  const params = new URLSearchParams(search);
+  params.set("period", period);
+  return `${pathname}?${params}`;
+}
+
 // Back follows the product hierarchy even after direct links or browser refreshes.
 export function parentRoute(pathname: string, search = "") {
   const params = new URLSearchParams(search);

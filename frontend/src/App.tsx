@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { PasswordResetPage } from "./pages/auth/PasswordResetPage";
 import { SignupPage } from "./pages/auth/SignupPage";
@@ -10,7 +10,6 @@ import { OcrExtractionReviewPage } from "./pages/receipts/OcrExtractionReviewPag
 import { AnalysisResultPage } from "./pages/receipts/AnalysisResultPage";
 import { PurchaseStoragePage } from "./pages/storage/PurchaseStoragePage";
 import { PurchaseTransactionStoragePage } from "./pages/storage/PurchaseTransactionStoragePage";
-import { SalesStoragePage } from "./pages/storage/SalesStoragePage";
 import { SalesFilingPage } from "./pages/storage/SalesFilingPage";
 import { TrashPage } from "./pages/storage/TrashPage";
 import { ReceiptListPage } from "./pages/storage/ReceiptListPage";
@@ -21,6 +20,11 @@ import { ScrollToTop } from "./components/ScrollToTop";
 import { SplashScreen } from "./components/SplashScreen";
 import { AccountPage, AboutPage } from "./pages/AccountPage";
 import { MonthlySalesReviewPage } from "./components/MonthlySalesReview";
+
+function SalesArchiveRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/storage/sales${location.search}`} replace />;
+}
 
 export default function App() {
   return (
@@ -43,7 +47,7 @@ export default function App() {
       <Route path="/storage/purchase" element={<PurchaseTransactionStoragePage />} />
       <Route path="/storage/purchase-legacy" element={<PurchaseStoragePage />} />
       <Route path="/storage/sales" element={<SalesFilingPage />} />
-      <Route path="/storage/sales/archive" element={<SalesStoragePage />} />
+      <Route path="/storage/sales/archive" element={<SalesArchiveRedirect />} />
       <Route path="/storage/purchase/receipts" element={<ReceiptListPage />} />
       <Route path="/storage/sales/receipts" element={<ReceiptListPage />} />
       <Route path="/storage/trash" element={<TrashPage />} />

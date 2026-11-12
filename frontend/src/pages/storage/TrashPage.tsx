@@ -10,6 +10,7 @@ import { ReceiptDocumentDetails } from "../../components/ReceiptDocumentDetails"
 import { SlidePanel } from "../../components/SlidePanel";
 import { linesTotal, type SavedDocument } from "../../components/MonthlySalesReview";
 import { useMaskedFormat } from "../../hooks/useMaskedFormat";
+import { withPeriod } from "../../hooks/navigation";
 
 // 휴지통 한 줄. 매입·매출 거래와 월간 매출 정산서를 같은 방식으로 복원하거나 영구 삭제한다.
 type Entry = { key: string; name: string; date: string; kind: string; amount: number; description: string;
@@ -65,7 +66,7 @@ export function TrashPage() {
     setBusy(false);
   }
 
-  return <div className="page qa-page"><PageHeader title="휴지통" showAmountToggle onBack={() => navigate(`/storage/${direction}`)} /><main className="page__body">
+  return <div className="page qa-page"><PageHeader title="휴지통" showAmountToggle onBack={() => navigate(withPeriod(`/storage/${direction}`, params.get("period")))} /><main className="page__body">
     <input className="input receipt-search" type="search" aria-label="휴지통 검색" placeholder="영수증 이름(거래처·품목)으로 검색" value={query} onChange={e => setQuery(e.target.value)} />
     <p className="muted">삭제한 거래는 예상 세액에서 제외됩니다. 복원한 매입 거래는 다시 분석해야 공제액에 반영됩니다.</p>
     {message && <p className="banner banner--info" role="status">{message}</p>}

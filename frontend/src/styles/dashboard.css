@@ -19,11 +19,7 @@
 .page.dashboard-page .summary-filters button small { margin-top: 2px; }
 .page.dashboard-page .page__body > .btn--primary { min-height: 48px; padding-top: 11px; padding-bottom: 11px; }
 
-/* 화면에 남는 세로 공간을 카드 사이 간격으로 고르게 나눈다 */
-.page.dashboard-page .page__body { display: flex; flex-direction: column; padding-bottom: 16px; }
-.page.dashboard-page .review-hero,
-.page.dashboard-page .page__body > .btn--primary { margin-top: auto; }
-.page.dashboard-page .overview-card { margin-top: auto !important; } /* fintech.css의 margin !important를 덮어쓴다 */
+.page.dashboard-page .page__body { align-content: start; padding-bottom: 16px; }
 
 /* 화면 높이가 낮은 폰(주소창 포함 기준): 보조 문구를 숨겨 한 화면에 */
 @media (max-height: 740px) {

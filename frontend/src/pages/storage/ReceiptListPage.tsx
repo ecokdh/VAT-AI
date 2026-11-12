@@ -9,6 +9,7 @@ import { SlidePanel } from "../../components/SlidePanel";
 import { filterLedger, isPeriod, matchesReviewStatus, needsReview, reviewLabel, reviewStatusClass } from "../../hooks/reviewState";
 import { AnalysisResult } from "../../components/AnalysisResult";
 import { useMaskedFormat } from "../../hooks/useMaskedFormat";
+import { withPeriod } from "../../hooks/navigation";
 
 // reanalyzeId: 추가 확인 필요(애매) 매입 거래라 다시 분석하도록 고를 수 있으면 그 거래 id.
 // analyzed: 분석이 끝난 매입 거래라 보관함처럼 분석 결과를 볼 수 있으면 그 거래.
@@ -57,7 +58,7 @@ export function ReceiptListPage() {
   async function reanalyze() {
     if (busy || !selected.length) return;
     setBusy(true); setError("");
-    try { const run = await createAnalysisRun(selected.slice(0, 100)); navigate(`/analysis/${run.id}`, { state: { from: location.pathname + location.search } }); }
+    try { const run = await createAnalysisRun(selected.slice(0, 100)); navigate(withPeriod(`/analysis/${run.id}`, filter.period), { state: { from: location.pathname + location.search } }); }
     catch { setError("분석 작업을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요."); setBusy(false); }
   }
 

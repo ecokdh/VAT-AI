@@ -24,7 +24,7 @@ export function DashboardPage() {
     <div className="section-heading"><span>예상 공제세액</span></div>
     <strong className="hero-amount">{view.loading?"불러오는 중":credit==null?"확인 필요":fmt.won(credit)}</strong>
     <p className="hero-caption">확정 거래·공제 분석 기준 · 참고용 추정치</p>
-    <div className="hero-secondary"><span>예상 납부세액</span><strong>{estimate?.payable_estimate==null?"확인 필요":fmt.won(estimate.payable_estimate)}</strong></div>
+    <div className="hero-secondary"><span>예상 납부세액</span><strong>{view.loading?"불러오는 중":view.salesPending?"매출 확인 필요":estimate?.payable_estimate==null?"확인 필요":fmt.won(estimate.payable_estimate)}</strong></div>
     <div className="readiness"><div className="section-heading"><span>신고 준비 상태</span><strong>확인 필요 {need}건</strong></div><div className="readiness-track" role="progressbar" aria-label="신고 준비 완료 비율" aria-valuemin={0} aria-valuemax={100} aria-valuenow={view.total?Math.round((view.total-need)/view.total*100):0}><span style={{width:`${view.total?(view.total-need)/view.total*100:0}%`}}/></div><p>{view.total?`${view.total}건 중 ${need}건이 확인 필요해요`:"증빙을 등록해 신고 준비를 시작해 보세요"}</p></div>
    </section>
    {view.period.startsWith("2025-")&&<p className="banner banner--info">2025년 거래 조회입니다. 현재 세액 계산은 2026년 규칙만 지원합니다.</p>}

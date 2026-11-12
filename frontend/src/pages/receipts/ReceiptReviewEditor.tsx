@@ -5,6 +5,7 @@ import { confirmReceiptExtraction, getReceipt, type ReceiptProcessingApi, type R
 import { PageHeader } from '../../components/PageHeader';
 import { ReceiptPreview } from '../../components/ReceiptPreview';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { withPeriod } from '../../hooks/navigation';
 import '../../styles/receipt-review.css';
 import {apiClient} from '../../api/client';
 
@@ -17,6 +18,12 @@ const numberOrNull = (value:string) => value.trim()==='' ? null : Number(value);
 export function OcrExtractionReviewPage() {
   const {id}=useParams(); const navigate=useNavigate();
   const [search,setSearch]=useSearchParams();const detailed=search.get('view')==='all';
+  const period=search.get('period');
+  function setDetailed(show: boolean) {
+    const params=new URLSearchParams(search);
+    if(show)params.set('view','all');else params.delete('view');
+    setSearch(params);
+  }
   const [answers,setAnswers]=useState<Record<string,string>>({});
   const [questions,setQuestions]=useState<Array<{id:string;label:string;options:Array<{value:string;label:string}>}>>([]);
   const [profileComplete,setProfileComplete]=useState(true);
@@ -64,12 +71,12 @@ export function OcrExtractionReviewPage() {
   const removeItem=(index:number)=>{setItems(v=>v.filter((_,i)=>i!==index).map(item=>({...item,parent_row:item.parent_row===null?null:item.parent_row===index?null:item.parent_row>index?item.parent_row-1:item.parent_row})));setDirty(true);};
   function money(key:string){return <label className="review-field" key={key} htmlFor={`review-${key}`}><span>{moneyLabels[key]} (원)</span><input className="input" id={`review-${key}`} type="number" step="1" inputMode="numeric" value={fields[key]??''} placeholder="미확인" onChange={e=>editField(key,e.target.value)} required={key==='payment_amount'} />{receipt?.recognition?.document?.conflicts.includes(key)&&<small>사진에서 금액을 확인해 주세요.</small>}</label>;}
   function askSave(e:FormEvent){e.preventDefault();if(receipt&&!saving)setConfirm('save');}
-  function leave(){setDirty(false);navigate(`/storage/${receipt?.direction??'purchase'}`);}
+  function leave(){setDirty(false);navigate(withPeriod(`/storage/${receipt?.direction??'purchase'}`,period));}
   async function save(){
     setConfirm(null);if(!receipt||saving)return;
     setError('');
     const amount=numberOrNull(fields.payment_amount??'');
-    if(!fields.vendor?.trim()||!date||amount===null||!Number.isSafeInteger(amount)||amount<0){setError('거래처·거래일·결제액을 확인해 주세요.');setSearch({view:'all'});return;}
+    if(!fields.vendor?.trim()||!date||amount===null||!Number.isSafeInteger(amount)||amount<0){setError('거래처·거래일·결제액을 확인해 주세요.');setDetailed(true);return;}
     const corrected:Record<string,string|number|null>={};
     textKeys.forEach(k=>corrected[k]=fields[k]?.trim()||null);
     for(const key of Object.keys(moneyLabels)){
@@ -78,7 +85,7 @@ export function OcrExtractionReviewPage() {
       corrected[key]=n;
     }
     corrected.transaction_datetime=date+(time?' '+time:'');
-    if(items.some(i=>i.source_row===undefined)){setError('기존 품목의 원본 연결을 상세 화면에서 확인해 주세요.');setSearch({view:'all'});return;}
+    if(items.some(i=>i.source_row===undefined)){setError('기존 품목의 원본 연결을 상세 화면에서 확인해 주세요.');setDetailed(true);return;}
     const converted:ReviewedItem[]=[];
     for(const [i,item] of items.entries()){
       if(!item.name.trim()){setError(`${i+1}번째 품목명을 입력하거나 해당 행을 삭제해 주세요.`);return;}
@@ -89,11 +96,11 @@ export function OcrExtractionReviewPage() {
     setSaving(true);
     try{
       await confirmReceiptExtraction(receipt.id,{vendor:fields.vendor.trim(),amount,date,document:{fields:corrected,items:converted},details:extraDetails,question_answers:answers,purpose:purpose.trim()||null,evidence_type:evidence,business_related:business==='unknown'?null:business==='yes',tax_treatment:tax});
-      setDirty(false);navigate(`/storage/${receipt.direction}`,{replace:true});
+      setDirty(false);navigate(withPeriod(`/storage/${receipt.direction}`,period),{replace:true});
     }catch(e){const message=isAxiosError(e)?e.response?.data?.error?.message:null;setError(message??'수정 내용을 저장하지 못했습니다. 입력값은 유지됩니다.');}
     finally{setSaving(false);}
   }
-  function retake(){if(!dirty||window.confirm('수정한 내용이 아직 저장되지 않았습니다. 다시 촬영할까요?'))navigate(`/capture?direction=${receipt?.direction??'purchase'}`);}
+  function retake(){if(!dirty||window.confirm('수정한 내용이 아직 저장되지 않았습니다. 다시 촬영할까요?'))navigate(withPeriod(`/capture?direction=${receipt?.direction??'purchase'}`,period));}
   return <div className="page receipt-review-page">
     <PageHeader title={detailed?"전체 정보 확인":"추출 결과 확인"} onBack={()=>setConfirm('leave')} />
     <div className="page__body review-body">
@@ -109,9 +116,9 @@ export function OcrExtractionReviewPage() {
                 <div className="review-item-numbers basic-item-numbers">{(['quantity','unit_price','line_amount'] as const).map((key,index)=><label className="review-field" key={key} htmlFor={`basic-item-${i}-${key}`}><span>{['수량','단가(원)','총 금액(원)'][index]}</span><input id={`basic-item-${i}-${key}`} type="number" step={key==='quantity'?'any':'1'} className="input" value={item[key]} placeholder="미확인" onChange={e=>editItem(i,{[key]:e.target.value})} /></label>)}</div></div>)}</div>{items.length===0&&<p className="muted">읽은 품목이 없습니다. 전체 정보에서 추가할 수 있습니다.</p>}{items.length>3&&<button type="button" className="text-link" onClick={()=>setShowAllItems(v=>!v)}>{showAllItems?'품목 접기':`나머지 ${items.length-3}개 품목 수정`}</button>}<button type="button" className="text-link" aria-expanded={showTax} onClick={()=>setShowTax(v=>!v)}>{showTax?'공급가액·부가세·할인 접기':'수량·금액·할인 수정'}</button></div>
               {showTax&&<>{money('supply_amount')}{money('vat_amount')}{money('discount_amount')}</>}
               <label className="review-field review-full"><span>발행·거래 날짜</span><input className="input" type="date" value={date} required onChange={e=>{setDate(e.target.value);setDirty(true);}}/></label>
-            </div><button type="button" className="btn btn--secondary review-all-button" onClick={()=>setSearch({view:'all'})}>전체 정보 확인</button></section>}
+            </div><button type="button" className="btn btn--secondary review-all-button" onClick={()=>setDetailed(true)}>전체 정보 확인</button></section>}
             {!detailed&&receipt.direction==='purchase'&&<section className="review-section"><h2>사용 목적 확인</h2>{!profileComplete&&<p>공제 분석에 필요한 사업 정보를 입력해 주세요. <a href="/account">사업 정보 입력</a></p>}{questionError&&<p role="alert">{questionError}</p>}{questions.map(q=><label className="review-field" key={q.id}><span>{q.label}</span><select aria-label={q.label} className="input" value={answers[q.id]??''} onChange={e=>{setAnswers(v=>q.id===questions[0]?.id?{[q.id]:e.target.value}:{...v,[q.id]:e.target.value});setDirty(true);}}><option value="">나중에 확인</option>{q.options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>)}{Object.values(answers).includes('other')&&<label className="review-field"><span>실제 사용 상황</span><textarea aria-label="실제 사용 상황" className="input review-purpose" value={answers.detail??''} maxLength={1000} placeholder="누가, 무엇을 위해 사용했는지 간단히 적어 주세요." onChange={e=>{setAnswers(v=>({...v,detail:e.target.value}));setDirty(true);}}/></label>}<p className="muted">공제 여부가 아니라 실제 사용 상황을 알려 주세요. 아직 모르면 저장 후 답변할 수 있습니다.</p></section>}
-            {detailed&&<><button type="button" className="text-link" onClick={()=>setSearch({})}>← 기본 정보로 돌아가기</button>
+            {detailed&&<><button type="button" className="text-link" onClick={()=>setDetailed(false)}>← 기본 정보로 돌아가기</button>
             <section className="review-section"><h2>거래 정보</h2><div className="review-grid">
               <label className="review-field review-full" htmlFor="review-vendor"><span>거래처</span><input id="review-vendor" className="input" value={fields.vendor??''} required maxLength={255} onChange={e=>editField('vendor',e.target.value)} /></label>
               <label className="review-field" htmlFor="review-branch"><span>지점</span><input id="review-branch" className="input" value={fields.branch??''} placeholder="미확인" maxLength={255} onChange={e=>editField('branch',e.target.value)} /></label>

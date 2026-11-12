@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { isAxiosError } from "axios";
 import { getReceipt, retryReceiptOcr, type ReceiptProcessingApi } from "../../api/receipts";
 import { ReceiptPreview } from "../../components/ReceiptPreview";
 import { RecognitionDetails } from "../../components/RecognitionDetails";
 import { ProcessingTimeline, useStageReveal } from "../../components/ProcessingTimeline";
+import { withPeriod } from "../../hooks/navigation";
 
 export function OcrProcessingPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [params] = useSearchParams();
+  const period = params.get("period");
   const [receipt, setReceipt] = useState<ReceiptProcessingApi | null>(null);
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
@@ -55,10 +58,10 @@ export function OcrProcessingPage() {
   const progress = Math.min(receipt?.processing_progress ?? 0, progressCap);
 
   useEffect(() => {
-    if (!complete || needsEdit) return;
-    const timer = window.setTimeout(() => navigate(`/receipts/${id}/review`, { replace: true }), 700);
+    if (!id || !complete || needsEdit) return;
+    const timer = window.setTimeout(() => navigate(withPeriod(`/receipts/${id}/review`, period), { replace: true }), 700);
     return () => window.clearTimeout(timer);
-  }, [complete, needsEdit, id, navigate]);
+  }, [complete, needsEdit, id, navigate, period]);
 
   async function retrySamePhoto() {
     if (!id) return;
@@ -137,10 +140,10 @@ export function OcrProcessingPage() {
 
         {unsupported && receipt && (
           <div className="stack-gap-sm" style={{ marginTop: 24 }}>
-            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}&source=file`, { replace: true })}>
+            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(withPeriod(`/capture?direction=${receipt.direction}&source=file`, period), { replace: true })}>
               다른 사진 선택
             </button>
-            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/storage/${receipt.direction}`)}>
+            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(withPeriod(`/storage/${receipt.direction}`, period))}>
               보관함으로 돌아가기
             </button>
           </div>
@@ -148,13 +151,13 @@ export function OcrProcessingPage() {
 
         {retake && receipt && (
           <div className="stack-gap-sm" style={{ marginTop: 24 }}>
-            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}`, { replace: true })}>
+            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(withPeriod(`/capture?direction=${receipt.direction}`, period), { replace: true })}>
               다시 촬영하기
             </button>
-            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}&source=file`, { replace: true })}>
+            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(withPeriod(`/capture?direction=${receipt.direction}&source=file`, period), { replace: true })}>
               다른 사진 선택
             </button>
-            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/storage/${receipt.direction}`)}>
+            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(withPeriod(`/storage/${receipt.direction}`, period))}>
               보관함으로 돌아가기
             </button>
           </div>
@@ -162,13 +165,13 @@ export function OcrProcessingPage() {
 
         {needsEdit && receipt && (
           <div className="stack-gap-sm" style={{ marginTop: 24 }}>
-            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/receipts/${id}/review`, { replace: true })}>
+            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(withPeriod(`/receipts/${id}/review`, period), { replace: true })}>
               읽은 정보 확인 · 수정
             </button>
-            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}&source=file`, { replace: true })}>
+            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(withPeriod(`/capture?direction=${receipt.direction}&source=file`, period), { replace: true })}>
               다른 사진 선택
             </button>
-            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/storage/${receipt.direction}`)}>
+            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(withPeriod(`/storage/${receipt.direction}`, period))}>
               보관함으로 돌아가기
             </button>
           </div>
@@ -181,11 +184,11 @@ export function OcrProcessingPage() {
                 {retrying ? "재분석 준비 중" : "같은 사진으로 한 번 더 분석"}
               </button>
             ) : (
-              <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}`, { replace: true })}>
+              <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(withPeriod(`/capture?direction=${receipt.direction}`, period), { replace: true })}>
                 새로 촬영하기
               </button>
             )}
-            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/storage/${receipt?.direction ?? "purchase"}`)}>
+            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(withPeriod(`/storage/${receipt?.direction ?? "purchase"}`, period))}>
               보관함으로 돌아가기
             </button>
           </div>
