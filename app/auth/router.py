@@ -47,7 +47,7 @@ def update_me(data: ProfileUpdate, current_user: User = Depends(get_current_user
     return service.get_user_out(db, current_user)
 
 
-from app.auth.schemas import PasswordResetRequest, PasswordResetConfirmation
+from app.auth.schemas import PasswordResetRequest, PasswordResetConfirmation, PasswordResetCodeVerification
 from app.auth import password_reset
 
 
@@ -59,6 +59,11 @@ def forgot_password(data: PasswordResetRequest, request: Request, db: Session = 
 @router.post("/reset-password")
 def reset_password(data: PasswordResetConfirmation, db: Session = Depends(get_session)):
     return password_reset.reset_password(db, data.token, data.password)
+
+
+@router.post("/verify-reset-code")
+def verify_reset_code(data: PasswordResetCodeVerification, db: Session = Depends(get_session)):
+    return password_reset.verify_reset_code(db, data.request_id, data.code)
 
 
 @router.post("/ocr-guide-seen", response_model=UserOut)

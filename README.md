@@ -91,6 +91,8 @@ python -m app.deduction.rag.fetch_laws     # 법령 개정 시 data/laws.json �
 
 전체 목록은 `.env.example` 참고.
 
+비밀번호 찾기의 이메일 인증 코드 흐름과 SMTP 설정은 [설정 가이드](docs/PASSWORD_RESET.md)를 참고한다.
+
 ## 테스트
 
 ```bash

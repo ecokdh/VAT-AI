@@ -11,7 +11,13 @@ class BusinessVerifyRequest(BaseModel):
 class BusinessIdentityRequest(BaseModel):
     business_number: str
     representative_name: str = PydanticField(min_length=1, max_length=100)
+    business_name: str = PydanticField(min_length=1, max_length=255)
     business_start_date: date
+
+    @field_validator("representative_name", "business_name", mode="before")
+    @classmethod
+    def trim_identity_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class BusinessVerifyResponse(BaseModel):

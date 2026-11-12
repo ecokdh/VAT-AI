@@ -35,10 +35,12 @@ def verify_business(value: str) -> BusinessVerifyResponse:
     )
 
 
-def verify_identity(value: str, name: str, start_date) -> None:
+def verify_identity(value: str, name: str, start_date, business_name: str) -> None:
     if not name.strip():
         raise AppException(400, "VALIDATION_ERROR", "대표자 이름을 입력해 주세요.")
-    nts_client.validate_identity(normalize_business_number(value), name.strip(), start_date.strftime("%Y%m%d"))
+    if not business_name.strip():
+        raise AppException(400, "VALIDATION_ERROR", "상호명을 입력해 주세요.")
+    nts_client.validate_identity(normalize_business_number(value), name.strip(), start_date.strftime("%Y%m%d"), business_name.strip())
 
 
 def save_tax_profile(session: Session, user_id, data: TaxProfileUpdate, *, commit: bool = True) -> TaxProfileV2:

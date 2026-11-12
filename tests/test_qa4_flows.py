@@ -44,11 +44,14 @@ def test_reset_is_one_time_and_revokes_previous_sessions(client, registration, m
     old_token = registered["access_token"]
     known = client.post("/auth/forgot-password", json={"email": registration["email"]})
     unknown = client.post("/auth/forgot-password", json={"email": "missing@example.com"})
-    assert known.status_code == unknown.status_code == 202
-    assert known.json() == unknown.json()
+    assert known.status_code == 202
+    assert unknown.status_code == 404
+    assert unknown.json()["error"]["code"] == "EMAIL_NOT_REGISTERED"
     assert len(mail) == 1
-    token = mail[0][1]
-    assert token not in str(known.json())
+    code = mail[0][1]
+    verified = client.post("/auth/verify-reset-code", json={"request_id": known.json()["request_id"], "code": code})
+    assert verified.status_code == 200
+    token = verified.json()["token"]
     session = next(app.dependency_overrides[get_session]())
     stored = session.exec(select(PasswordResetToken).where(PasswordResetToken.token_hash == hashlib.sha256(token.encode()).hexdigest())).one()
     assert stored.token_hash != token
@@ -65,21 +68,23 @@ def test_reset_is_one_time_and_revokes_previous_sessions(client, registration, m
 
 def test_reset_expiry_throttling_and_missing_mail_config(client, registration, mail, monkeypatch):
     client.post("/auth/register", json=registration)
-    for _ in range(5):
-        assert client.post("/auth/forgot-password", json={"email": registration["email"]}).status_code == 202
-    assert len(mail) == 3
+    known = client.post("/auth/forgot-password", json={"email": registration["email"]})
+    assert known.status_code == 202
+    assert client.post("/auth/forgot-password", json={"email": registration["email"]}).status_code == 202
+    assert len(mail) == 1
     session = next(app.dependency_overrides[get_session]())
     for item in session.exec(select(PasswordResetToken)).all():
         item.expires_at = datetime.utcnow() - timedelta(minutes=1)
+        item.created_at = datetime.utcnow() - timedelta(hours=2)
         session.add(item)
     session.commit()
     session.close()
-    assert client.post("/auth/reset-password", json={"token": mail[-1][1], "password": "Changed-456!"}).status_code == 400
+    assert client.post("/auth/verify-reset-code", json={"request_id": known.json()["request_id"], "code": mail[-1][1]}).status_code == 400
     monkeypatch.setattr(settings, "SMTP_HOST", "")
-    for email in (registration["email"], "missing@example.com"):
-        response = client.post("/auth/forgot-password", json={"email": email})
-        assert response.status_code == 503
-        assert response.json()["error"]["code"] == "EMAIL_NOT_CONFIGURED"
+    response = client.post("/auth/forgot-password", json={"email": registration["email"]})
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "EMAIL_NOT_CONFIGURED"
+    assert client.post("/auth/forgot-password", json={"email": "missing@example.com"}).status_code == 404
 
 
 def test_registration_saves_profile_atomically_and_remembers_guide(client, registration):

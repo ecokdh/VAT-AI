@@ -19,10 +19,11 @@ def verify_business(data: BusinessVerifyRequest):
     return service.verify_business(data.business_number)
 
 
-@router.post("/verify-identity")
+@router.post("/verify-identity", response_model=BusinessVerifyResponse)
 def verify_identity(data: BusinessIdentityRequest):
-    service.verify_identity(data.business_number, data.representative_name, data.business_start_date)
-    return {"verified": True}
+    verification = service.verify_business(data.business_number)
+    service.verify_identity(data.business_number, data.representative_name, data.business_start_date, data.business_name)
+    return verification
 
 
 def _profile_out(item: TaxProfileV2 | None):

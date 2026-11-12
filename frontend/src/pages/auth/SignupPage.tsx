@@ -5,7 +5,7 @@ import { PageHeader } from "../../components/PageHeader";
 import { Icon } from "../../components/Icon";
 import { checkEmailAvailability, emptyFilingInfo, register, validIndustryCode, type BusinessFilingInfo } from "../../api/auth";
 import { BusinessFilingFields } from "../../components/BusinessFilingFields";
-import { verifyBusiness, verifyBusinessIdentity, type BusinessVerificationResponse } from "../../api/business";
+import { verifyBusinessIdentity, type BusinessVerificationResponse } from "../../api/business";
 
 import { TaxProfileFields, emptyTaxProfile } from "../../components/TaxProfileFields";
 import type { TaxProfileInput } from "../../api/transactions";
@@ -35,7 +35,7 @@ function businessError(error: unknown) {
   const code = error.response?.data?.error?.code;
   switch (code) {
     case "BUSINESS_IDENTITY_MISMATCH":
-      return "대표자명·사업자등록번호·개업일자가 일치하지 않습니다. 사업자등록증을 확인해 주세요.";
+      return "대표자명·상호명·사업자등록번호·개업일자가 일치하지 않습니다. 사업자등록증을 확인해 주세요.";
     case "VALIDATION_ERROR":
       return "사업자등록번호는 숫자 10자리로 입력해 주세요.";
     case "BUSINESS_NOT_REGISTERED":
@@ -66,7 +66,10 @@ export function SignupPage() {
   const emailAvailabilityRun = useRef(0);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [taxProfile, setTaxProfile] = useState<TaxProfileInput>({...emptyTaxProfile});
-  function updateProfile<K extends keyof TaxProfileInput>(key: K, value: TaxProfileInput[K]) { setTaxProfile(current => ({...current, [key]:value, confirmed:false})); }
+  function updateProfile<K extends keyof TaxProfileInput>(key: K, value: TaxProfileInput[K]) {
+    if (key === "business_start_date") invalidateIdentity();
+    setTaxProfile(current => ({...current, [key]:value, confirmed:false}));
+  }
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [verifiedIdentity, setVerifiedIdentity] = useState("");
@@ -76,8 +79,6 @@ export function SignupPage() {
   const [filingInfo, setFilingInfo] = useState<BusinessFilingInfo>(emptyFilingInfo);
   const [businessNumber, setBusinessNumber] = useState("");
   const [verification, setVerification] = useState<BusinessVerificationResponse | null>(null);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationError, setVerificationError] = useState("");
   const [email, setEmail] = useState("");
   const [emailAvailability, setEmailAvailability] = useState<"available" | "taken" | null>(null);
   const [emailCheckError, setEmailCheckError] = useState("");
@@ -94,8 +95,9 @@ export function SignupPage() {
 
   const businessVerified = verification?.verified === true
     && verification.business_number === normalizedBusinessNumber(businessNumber);
-  const identityKey = JSON.stringify([normalizedBusinessNumber(businessNumber), name.trim(), taxProfile.business_start_date]);
-  const identityVerified = verifiedIdentity === identityKey;
+  const identityKey = JSON.stringify([normalizedBusinessNumber(businessNumber), name.trim(), businessName.trim(), taxProfile.business_start_date]);
+  const identityVerified = businessVerified && verifiedIdentity === identityKey;
+  const identityReady = validBusinessNumber(businessNumber) && !!name.trim() && !!businessName.trim() && !!taxProfile.business_start_date;
   const passwordRequirements = [
     { label: "8자 이상", met: [...password].length >= 8 },
     { label: "영문 포함", met: /[A-Za-z]/.test(password) },
@@ -116,7 +118,7 @@ export function SignupPage() {
     && validBusinessNumber(businessNumber)
     && businessVerified
     && identityVerified
-    && !isVerifying
+    && !identityBusy
     && !!taxProfile.entity_type && !!taxProfile.industry_category && !!taxProfile.business_start_date
     && validIndustryCode(filingInfo.industry_code)
     && taxProfile.taxable_sales_h1 != null && taxProfile.taxable_sales_h2 != null
@@ -126,13 +128,18 @@ export function SignupPage() {
     && taxProfile.confirmed;
   const canSubmit = accountStepValid && businessStepValid && termsAccepted && privacyAccepted && !isSubmitting;
 
-  function handleBusinessNumberChange(value: string) {
+  function invalidateIdentity() {
     verificationRun.current += 1;
-    setBusinessNumber(formattedBusinessNumber(value));
     setVerification(null);
+    setVerifiedIdentity("");
+    setIdentityError("");
+    setIdentityBusy(false);
     setTaxProfile(current => ({...current, confirmed:false}));
-    setVerificationError("");
-    setIsVerifying(false);
+  }
+
+  function handleBusinessNumberChange(value: string) {
+    invalidateIdentity();
+    setBusinessNumber(formattedBusinessNumber(value));
   }
 
   function handleEmailChange(value: string) {
@@ -158,32 +165,6 @@ export function SignupPage() {
       if (run === emailAvailabilityRun.current) setEmailCheckError("이메일 사용 여부를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       if (run === emailAvailabilityRun.current) setIsCheckingEmail(false);
-    }
-  }
-
-  async function handleVerifyBusiness() {
-    if (!validBusinessNumber(businessNumber)) {
-      setVerificationError("사업자등록번호는 숫자 10자리로 입력해 주세요.");
-      return;
-    }
-    const run = ++verificationRun.current;
-    setVerification(null);
-    setTaxProfile(current => ({...current, confirmed:false}));
-    setVerificationError("");
-    setIsVerifying(true);
-    try {
-      const result = await verifyBusiness(normalizedBusinessNumber(businessNumber));
-      if (run !== verificationRun.current) return;
-      if (!result.verified || result.business_number !== normalizedBusinessNumber(businessNumber)) {
-        setVerificationError("사업자정보 조회 결과를 확인할 수 없습니다. 다시 시도해 주세요.");
-        return;
-      }
-      setVerification(result);
-      setTaxProfile(current => ({...current, confirmed:false}));
-    } catch (requestError) {
-      if (run === verificationRun.current) setVerificationError(businessError(requestError));
-    } finally {
-      if (run === verificationRun.current) setIsVerifying(false);
     }
   }
 
@@ -216,7 +197,7 @@ export function SignupPage() {
       } else if (typeof code === "string" && code.startsWith("BUSINESS_")) {
         setVerifiedIdentity("");
         setVerification(null);
-        setVerificationError(businessError(requestError));
+        setIdentityError(businessError(requestError));
         setError("사업자정보를 다시 확인해 주세요.");
         setStep(2);
       } else {
@@ -234,13 +215,21 @@ export function SignupPage() {
   }
 
   async function handleVerifyIdentity() {
-    if (!taxProfile.business_start_date || !name.trim() || !businessVerified) return;
+    if (!identityReady || !taxProfile.business_start_date || identityBusy) return;
+    const run = ++verificationRun.current;
     setIdentityBusy(true);setIdentityError("");setVerifiedIdentity("");
+    setVerification(null);
     try {
-      const result = await verifyBusinessIdentity(normalizedBusinessNumber(businessNumber), name.trim(), taxProfile.business_start_date);
-      if (result.verified) setVerifiedIdentity(identityKey);
-    } catch (e) {setIdentityError(businessError(e));}
-    finally {setIdentityBusy(false);}
+      const result = await verifyBusinessIdentity(normalizedBusinessNumber(businessNumber), name.trim(), taxProfile.business_start_date, businessName.trim());
+      if (run !== verificationRun.current) return;
+      if (!result.verified || result.business_number !== normalizedBusinessNumber(businessNumber)) {
+        setIdentityError("사업자정보 조회 결과를 확인할 수 없습니다. 다시 시도해 주세요.");
+        return;
+      }
+      setVerification(result);
+      setVerifiedIdentity(identityKey);
+    } catch (e) {if (run === verificationRun.current) setIdentityError(businessError(e));}
+    finally {if (run === verificationRun.current) setIdentityBusy(false);}
   }
 
   return (
@@ -249,7 +238,7 @@ export function SignupPage() {
       <div className="page__body">
         <div style={{ display: "flex", justifyContent: "space-between", margin: "0 0 12px", fontSize: 13, color: "var(--color-primary)" }}>
           <span>{step} / 3</span>
-          <span>{step === 1 ? "계정 정보 입력" : step === 2 ? "사업자번호 확인" : "약관 동의"}</span>
+          <span>{step === 1 ? "계정 정보 입력" : step === 2 ? "사업자 정보 확인" : "약관 동의"}</span>
         </div>
 
         {step === 1 && <>
@@ -295,33 +284,36 @@ export function SignupPage() {
         </>}
 
         {step === 2 && <>
-          <div style={{ fontSize: 22, fontWeight: 800, margin: "8px 0" }}>사업자번호 확인</div>
-          <div className="muted" style={{ marginBottom: 20, fontSize: 13 }}>가입에 필요한 사업자 기본 정보를 입력하고 국세청 상태를 확인합니다.</div>
+          <div style={{ fontSize: 22, fontWeight: 800, margin: "8px 0" }}>사업자 정보 확인</div>
+          <div className="muted" style={{ marginBottom: 20, fontSize: 13 }}>사업자등록증에 기재된 네 가지 정보를 입력해 주세요. 진위확인 후 나머지 정보를 입력할 수 있습니다.</div>
           <div className="form-field">
-            <label className="form-field__label" htmlFor="signup-name">대표자 이름</label>
-            <input id="signup-name" className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+            <label className="form-field__label" htmlFor="signup-name">대표자명</label>
+            <input id="signup-name" className="input" autoComplete="name" required value={name} onChange={(e) => { invalidateIdentity(); setName(e.target.value); }} />
           </div>
           <div className="form-field">
             <label className="form-field__label" htmlFor="signup-business-name">상호명</label>
-            <input id="signup-business-name" className="input" autoComplete="organization" value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
+            <input id="signup-business-name" className="input" autoComplete="organization" required value={businessName} onChange={(e) => { invalidateIdentity(); setBusinessName(e.target.value); }} />
             <div className="form-field__hint">상호명은 가입 후 변경할 수 없습니다. 사업자등록증에 기재된 상호를 입력해 주세요.</div>
           </div>
           <div className="form-field">
             <label className="form-field__label" htmlFor="signup-business-number">사업자등록번호</label>
-            <div className="form-field__input-row">
-              <input id="signup-business-number" className="input" inputMode="numeric" autoComplete="off" value={businessNumber} onChange={(e) => handleBusinessNumberChange(e.target.value)} />
-              <button className="btn btn--secondary btn--sm" style={{ width: 110, flexShrink: 0 }} onClick={handleVerifyBusiness} disabled={isVerifying || !validBusinessNumber(businessNumber)}>{isVerifying ? "조회 중..." : "검증하기"}</button>
-            </div>
+            <input id="signup-business-number" className="input" inputMode="numeric" autoComplete="off" required value={businessNumber} onChange={(e) => handleBusinessNumberChange(e.target.value)} />
             {businessNumber && !validBusinessNumber(businessNumber) && <div className="form-field__hint form-field__hint--error">사업자등록번호는 숫자 10자리로 입력해 주세요.</div>}
-            {verificationError && <div className="form-field__hint form-field__hint--error" role="alert">{verificationError}</div>}
-            {businessVerified && verification && <div className="form-field__hint" role="status">국세청 상태조회 완료 · {verification.business_status} · {verification.tax_type}{verification.end_date && ` · 폐업일자 ${verification.end_date}`}</div>}
           </div>
-          {businessVerified && verification?.business_status_code === "02" && <div className="banner banner--warning" style={{ marginBottom: 16 }} role="status">현재 휴업 상태로 조회됩니다. 가입은 가능하지만 사업자 상태가 이후 세무 검토에 참고됩니다.</div>}
-          {businessVerified && verification?.business_status_code === "03" && <div className="banner banner--error" style={{ marginBottom: 16 }} role="status">현재 폐업 상태로 조회됩니다. 가입은 가능하지만 사업자 상태가 이후 세무 검토에 참고됩니다.</div>}
-          {businessVerified && <section className="signup-tax-profile"><h2 className="section-title">사업자·과세기간 정보</h2>
+          <div className="form-field">
+            <label className="form-field__label" htmlFor="signup-business-start">개업일</label>
+            <input id="signup-business-start" className="input" type="date" required value={taxProfile.business_start_date ?? ""} onChange={e => updateProfile("business_start_date", e.target.value || null)} />
+          </div>
+          <div className="identity-check">
+            <button type="button" className="btn btn--secondary" onClick={()=>void handleVerifyIdentity()} disabled={identityBusy || !identityReady || identityVerified}>{identityBusy ? "진위확인 중…" : identityVerified ? "대표자 진위확인 완료" : "대표자 진위확인"}</button>
+            {identityError && <p className="form-field__hint form-field__hint--error" role="alert">{identityError}</p>}
+            {identityVerified && verification && <p className="form-field__hint" role="status">국세청 등록정보와 일치합니다. · {verification.business_status} · {verification.tax_type}{verification.end_date && ` · 폐업일자 ${verification.end_date}`}</p>}
+          </div>
+          {identityVerified && verification?.business_status_code === "02" && <div className="banner banner--warning" style={{ marginBottom: 16 }} role="status">현재 휴업 상태로 조회됩니다. 가입은 가능하지만 사업자 상태가 이후 세무 검토에 참고됩니다.</div>}
+          {identityVerified && verification?.business_status_code === "03" && <div className="banner banner--error" style={{ marginBottom: 16 }} role="status">현재 폐업 상태로 조회됩니다. 가입은 가능하지만 사업자 상태가 이후 세무 검토에 참고됩니다.</div>}
+          {identityVerified && <section className="signup-tax-profile"><h2 className="section-title">사업자·과세기간 정보</h2>
             <p className="banner banner--info">국세청 조회 과세유형: {verification?.tax_type}. 아래 정보를 확인하면 가입과 함께 저장됩니다.</p>
-            <TaxProfileFields taxProfile={taxProfile} taxType={verification?.tax_type_code === "02" ? "simplified" : "general"} updateProfile={updateProfile}/>
-            <div className="identity-check"><p className="footnote">입력한 대표자명·사업자등록번호·개업일자를 국세청 등록정보와 대조합니다.</p><button type="button" className="btn btn--secondary" onClick={()=>void handleVerifyIdentity()} disabled={identityBusy || !name.trim() || !taxProfile.business_start_date || identityVerified}>{identityBusy?"진위확인 중…":identityVerified?"대표자 진위확인 완료":"대표자 진위확인"}</button>{identityError && <p className="form-field__hint form-field__hint--error" role="alert">{identityError}</p>}{identityVerified && <p className="form-field__hint" role="status">국세청 등록정보와 일치합니다.</p>}</div>
+            <TaxProfileFields taxProfile={taxProfile} taxType={verification?.tax_type_code === "02" ? "simplified" : "general"} updateProfile={updateProfile} showBusinessStartDate={false}/>
             <BusinessFilingFields signup value={filingInfo} onChange={(key, value) => setFilingInfo(current => ({ ...current, [key]: value }))} />
             <label className="check-row"><input type="checkbox" checked={taxProfile.confirmed} onChange={e=>setTaxProfile(current=>({...current,confirmed:e.target.checked}))}/>입력한 사업자 정보를 확인했습니다.</label>
           </section>}

@@ -42,3 +42,6 @@ class PasswordResetToken(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     expires_at: datetime
     used_at: datetime | None = None
+    code_hash: str | None = Field(default=None, max_length=64)
+    attempts: int = Field(default=0, nullable=False)
+    verified_at: datetime | None = None
