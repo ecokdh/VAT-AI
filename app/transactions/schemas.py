@@ -127,6 +127,8 @@ class TaxEstimateOut(BaseModel):
     eligible_input_vat: Optional[int]
     deemed_input_vat: Optional[int]
     payable_estimate: Optional[int]
+    card_issuance_base: Optional[int] = None
+    card_issuance_credit: Optional[int] = None
     included_transaction_count: int
     caution_transaction_count: int
     uncalculated_transaction_count: int

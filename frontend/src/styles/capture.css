@@ -1,0 +1,66 @@
+/* 영수증 촬영 — 화면 전체 카메라 + 모서리 가이드 (393×852 · 4pt 그리드) */
+.capture-page { position: relative; width: 100%; max-width: var(--page-max-width); height: 100dvh; margin: 0 auto; overflow: hidden; background: #0c0c10; color: #fff; }
+.capture-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.capture-page svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 위: 닫기 · 제목 · 플래시 */
+.capture-top { position: absolute; top: calc(16px + env(safe-area-inset-top)); left: 20px; right: 20px; display: flex; align-items: center; justify-content: space-between; }
+.capture-square { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: rgb(255 255 255 / .92); color: #0f172a; }
+.capture-square--ghost { background: rgb(255 255 255 / .16); color: #fff; }
+.capture-title { font-size: 16px; font-weight: 500; text-shadow: 0 1px 4px rgb(0 0 0 / .4); }
+
+/* 가운데: 영수증 자리를 알려주는 모서리 4개 */
+.capture-guide-frame { position: absolute; top: 120px; bottom: 232px; left: 48px; right: 48px; pointer-events: none; }
+.capture-guide-frame i { position: absolute; width: 40px; height: 40px; border: 0 solid #7cc8ff; }
+.capture-guide-frame i:nth-child(1) { top: 0; left: 0; border-width: 4px 0 0 4px; border-top-left-radius: 12px; }
+.capture-guide-frame i:nth-child(2) { top: 0; right: 0; border-width: 4px 4px 0 0; border-top-right-radius: 12px; }
+.capture-guide-frame i:nth-child(3) { bottom: 0; left: 0; border-width: 0 0 4px 4px; border-bottom-left-radius: 12px; }
+.capture-guide-frame i:nth-child(4) { bottom: 0; right: 0; border-width: 0 4px 4px 0; border-bottom-right-radius: 12px; }
+.capture-hint { position: absolute; bottom: 184px; left: 50%; transform: translateX(-50%); margin: 0; padding: 8px 16px; border-radius: 999px; background: rgb(0 0 0 / .6); font-size: 13px; line-height: 20px; white-space: nowrap; }
+.capture-error { position: absolute; bottom: 184px; left: 20px; right: 20px; margin: 0; }
+
+/* 아래: 앨범 · 셔터 · 카메라 전환 */
+.capture-controls { position: absolute; left: 20px; right: 20px; bottom: calc(40px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-around; }
+.capture-control { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #fff; font-size: 12px; }
+.capture-control > span { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 12px; background: rgb(255 255 255 / .16); }
+.capture-control:disabled { opacity: .5; }
+.capture-shutter { width: 72px; height: 72px; display: grid; place-items: center; border: 4px solid #fff; border-radius: 50%; }
+.capture-shutter i { width: 56px; height: 56px; border-radius: 50%; background: #fff; transition: transform .15s ease; }
+.capture-shutter:active:not(:disabled) i { transform: scale(.9); }
+.capture-shutter:disabled { opacity: .5; }
+
+/* 셔터 직후: 찍은 화면을 흐리게 덮고, 백엔드 진행률대로 게이지를 채운다 */
+.capture-processing { position: absolute; inset: 0; display: grid; place-items: center; background: rgb(245 247 251 / .78); animation: capture-fade .25s ease-out both; }
+.capture-processing__pill { width: 240px; padding: 12px 16px; border-radius: 12px; background: #fff; color: #0f172a; }
+.capture-progress__row { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 500; line-height: 20px; }
+.capture-progress__row span:last-child { color: var(--color-primary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.capture-progress { height: 4px; margin-top: 8px; overflow: hidden; border-radius: 2px; background: #e5eaf3; }
+.capture-progress i { display: block; height: 100%; border-radius: 2px; background: var(--color-primary); transition: width .6s ease; }
+
+/* 인식 결과가 영수증이 아니거나 실패: 흰 배경 위 안내와 버튼 */
+.capture-result { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 20px; background: rgb(255 255 255 / .96); color: #0f172a; text-align: center; animation: capture-fade .25s ease-out both; }
+.capture-result__icon { width: 56px; height: 56px; margin: 0 auto; display: grid; place-items: center; border-radius: 16px; }
+.capture-result__icon svg { width: 28px; height: 28px; }
+.capture-result__icon--unsupported, .capture-result__icon--retake { background: #fff6db; color: #c98a00; }
+.capture-result__icon--failed { background: #fdecec; color: #dc2626; }
+.capture-result h2 { margin: 16px 0 0; font-size: 20px; font-weight: 600; line-height: 28px; }
+.capture-result p { margin: 8px 0 0; color: #6b7385; font-size: 13px; line-height: 20px; word-break: keep-all; }
+.capture-result .capture-result__error { color: var(--color-danger); }
+.capture-result .btn { height: 52px; min-height: 52px; border-radius: 12px; font-size: 16px; }
+.capture-result .btn--primary { margin-top: 32px; font-weight: 600; }
+.capture-result .capture-result__secondary { margin-top: 12px; border: 1px solid #d5dce8; background: #fff; color: #0f172a; font-weight: 500; }
+@keyframes capture-fade { from { opacity: 0; } }
+
+@media (max-height: 700px) {
+  .capture-guide-frame { top: 88px; bottom: 200px; }
+  .capture-hint, .capture-error { bottom: 152px; }
+  .capture-controls { bottom: calc(24px + env(safe-area-inset-bottom)); }
+}
+
+/* 앨범 사진 확인 — 제목·설명을 붙이고 사진 높이를 남는 공간에 맞춰 한 화면에 */
+.page.capture-confirm .screen-title { margin: 8px 0 0; font-size: 24px; font-weight: 600; line-height: 32px; letter-spacing: -.02em; }
+.page.capture-confirm .muted { margin: 4px 0 0; font-size: 13px; line-height: 20px; }
+.page.capture-confirm .capture-preview { display: block; max-height: calc(100dvh - 300px); margin: 16px 0; border-radius: 12px; }
+.page.capture-confirm .page__body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+.page.capture-confirm .btn-row { gap: 8px; }
+.page.capture-confirm .btn { height: 52px; min-height: 52px; border-radius: 12px; font-size: 16px; }

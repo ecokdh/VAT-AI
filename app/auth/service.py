@@ -75,7 +75,7 @@ def register_user(db: Session, data: RegisterRequest) -> AuthResponse:
         raise AppException(502, "BUSINESS_API_INVALID_RESPONSE", "사업자정보 확인에 실패했습니다.")
     if data.tax_profile is None or data.tax_profile.business_start_date is None:
         raise AppException(400, "BUSINESS_START_DATE_REQUIRED", "대표자 진위확인을 위한 개업일자를 입력해 주세요.")
-    verify_identity(data.business_number, name, data.tax_profile.business_start_date)
+    verify_identity(data.business_number, name, data.tax_profile.business_start_date, business_name)
     nickname = data.nickname
 
     consent_recorded_at = datetime.now(timezone.utc)

@@ -10,7 +10,7 @@ from app.transactions.models import Transaction
 
 
 def filter_bounds(period: str):
-    match = re.fullmatch(r"(2025|2026)-(Q1|H1|Q3|H2|YEAR)", period)
+    match = re.fullmatch(r"(2026)-(Q1|H1|Q3|H2|YEAR)", period)
     if not match:
         raise AppException(400, "UNSUPPORTED_TAX_PERIOD", "지원하지 않는 신고기간입니다.")
     year, part = int(match[1]), match[2]
@@ -21,10 +21,11 @@ def filter_bounds(period: str):
 def filing_readiness(session: Session, user: User, period: str, estimate: dict) -> dict:
     start, end = filter_bounds(period)
     profile = session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id == user.id)).first()
+    # 매출은 매출 보관함의 신고용 집계로 따로 확정하므로, 신고 준비 건수는 매입 거래·영수증만 센다(매입 보관함과 같은 기준).
     rows = session.exec(select(Transaction).where(Transaction.user_id == user.id, Transaction.deleted_at.is_(None),
-        Transaction.transaction_date >= start, Transaction.transaction_date < end)).all()
+        Transaction.direction == "purchase", Transaction.transaction_date >= start, Transaction.transaction_date < end)).all()
     receipts = session.exec(select(Receipt).outerjoin(Transaction, Transaction.receipt_id == Receipt.id).where(
-        Receipt.user_id == user.id, Transaction.id.is_(None), Receipt.status == "done", Receipt.extraction_confirmed.is_(True),
+        Receipt.user_id == user.id, Receipt.direction == "purchase", Transaction.id.is_(None), Receipt.status == "done", Receipt.extraction_confirmed.is_(True),
         Receipt.date.is_(None) | ((Receipt.date >= start) & (Receipt.date < end)))).all()
     unconfirmed = len(receipts) + sum(row.state != "confirmed" for row in rows)
     pending = sum(row.state == "confirmed" and row.direction == "purchase" and row.review_status not in {"analyzed", "excluded"} for row in rows)

@@ -51,13 +51,13 @@ def test_business_name_change_rejected_without_profile_side_effects(client, regi
 
 def test_registration_verifies_identity_on_server_and_rolls_back(client, registration, monkeypatch):
     seen=[]
-    def mismatch(number,name,start):
-        seen.append((number,name,start))
+    def mismatch(number,name,start,business_name):
+        seen.append((number,name,start,business_name))
         raise AppException(400,'BUSINESS_IDENTITY_MISMATCH','불일치')
     monkeypatch.setattr(auth_service,'verify_identity',mismatch)
     response=client.post('/auth/register',json=registration)
     assert response.status_code==400 and response.json()['error']['code']=='BUSINESS_IDENTITY_MISMATCH'
-    assert seen==[('1234567890','실제 대표자',date(2025,1,1))]
+    assert seen==[('1234567890','실제 대표자',date(2025,1,1),'고정 상호')]
     gen=app.dependency_overrides[get_session](); session=next(gen)
     try:
         assert session.exec(select(User)).all()==[]
@@ -75,10 +75,10 @@ def test_nts_identity_contract(monkeypatch, valid, expected):
     monkeypatch.setattr(settings,'NTS_BUSINESS_API_KEY','test-key')
     def post(url, **kwargs):
         assert url==settings.NTS_BUSINESS_VALIDATE_URL
-        assert kwargs['json']=={'businesses':[{'b_no':'1234567890','start_dt':'20250101','p_nm':'대표자'}]}
+        assert kwargs['json']=={'businesses':[{'b_no':'1234567890','start_dt':'20250101','p_nm':'대표자','b_nm':'테스트 상호'}]}
         return httpx.Response(200,json={'status_code':'OK','data':[{'b_no':'1234567890','valid':valid}]})
     monkeypatch.setattr(nts_client.httpx,'post',post)
     if expected:
-        with pytest.raises(AppException) as exc:real_validate_identity('1234567890','대표자','20250101')
+        with pytest.raises(AppException) as exc:real_validate_identity('1234567890','대표자','20250101','테스트 상호')
         assert exc.value.code==expected
-    else:real_validate_identity('1234567890','대표자','20250101')
+    else:real_validate_identity('1234567890','대표자','20250101','테스트 상호')

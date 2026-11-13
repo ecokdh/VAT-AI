@@ -1,110 +1,116 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@600&display=swap");
-/* 로그인 화면 — 하늘색 글래스 스타일 */
-body:has(.login-page) { background: #e6eefc; }
+/* 로그인 화면 — 흰 상단 로고 + 아래에서 올라오는 파란 시트 (393×852 · 4pt 그리드) */
 .page.login-page {
-  position: relative;
+  min-height: 100dvh;
   overflow: hidden;
-  isolation: isolate;
-  background: linear-gradient(180deg, #eef4ff 0%, #e3ecfc 100%);
+  background: #fff;
 }
-.page.login-page .page__body { position: relative; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+.login-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* 로고 타일 */
-.page.login-page .auth-intro { padding: calc(32px + env(safe-area-inset-top)) 0 24px; }
+/* 로고 */
+.login-hero { height: 240px; padding-top: calc(96px + env(safe-area-inset-top)); box-sizing: border-box; display: flex; justify-content: center; }
 .login-logo {
-  width: 104px;
-  height: 104px;
-  margin: 0 auto 18px;
+  width: 88px;
+  height: 88px;
   display: grid;
   place-items: center;
-  border-radius: 32px;
-  border: 1px solid rgb(255 255 255 / .9);
-  background: linear-gradient(160deg, #ffffff 0%, #e9f0fd 100%);
-  box-shadow: inset 0 2px 0 #fff, inset 0 -6px 14px rgb(37 99 235 / .08), 0 22px 44px rgb(37 99 235 / .16);
+  border-radius: 24px;
+  background: var(--color-primary);
+  animation: login-pop .7s cubic-bezier(.34, 1.56, .64, 1) both;
 }
-.login-logo .brand-mark { width: 60px; height: 60px; filter: drop-shadow(0 8px 12px rgb(29 78 216 / .28)); }
-.login-logo .brand-mark__body { fill: #2f6bf0; }
-.login-logo .brand-mark__line { fill: #fff; opacity: .55; }
-.login-logo .brand-mark__spark { fill: #bfe6ff; }
-.login-logo .brand-mark__check { stroke: #fff; }
-.login-page .auth-title { line-height: 0; }
-.login-wordmark { width: 176px; height: auto; filter: drop-shadow(0 6px 12px rgb(37 99 235 / .2)); }
-.login-wordmark .brand-word__vat { fill: #1f56e0; }
-.login-wordmark .brand-word__ai { fill: #38a6f5; }
-.login-page .auth-description { margin-top: 18px; color: #34446b; font-family: "Noto Sans KR", sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.5px; }
+.login-logo .brand-mark { width: 52px; height: 52px; }
+.login-logo .brand-mark__body { fill: #fff; }
+.login-logo .brand-mark__line { fill: var(--color-primary); opacity: .25; }
+.login-logo .brand-mark__spark { fill: #7cc8ff; }
+.login-logo .brand-mark__check { stroke: var(--color-primary); }
 
-/* 입력창 */
-.login-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.login-field { position: relative; }
-.login-field > svg { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); color: #5b6785; pointer-events: none; }
-.login-page .login-field .input {
-  min-height: 60px;
-  padding-left: 56px;
-  border: 1px solid rgb(255 255 255 / .95);
-  border-radius: 20px;
-  background: rgb(255 255 255 / .6);
-  box-shadow: inset 0 1px 0 #fff, 0 8px 20px rgb(37 99 235 / .07);
+/* 시트 */
+.login-sheet {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 32px max(var(--page-gutter), env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(var(--page-gutter), env(safe-area-inset-left));
+  border-radius: 16px 16px 0 0;
+  background: #1d4ed8;
+  color: #fff;
+  animation: login-sheet .7s cubic-bezier(.22, 1, .36, 1) .15s both;
 }
-.login-page .login-field .input:focus { border-color: #8db2f7; outline: 3px solid rgb(37 99 235 / .14); }
-.login-page .password-field button { top: 8px; color: #5b6785; }
+.login-sheet > * { animation: login-rise .5s cubic-bezier(.22, 1, .36, 1) both; }
+.login-sheet > :nth-child(1) { animation-delay: .45s; }
+.login-sheet > :nth-child(2) { animation-delay: .55s; }
+.login-sheet > :nth-child(3) { animation-delay: .62s; }
+.login-sheet > :nth-child(4) { animation-delay: .69s; }
+.login-sheet > :nth-child(n+5) { animation-delay: .76s; }
+.login-title { margin: 0; font-size: 24px; font-weight: 600; line-height: 32px; letter-spacing: -.02em; }
+
+/* 입력 — 밑줄형 */
+.login-field { margin-top: 24px; }
+.login-field label { display: block; font-size: 13px; line-height: 20px; color: rgb(255 255 255 / .72); }
+.login-field input {
+  width: 100%;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid rgb(255 255 255 / .32);
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+  transition: border-color .2s ease;
+}
+.login-field input::placeholder { color: rgb(255 255 255 / .45); }
+.login-field input:focus { border-bottom-color: #fff; }
+.login-password { position: relative; }
+.login-password input { padding-right: 48px; }
+.login-password button { position: absolute; right: 0; top: 4px; width: 40px; height: 40px; display: grid; place-items: center; color: rgb(255 255 255 / .6); }
 
 /* 이메일 저장 · 비밀번호 찾기 */
-.login-page .auth-preferences { font-size: 13px; }
-.login-page .auth-preferences label { color: #1f2a44; }
-.login-page .auth-preferences input {
+.page.login-page .auth-preferences { margin: 16px 0 0; font-size: 13px; }
+.page.login-page .auth-preferences label { color: rgb(255 255 255 / .85); }
+.page.login-page .auth-preferences input {
   appearance: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  border: 1.5px solid #b7c8ec;
-  background: #fff;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border-radius: 4px;
+  border: 1.5px solid rgb(255 255 255 / .55);
+  background: transparent;
   cursor: pointer;
 }
-.login-page .auth-preferences input:checked {
-  border-color: transparent;
-  background: #2563eb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center / 14px no-repeat;
-  box-shadow: 0 4px 10px rgb(37 99 235 / .35);
+.page.login-page .auth-preferences input:checked {
+  border-color: #fff;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d4ed8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center / 12px no-repeat;
 }
-.login-page .auth-preferences input:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-.login-page .auth-preferences .text-link { color: #1d5ae8; font-size: 13px; font-weight: 700; text-decoration: none; }
+.page.login-page .auth-preferences input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.page.login-page .auth-preferences .text-link { color: #bfe3ff; font-size: 13px; font-weight: 400; text-decoration: none; }
+.login-notice { margin-top: 16px; }
 
 /* 버튼 */
-.login-page .login-submit {
-  position: relative;
-  width: 100%;
-  min-height: 60px;
-  font-size: 17px;
-  background: linear-gradient(90deg, #3d8bff 0%, #1f56e0 100%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / .35), 0 14px 28px rgb(37 99 235 / .35);
-}
-.login-page .login-submit:disabled { opacity: .7; }
-.login-submit__arrow {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: rgb(255 255 255 / .18);
-}
-.login-page .btn--ghost {
-  border: 1px solid rgb(255 255 255 / .95);
-  background: rgb(255 255 255 / .55);
-  color: #1d4ed8;
-  box-shadow: 0 8px 20px rgb(37 99 235 / .07);
+.login-actions { margin-top: auto; padding-top: 32px; display: flex; flex-direction: column; gap: 16px; }
+.page.login-page .login-actions .btn { height: 52px; min-height: 52px; border-radius: 12px; font-size: 16px; }
+.page.login-page .login-submit { background: #fff; color: #1d4ed8; font-weight: 600; }
+.page.login-page .login-submit:disabled { background: rgb(255 255 255 / .7) !important; border-color: transparent !important; color: #1d4ed8 !important; }
+.page.login-page .login-signup { border: 1px solid rgb(255 255 255 / .55); background: transparent; color: #fff; font-weight: 500; }
+
+/* 앱 첫 실행 시 시작 화면이 덮는 동안 모션을 멈춰 두었다가, 시작 화면이 사라지면 처음부터 재생 */
+body:has(.splash--intro) .login-page,
+body:has(.splash--intro) .login-page * { animation-play-state: paused; }
+
+@keyframes login-pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
+@keyframes login-sheet { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes login-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
+/* 화면 높이가 낮은 폰에서도 스크롤 없이 한 화면 */
+@media (max-height: 700px) {
+  .login-hero { height: 160px; padding-top: calc(48px + env(safe-area-inset-top)); }
+  .login-logo { width: 72px; height: 72px; border-radius: 20px; }
+  .login-logo .brand-mark { width: 40px; height: 40px; }
+  .login-sheet { padding-top: 24px; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+  .login-field { margin-top: 16px; }
+  .login-actions { padding-top: 24px; gap: 12px; }
 }
 
-/* 화면 높이가 낮은 폰(주소창 포함 기준)에서도 스크롤 없이 한 화면 */
-@media (max-height: 660px) {
-  .page.login-page .page__body { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-  .page.login-page .auth-intro { padding: calc(16px + env(safe-area-inset-top)) 0 14px; }
-  .login-logo { width: 72px; height: 72px; margin-bottom: 12px; border-radius: 22px; }
-  .login-logo .brand-mark { width: 42px; height: 42px; }
-  .login-wordmark { width: 150px; }
-  .login-page .auth-description { margin-top: 10px; }
-  .login-page .login-field .input, .login-page .login-submit, .login-page .btn--ghost { min-height: 52px; }
-  .login-page .auth-preferences { margin-bottom: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .login-logo, .login-sheet, .login-sheet > * { animation: none; }
 }

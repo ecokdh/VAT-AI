@@ -3,7 +3,7 @@ import { isAxiosError } from "axios";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { login } from "../../api/auth";
 import { Icon } from "../../components/Icon";
-import { BrandMark, BrandWordmark } from "../../components/BrandMark";
+import { BrandMark } from "../../components/BrandMark";
 import { LoginLoadingScreen } from "../../components/SplashScreen";
 import "../../styles/login.css";
 
@@ -52,47 +52,47 @@ export function LoginPage() {
   return (
     <div className="page auth-page login-page">
       {showLoading && <LoginLoadingScreen />}
-      <div className="page__body">
-        <div className="auth-intro">
-          <div className="login-logo"><BrandMark /></div>
-          <h1 className="auth-title"><BrandWordmark className="login-wordmark" /><span className="login-sr-only">VAT-AI</span></h1>
-          <p className="auth-description">소상공인을 위한 스마트 부가가치세 비서</p>
-        </div>
+      <div className="login-hero">
+        <div className="login-logo"><BrandMark /></div>
+        <h1 className="login-sr-only">VAT-AI</h1>
+      </div>
 
-        <div className="form-field">
-          <label className="form-field__label login-sr-only" htmlFor="login-email">대표자 이메일</label>
-          <div className="login-field"><Icon name="user" /><input id="login-email" className="input" type="email" autoComplete="username" placeholder="대표자 이메일" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-        </div>
-        <div className="form-field">
-          <label className="form-field__label login-sr-only" htmlFor="login-password">비밀번호</label>
-          <div className="password-field login-field"><Icon name="lock" /><input id="login-password" ref={passwordInput} className="input" type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="비밀번호" value={password} onChange={(e) => setPassword(e.target.value)} /><button type="button" aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}><Icon name={showPassword ? "eyeOff" : "eye"} /></button></div>
-        </div>
+      <div className="login-sheet">
+        <h2 className="login-title">로그인</h2>
 
-        {routeState?.signupComplete && <div className="banner" style={{ marginBottom: 16 }} role="status">가입이 완료되었습니다. 이메일과 비밀번호로 로그인해 주세요.</div>}
+        <div className="login-field">
+          <label htmlFor="login-email">대표자 이메일</label>
+          <input id="login-email" type="email" autoComplete="username" placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="login-field">
+          <label htmlFor="login-password">비밀번호</label>
+          <div className="login-password">
+            <input id="login-password" ref={passwordInput} type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="비밀번호 입력" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <button type="button" aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}><Icon name={showPassword ? "eyeOff" : "eye"} /></button>
+          </div>
+        </div>
 
         <div className="auth-preferences">
           <label>
             <input type="checkbox" checked={rememberEmail} onChange={(e) => setRememberEmail(e.target.checked)} />
             이메일 저장
           </label>
-          <Link className="text-link" to="/forgot-password">비밀번호를 잊으셨나요?</Link>
+          <Link className="text-link" to="/forgot-password">비밀번호 찾기</Link>
         </div>
 
+        {routeState?.signupComplete && <div className="banner login-notice" role="status">가입이 완료되었습니다. 이메일과 비밀번호로 로그인해 주세요.</div>}
         {error && (
-          <div className="banner banner--error" style={{ marginBottom: 20 }}>
+          <div className="banner banner--error login-notice">
             <Icon name="info" />
             <div>{error}</div>
           </div>
         )}
 
-        <div className="stack-gap-sm">
-          <button className="btn btn--primary login-submit" onClick={handleLogin} disabled={isSubmitting}>
+        <div className="login-actions">
+          <button className="btn login-submit" onClick={handleLogin} disabled={isSubmitting}>
             {isSubmitting ? "로그인 중..." : "로그인"}
-            <span className="login-submit__arrow"><Icon name="arrowRight" /></span>
           </button>
-          <Link to="/signup" className="btn btn--ghost">
-            회원가입 하기
-          </Link>
+          <Link to="/signup" className="btn login-signup">회원가입</Link>
         </div>
       </div>
     </div>

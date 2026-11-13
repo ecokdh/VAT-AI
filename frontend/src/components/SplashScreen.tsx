@@ -4,12 +4,12 @@ import "../styles/splash.css";
 
 const SPLASH_MS = 3000;
 
-// 하늘색→파란색 배경 위에 로고를 띄우는 전체 화면. 첫 실행·로그인 대기에서 함께 쓴다.
+// 흰 배경 위에 파란 로고 타일을 띄우는 전체 화면. 첫 실행·로그인 대기에서 함께 쓴다.
 export function BrandOverlay({ className, label, children }: { className?: string; label: string; children?: ReactNode }) {
   return (
     <div className={`splash ${className ?? ""}`} role="status" aria-label={label}>
       <div className="splash-brand">
-        <BrandMark className="splash-mark" />
+        <div className="splash-logo"><BrandMark className="splash-mark" /></div>
         <BrandWordmark className="splash-wordmark" />
         {children}
       </div>
@@ -26,7 +26,11 @@ export function SplashScreen() {
   }, []);
   if (!visible) return null;
 
-  return <BrandOverlay className="splash--intro" label="VAT-AI 로딩 중" />;
+  return (
+    <BrandOverlay className="splash--intro" label="VAT-AI 로딩 중">
+      <p className="splash-caption">소상공인을 위한 부가가치세 신고 지원 서비스</p>
+    </BrandOverlay>
+  );
 }
 
 // 로그인 요청이 끝날 때까지 돌아가는 게이지와 함께 보여준다.

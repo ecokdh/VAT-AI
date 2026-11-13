@@ -1,7 +1,6 @@
-"""Track B: 파일 검증·저장, CLOVA OCR, Receipt CRUD."""
+"""Track B: 파일 검증·저장, Receipt 조회."""
 
 from io import BytesIO
-import json
 import uuid
 import warnings
 from typing import Optional
@@ -11,7 +10,6 @@ from sqlmodel import Session, select
 
 from app.common.exceptions import AppException
 from app.core.config import settings
-from app.receipts.ocr import ocr_client
 from app.receipts.models import Receipt
 from app.receipts.schemas import ReceiptOut, ReceiptSummary
 from app.receipts.storage import FileStorage, LocalFileStorage, S3FileStorage
@@ -105,128 +103,6 @@ def _delete_after_failure(key: str) -> None:
     except Exception:
         # 원래 오류를 보존한다. 저장소 정리는 best effort이다.
         pass
-
-
-def _rollback_best_effort(session: Session) -> None:
-    try:
-        session.rollback()
-    except Exception:
-        # 원래 DB 오류와 파일 보존/정리 정책을 덮어쓰지 않는다.
-        pass
-
-
-def _ocr_is_complete(result: object) -> bool:
-    return (
-        isinstance(result, ocr_client.OcrResult)
-        and bool(result.vendor.strip())
-        and result.amount is not None
-        and result.date is not None
-        and bool(result.ocr_raw.strip())
-    )
-
-
-async def upload_receipt(
-    session: Session,
-    user_id: uuid.UUID,
-    file_bytes: bytes,
-    content_type: Optional[str],
-) -> ReceiptOut:
-    media_type, extension = validate_image(file_bytes, content_type)
-    try:
-        stored = storage.save(user_id, file_bytes, media_type, extension)
-    except OSError as exc:
-        raise AppException(500, "STORAGE_ERROR", "파일 저장에 실패했습니다.") from exc
-
-    try:
-        ocr_result = await ocr_client.extract_receipt(file_bytes, media_type)
-    except Exception:
-        # 예상된 외부 오류는 ocr_client가 None으로 변환한다. 그 밖의 오류는
-        # 서버 오류로 남겨 OCR 실패로 위장하지 않는다.
-        _delete_after_failure(stored.key)
-        raise
-
-    if isinstance(ocr_result, ocr_client.OcrResult) and ocr_result.engine == 'luna_low':
-        details=json.loads(ocr_result.ocr_raw)
-        doc=details.get('document') or {}
-        classification=doc.get('classification') or {}
-        final_status=classification.get('final_status')
-        if details.get('error_code'):
-            status = 'failed'
-        elif final_status in ('unsupported', 'retake'):
-            status = final_status
-        elif final_status == 'needs_edit':
-            status = 'needs_edit'
-        else:
-            status = 'done'
-        missing=[k for k,v in [('vendor',ocr_result.vendor),('amount',ocr_result.amount),('transaction_date',ocr_result.date)] if v is None or v=='']
-        receipt=Receipt(
-            user_id=user_id,
-            image_url=stored.key,
-            ocr_raw=ocr_result.ocr_raw,
-            vendor=ocr_result.vendor or None,
-            amount=ocr_result.amount,
-            date=ocr_result.date,
-            status=status,
-            ocr_pipeline_name='luna_low',
-            ocr_pipeline_version='optimized-v2',
-            ocr_missing_fields_json=json.dumps(missing),
-            ocr_warnings_json=json.dumps([classification.get('guide_message')] if classification.get('guide_message') else ['일부 항목을 원본과 대조해 주세요.'] if ocr_result.review_required else [],ensure_ascii=False),
-            doc_type=classification.get('doc_type'),
-            support_status=classification.get('support_status'),
-            readability_issues_json=json.dumps(classification.get('issues', []), ensure_ascii=False),
-            affected_regions_json=json.dumps(classification.get('affected_regions', []), ensure_ascii=False),
-            issue_code=classification.get('issue_code') or details.get('error_code'),
-            guide_message=classification.get('guide_message'),
-            classification_version='v2' if classification.get('doc_type') not in (None, 'uninspected') else None,
-            extraction_confirmed=False
-        )
-    elif _ocr_is_complete(ocr_result):
-        receipt = Receipt(
-            user_id=user_id,
-            image_url=stored.key,
-            ocr_raw=ocr_result.ocr_raw,
-            vendor=ocr_result.vendor,
-            amount=ocr_result.amount,
-            date=ocr_result.date,
-            status="done",
-        )
-    else:
-        receipt = Receipt(
-            user_id=user_id,
-            image_url=stored.key,
-            ocr_raw=None,
-            vendor=None,
-            amount=None,
-            date=None,
-            status="failed",
-        )
-
-    # flush 실패는 commit 전에 확정된 DB 저장 실패이므로 저장 파일을 정리한다.
-    try:
-        session.add(receipt)
-        session.flush()
-    except Exception as exc:
-        _rollback_best_effort(session)
-        _delete_after_failure(stored.key)
-        raise AppException(500, "DATABASE_ERROR", "영수증 저장에 실패했습니다.") from exc
-
-    # commit()이 예외를 던져도 서버/네트워크 상태에 따라 커밋 여부가
-    # 불확실할 수 있다. 이 경우 참조 레코드가 이미 있을 수 있으므로 파일을
-    # 삭제하지 않고 DB 오류만 반환한다.
-    try:
-        session.commit()
-    except Exception as exc:
-        _rollback_best_effort(session)
-        raise AppException(500, "DATABASE_ERROR", "영수증 저장에 실패했습니다.") from exc
-
-    # 여기부터는 Receipt가 이미 커밋되었다. refresh/응답 변환 실패 시에도
-    # 커밋된 레코드가 참조하는 원본 파일을 삭제하지 않는다.
-    try:
-        session.refresh(receipt)
-        return ReceiptOut.model_validate(receipt)
-    except Exception as exc:
-        _rollback_best_effort(session)
-        raise AppException(500, "DATABASE_ERROR", "영수증 응답 생성에 실패했습니다.") from exc
 
 
 def list_receipts(session: Session, user_id: uuid.UUID) -> list[ReceiptSummary]:

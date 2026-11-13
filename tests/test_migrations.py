@@ -58,7 +58,6 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
             "alembic_version",
             "users",
             "receipts",
-            "deductions",
             "business_profiles",
             "transactions",
             "transaction_revisions",
@@ -73,9 +72,13 @@ def test_alembic_upgrade_head_creates_legacy_and_v2_schema(tmp_path: Path):
             "merchant_memories",
             "filing_inputs",
             "monthly_sales_documents",
+            "sales_filing_workflows",
         }
         consent_columns = {
             column["name"] for column in inspect(connection).get_columns("consent_records")
+        }
+        assert {"code_hash", "attempts", "verified_at"} <= {
+            c["name"] for c in inspect(connection).get_columns("password_reset_tokens")
         }
         assert consent_columns == {
             "id", "user_id", "consent_type", "accepted", "document_version", "recorded_at",

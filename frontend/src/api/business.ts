@@ -16,5 +16,5 @@ export function verifyBusiness(businessNumber: string) {
     .then((res) => res.data);
 }
 
-export const verifyBusinessIdentity = (business_number: string, representative_name: string, business_start_date: string) =>
-  apiClient.post<{verified: boolean}>("/business/verify-identity", {business_number, representative_name, business_start_date}).then(r => r.data);
+export const verifyBusinessIdentity = (business_number: string, representative_name: string, business_start_date: string, business_name: string) =>
+  apiClient.post<BusinessVerificationResponse>("/business/verify-identity", {business_number, representative_name, business_start_date, business_name}).then(r => r.data);

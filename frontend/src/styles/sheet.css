@@ -1,0 +1,101 @@
+/* 상세 바텀시트 — 앱 폭(최대 480) 안에서 아래에서 올라온다. 내용은 마이페이지와 같은 줄 맞춤 */
+.sheet {
+  position: fixed;
+  inset: auto 0 0;
+  width: 100%;
+  max-width: var(--page-max-width);
+  height: calc(100dvh - 56px);
+  max-height: none;
+  margin: 0 auto;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px 16px 0 0;
+  background: #fff;
+  color: #0f172a;
+  transition: transform .2s ease;
+}
+.sheet::backdrop { background: rgb(15 23 42 / .35); }
+.sheet[open] { display: flex; flex-direction: column; animation: sheet-up .3s cubic-bezier(.22, 1, .36, 1); }
+.sheet.is-closing { animation: sheet-down .25s ease-in forwards; }
+.sheet[open]::backdrop { animation: sheet-fade-in .3s ease-out; }
+.sheet.is-closing::backdrop { animation: sheet-fade-out .25s ease-in forwards; }
+@keyframes sheet-up { from { transform: translateY(100%); } }
+@keyframes sheet-down { to { transform: translateY(100%); } }
+@keyframes sheet-fade-in { from { opacity: 0; } }
+@keyframes sheet-fade-out { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sheet[open], .sheet.is-closing, .sheet[open]::backdrop { animation: none; } }
+
+/* 위: 손잡이 막대 · ✕ */
+.sheet-top { position: relative; flex-shrink: 0; height: 56px; touch-action: none; cursor: grab; }
+.sheet-grab { position: absolute; top: 8px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: #d5dce8; }
+.sheet-close { position: absolute; top: 12px; right: 20px; width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid #e5eaf3; border-radius: 12px; background: #fff; color: #0f172a; }
+.sheet-close svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.sheet-scroll { flex: 1; overflow: auto; padding: 0 20px calc(32px + env(safe-area-inset-bottom)); }
+.sheet-scroll:focus { outline: none; }
+
+/* 내용 */
+.sheet-title { margin: 0; font-size: 18px; font-weight: 600; line-height: 24px; overflow-wrap: anywhere; }
+.sheet-scroll > p:first-of-type { margin: 4px 0 0; color: #6b7385; font-size: 13px; line-height: 20px; }
+.sheet .peek-amount-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 16px; }
+.sheet .peek-amount { margin: 0; font-size: 24px; font-weight: 700; line-height: 32px; font-variant-numeric: tabular-nums; }
+.sheet .peek-amount-row .text-link { flex-shrink: 0; min-height: 0; padding: 0; color: var(--color-primary); font-size: 13px; font-weight: 500; text-decoration: none; }
+.sheet .status-label { display: inline-block; margin: 8px 0 0; padding: 2px 8px; border-radius: 999px; background: #f1f3f7; font-size: 12px; line-height: 16px; }
+.sheet .status-label--done { background: #e7f6ee; color: #15803d; }
+.sheet .status-label--danger { background: #fdecec; color: #b91c1c; }
+.sheet .status-label--review { background: #fff6db; color: #92400e; }
+.sheet .field-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 0; padding: 12px 0; border-bottom: 1px solid #eef1f6; font-size: 14px; line-height: 20px; }
+.sheet .field-row > span:first-child { flex-shrink: 0; color: #6b7385; font-size: 13px; }
+.sheet .field-row > :last-child { text-align: right; font-weight: 400; }
+.sheet .peek-amount-row + .status-label + .field-row,
+.sheet .peek-amount-row + .field-row { margin-top: 16px; }
+.sheet h3 { margin: 32px 0 4px; font-size: 14px; font-weight: 600; line-height: 20px; }
+.sheet .check-row { display: flex; align-items: center; gap: 8px; margin-top: 24px; font-size: 14px; }
+.sheet .footnote, .sheet .muted { margin: 4px 0 0; color: #8a94a6; font-size: 12px; line-height: 16px; text-align: left; }
+.sheet .text-link.danger { display: block; margin: 32px auto 0; min-height: 0; padding: 0; color: var(--color-danger); font-size: 14px; text-decoration: none; }
+
+/* 원본 사진 — 추출 결과 확인 화면과 같은 모양 */
+.sheet .receipt-preview--reference { margin-top: 24px; border: 1px solid #e5eaf3; border-radius: 12px; overflow: hidden; }
+.sheet .reference-tools { padding: 8px 12px; background: #f8fafd; border-bottom: 1px solid #e5eaf3; }
+.sheet .reference-tools button { width: 32px; min-width: 32px; height: 32px; min-height: 32px; border: 1px solid #d5dce8; border-radius: 8px; background: #fff; font-size: 14px; }
+.sheet .reference-tools button:last-child { width: auto; padding: 0 8px; }
+
+/* 분석 결과 */
+.sheet .peek-verdict { font-size: 13px; font-weight: 600; }
+.sheet .peek-reason { margin: 16px 0 0; padding: 12px 16px; border-radius: 12px; background: #f8fafd; font-size: 13px; line-height: 20px; }
+.sheet .ref-card { margin: 8px 0 !important; padding: 12px 16px !important; border: 1px solid #e5eaf3; border-radius: 12px; background: #fff; box-shadow: none; }
+.sheet .ref-card strong { display: block; font-size: 14px; line-height: 20px; }
+.sheet .ref-card p { margin: 4px 0 0; font-size: 13px; line-height: 20px; }
+.sheet .ref-card a { display: inline-block; margin-top: 4px; font-size: 13px; }
+
+/* 글자: 값은 500 굵기로 또렷하게 */
+.sheet .field-row > :last-child { font-weight: 500; color: #0f172a; }
+.sheet .field-row > span:first-child { font-weight: 500; }
+
+/* 수정 모드 — 이름 위 · 칸 48 아래, 칸 사이 16 (마이페이지와 같은 줄 맞춤) */
+.sheet .receipt-detail-edit .field-row { flex-direction: column; align-items: stretch; gap: 8px; padding: 0; margin-top: 16px; border-bottom: 0; }
+.sheet .receipt-detail-edit .field-row > span:first-child { color: #4b5568; font-size: 13px; line-height: 20px; }
+.sheet .receipt-detail-edit .detail-input,
+.sheet .receipt-detail-edit select.detail-input {
+  width: 100% !important;
+  height: 48px;
+  min-height: 48px !important;
+  padding: 0 14px !important;
+  border: 1px solid #d5dce8;
+  border-radius: 8px !important;
+  background: #fff;
+  color: #0f172a;
+  font-size: 15px !important;
+  font-weight: 500;
+  text-align: left;
+}
+.sheet .receipt-detail-edit .detail-input::placeholder { color: #a3acbd; font-weight: 400; }
+.sheet .receipt-detail-edit .detail-input:focus { border-color: var(--color-primary); outline: none; box-shadow: 0 0 0 3px var(--color-primary-light); }
+.sheet .receipt-detail-edit .field-row > .detail-input + .detail-input { width: 100% !important; }
+.sheet .receipt-detail-edit article { padding: 16px 0 !important; border-bottom: 1px solid #eef1f6 !important; }
+.sheet .receipt-detail-edit article > .detail-input { font-weight: 600; }
+.sheet .detail-edit-actions { position: sticky; bottom: 0; margin-top: 24px; padding: 12px 0; gap: 8px; background: #fff; }
+.sheet .detail-edit-actions .btn { height: 52px; min-height: 52px; border-radius: 12px; font-size: 16px; font-weight: 600; }
+
+/* 전체 증빙 정보 아래 '정보 수정하기' */
+.sheet .sheet-edit-button { width: 100%; height: 48px; min-height: 48px; margin-top: 16px; border: 1px solid #c9d6f2; border-radius: 12px; background: #fff; color: var(--color-primary); font-size: 15px; font-weight: 500; }

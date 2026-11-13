@@ -6,11 +6,11 @@ function Wheel({label, options, value, onChange}: {label: string; options: {valu
   const id = useId();
   const index = Math.max(0, options.findIndex(o => o.value === value));
   const initialIndex = useRef(index);
-  useLayoutEffect(() => {if(ref.current) ref.current.scrollTop = initialIndex.current * 48;}, []); // Scrolling owns subsequent selection.
+  useLayoutEffect(() => {ref.current?.scrollTo({top: initialIndex.current * 48, behavior: "instant"});}, []); // Scrolling owns subsequent selection.
   function select(next: number) {
     const bounded = Math.max(0, Math.min(options.length - 1, next));
     onChange(options[bounded].value);
-    ref.current?.scrollTo({top: bounded * 48, behavior: "instant"});
+    ref.current?.scrollTo({top: bounded * 48, behavior: "smooth"});
   }
   return <div className="period-wheel-column"><span className="form-field__label">{label}</span><div className="period-wheel-frame"><div
     ref={ref} className="period-wheel" role="listbox" aria-label={label} tabIndex={0} aria-activedescendant={`${id}-${index}`}
@@ -43,5 +43,5 @@ function PickerDialog({value, simplified, allowAll, onClose, onChange}: {value: 
 
 export function PeriodPicker({value, simplified=false, allowAll=false, onChange}: {value:string; simplified?:boolean; allowAll?:boolean; onChange:(value:string)=>void}) {
   const [open,setOpen]=useState(false);
-  return <div className="form-field period-picker"><span className="form-field__label">신고 대상 기간</span><button type="button" className="input period-trigger" aria-haspopup="dialog" onClick={()=>setOpen(true)}><span>{value==="all"?"전체 기간":periodLabel(value)}</span><span aria-hidden="true">⌄</span></button>{open && <PickerDialog value={value} simplified={simplified} allowAll={allowAll} onClose={()=>setOpen(false)} onChange={onChange}/>}</div>;
+  return <div className="form-field period-picker"><span className="form-field__label">신고 대상 기간</span><button type="button" className="input period-trigger" aria-haspopup="dialog" onClick={()=>setOpen(true)}><span>{value==="all"?"전체 기간":periodLabel(value)}</span><svg className="period-trigger__chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>{open && <PickerDialog value={value} simplified={simplified} allowAll={allowAll} onClose={()=>setOpen(false)} onChange={onChange}/>}</div>;
 }

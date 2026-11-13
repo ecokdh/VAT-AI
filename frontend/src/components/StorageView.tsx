@@ -5,7 +5,7 @@ import { SummaryCard } from "./SummaryCard";
 import { FilterChips } from "./FilterChips";
 import { ReceiptListRow } from "./ReceiptListRow";
 import type { Receipt } from "../types";
-import { useMaskedFormat } from "../hooks/useMaskedFormat";
+import { formatWon, formatWonSpaced } from "../utils/format";
 
 export interface SummaryRowSpec {
   label: string;
@@ -42,8 +42,7 @@ export function StorageView({
   error,
 }: StorageViewProps) {
   const [activeMonth, setActiveMonth] = useState("전체");
-  const fmt = useMaskedFormat();
-  const navigate = useNavigate();
+const navigate = useNavigate();
 
   const filtered = useMemo(
     () => (activeMonth === "전체" ? receipts : receipts.filter((r) => monthOf(r.issuedAt) === activeMonth)),
@@ -56,25 +55,25 @@ export function StorageView({
 
   return (
     <div className="page">
-      <PageHeader title={title} showAmountToggle />
+      <PageHeader title={title} />
       <div className="page__body">
         <SummaryCard
           variant={variant}
           eyebrow="2024년 1기 확정 · 과세기간 누적"
           label={`${variant === "primary" ? "매입" : "매출"}처별 세금계산서 합계금액`}
-          amount={fmt.wonSpaced(totalAmount)}
+          amount={formatWonSpaced(totalAmount)}
           rows={summaryRows.map((row) => ({
             label: row.label,
             value:
               row.amount !== undefined
                 ? row.countText
-                  ? `${row.countText} · ${fmt.won(row.amount)}`
-                  : fmt.won(row.amount)
+                  ? `${row.countText} · ${formatWon(row.amount)}`
+                  : formatWon(row.amount)
                 : (row.countText ?? ""),
           }))}
         />
 
-        <div style={{ marginTop: 18, marginBottom: 12 }}>
+        <div style={{ marginTop: 16, marginBottom: 12 }}>
           <FilterChips options={MONTHS} active={activeMonth} onChange={setActiveMonth} variant={variant} />
         </div>
 
@@ -98,7 +97,7 @@ export function StorageView({
         <div className="section-title-row">
           <span className="section-title-row__title">거래 내역{activeMonth !== "전체" && ` (${activeMonth})`}</span>
           <span className="section-title-row__count">
-            총 {filtered.length}건 · {fmt.won(filtered.reduce((sum, r) => sum + r.supplyAmount, 0))}
+            총 {filtered.length}건 · {formatWon(filtered.reduce((sum, r) => sum + r.supplyAmount, 0))}
           </span>
         </div>
 

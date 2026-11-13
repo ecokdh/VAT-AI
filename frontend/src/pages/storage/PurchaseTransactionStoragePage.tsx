@@ -1,24 +1,26 @@
-import {TransactionQuestions} from "../../components/TransactionQuestions";
 import { TeamBenchmarkTab } from "../../components/TeamBenchmarkTab";
+import { VaultTabs } from "../../components/VaultTabs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { getMe } from "../../api/auth";
 import { isAxiosError } from "axios";
-import { confirmTransaction, confirmTransactionFromReceipt, createAnalysisRun, editTransactionReceipt, listTransactions, moveTransactionToTrash, setFixedAsset, type TransactionApi } from "../../api/transactions";
+import { confirmTransaction, confirmTransactionFromReceipt, createAnalysisRun, listTransactions, moveTransactionToTrash, type TransactionApi } from "../../api/transactions";
 import { listReceiptInbox, saveReceiptEdits, type ReceiptProcessingApi } from "../../api/receipts";
-import { useMaskedFormat } from "../../hooks/useMaskedFormat";
 import { inPeriod, isPeriod, needsReview } from "../../hooks/useReviewOverview";
 import { filterLedger, matchesReviewStatus, reviewLabel, reviewStatusClass } from "../../hooks/reviewState";
 import { parseSalesPeriod } from "../../hooks/salesPeriod";
-import { AnalysisResult } from "../../components/AnalysisResult";
+import { rememberPeriod, rememberedPeriod, useReturnedPeriod } from "../../hooks/currentPeriod";
 import { PeriodPicker } from "../../components/PeriodPicker";
+import { LedgerCard } from "../../components/LedgerCard";
 import { PageHeader } from "../../components/PageHeader";
 import { DeleteConfirmation } from "../../components/DeleteConfirmation";
 import { ReceiptPreview } from "../../components/ReceiptPreview";
 import { ReceiptDocumentDetails } from "../../components/ReceiptDocumentDetails";
 import { SlidePanel } from "../../components/SlidePanel";
+import { TransactionDetailSheet } from "../../components/TransactionDetailSheet";
 import type { SavedDocument } from "../../components/MonthlySalesReview";
 import { apiClient } from "../../api/client";
+import { formatWon } from "../../utils/format";
 
 const PREVIEW_COUNT = 5;
 // 분석 대기 거래는 자동으로 분석에 포함되고, 직접 고르는 것은 애매(추가 확인 필요) 거래의 재분석뿐이다.
@@ -27,8 +29,7 @@ const isSelectable = (r: TransactionApi) => r.direction === "purchase" && matche
 export function PurchaseTransactionStoragePage({ direction = "purchase" }: { direction?: "purchase" | "sales" }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const fmt = useMaskedFormat();
-  const [params, setParams] = useSearchParams();
+const [params, setParams] = useSearchParams();
   const status = params.get("status") ?? "all";
   const purchase = direction === "purchase";
   const combined = purchase && params.get("scope") === "all";
@@ -37,8 +38,11 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   const [monthly, setMonthly] = useState<SavedDocument[]>([]);
   const [simplified, setSimplified] = useState(false);
   const requestedPeriod = params.get("period");
-  const validPeriod = isPeriod(requestedPeriod) ? requestedPeriod : (!purchase && parseSalesPeriod(requestedPeriod)) || "all";
+  const returnedPeriod = useReturnedPeriod();
+  const validPeriod = returnedPeriod ?? (isPeriod(requestedPeriod) ? requestedPeriod
+    : (!purchase && parseSalesPeriod(requestedPeriod)) || (requestedPeriod ? "all" : rememberedPeriod() ?? "all"));
   const period = simplified && validPeriod !== "all" ? `${validPeriod.slice(0,4)}-YEAR` : validPeriod;
+  useEffect(() => { rememberPeriod(period); }, [period]);
   const [month, setMonth] = useState("");
   const [order, setOrder] = useState("newest");
   const [selected, setSelected] = useState<number[]>([]);
@@ -50,26 +54,14 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   const [deleteError, setDeleteError] = useState("");
   const [detail, setDetail] = useState<TransactionApi | null>(null);
   const [resultMode, setResultMode] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [receiptDetail, setReceiptDetail] = useState<ReceiptProcessingApi | null>(null);
   const [receiptEditing, setReceiptEditing] = useState(false);
   // 월간 매출 정산서도 매입 거래처럼 상세 창에서 확인하고 휴지통으로 옮긴다.
   const [monthlyDetail, setMonthlyDetail] = useState<SavedDocument | null>(null);
   const [monthlyDelete, setMonthlyDelete] = useState<SavedDocument | null>(null);
   const monthlyName = (r: SavedDocument) => (r.document.사업장.상호 as string | null) || "월간 매출 정산서";
-  const monthlyAmount = (r: SavedDocument) => typeof r.document.집계합계.실매출액 === "number" ? fmt.won(r.document.집계합계.실매출액) : "금액 확인 필요";
-  const openDetail = (item: TransactionApi, result = false) => { setResultMode(result); setEditing(false); setFixedAssetError(""); setDetail(item); };
-  const [fixedAssetBusy, setFixedAssetBusy] = useState(false);
-  const [fixedAssetError, setFixedAssetError] = useState("");
-  async function toggleFixedAsset(item: TransactionApi, value: boolean) {
-    setFixedAssetBusy(true); setFixedAssetError("");
-    try {
-      const updated = await setFixedAsset(item.id, value);
-      setDetail(updated);
-      setTransactions(rows => rows.map(r => r.id === updated.id ? updated : r));
-    } catch { setFixedAssetError("고정자산 여부를 저장하지 못했습니다. 다시 시도해 주세요."); }
-    finally { setFixedAssetBusy(false); }
-  }
+  const monthlyAmount = (r: SavedDocument) => typeof r.document.집계합계.실매출액 === "number" ? formatWon(r.document.집계합계.실매출액) : "금액 확인 필요";
+  const openDetail = (item: TransactionApi, result = false) => { setResultMode(result); setDetail(item); };
   const [scrolled, setScrolled] = useState(false);
   const refreshRun = useRef(0);
   const refresh = useCallback(async () => {
@@ -141,9 +133,9 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
     catch (cause) { setMessage((isAxiosError(cause) && cause.response?.data?.error?.message) || "거래 상세 정보를 열지 못했습니다. 다시 시도해 주세요."); }
     finally { setBusy(false); }
   }
-  return <div className="page qa-page"><PageHeader title={combined ? "확인할 거래" : purchase ? "매입 보관함" : "매출 보관함"} showAmountToggle /><main className="page__body">
+  return <div className="page qa-page"><PageHeader title={combined ? "확인할 거래" : purchase ? "매입 보관함" : "매출 보관함"} /><main className="page__body">
     <p className="eyebrow muted">{purchase ? "매입 증빙 및 공제 분석" : "매출 증빙 및 거래 관리"}</p><h1 className="screen-title">{combined ? "매입·매출을 함께 확인하세요" : purchase ? "내 매입 거래를 관리하세요" : "내 매출 내역을 확인하세요"}</h1>
-    <nav className="vault-tabs" aria-label="보관함 종류"><NavLink to={`/storage/purchase?period=${period}`}>매입</NavLink><NavLink to={`/storage/sales?period=${period}`}>매출</NavLink><TeamBenchmarkTab /></nav>
+    <VaultTabs purchaseTo={`/storage/purchase?period=${period}`} salesTo={`/storage/sales?period=${period}`}><TeamBenchmarkTab /></VaultTabs>
     <PeriodPicker value={period} simplified={simplified} allowAll onChange={period=>updateFilters({period})}/>
     {combined && <p className="banner banner--info">홈 요약에서 선택한 매입·매출 거래를 함께 표시합니다.</p>}
     <div className="stat-grid stat-filters">{[["all","전체 거래",total],["review","확인 필요",review],["done",purchase ? "분석 완료" : "확정 거래",total-review]].map(([key,label,count]) => <button key={key} aria-pressed={status === key} onClick={() => filter(String(key))}><small>{label}</small><strong>{count}건</strong></button>)}</div>
@@ -154,15 +146,17 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
     <div className="status-tabs">{(purchase ? [["all","전체"],["waiting","분석 대기"],["caution","추가 확인 필요"],["deductible","공제"],["nondeductible","불공제"]] : [["all","전체"],["review","확인 필요"],["done","확정"]]).map(([key,label])=><button key={key} aria-pressed={status===key} onClick={()=>filter(key)}>{label}</button>)}</div>
     {loading ? <p className="center-note" role="status">거래를 불러오는 중입니다.</p> : <>
       {!filtered.length && !receipts.length && !monthlyVisible.length && <div className="empty-card"><strong>표시할 거래가 없어요</strong><p className="muted">신고 기간·월·상태를 바꾸거나 증빙을 추가해 주세요.</p></div>}
-      {monthlyVisible.map(r=><article className="card ledger-card" key={`monthly-${r.id}`}><div className="ledger-head"><div><strong>{monthlyName(r)}</strong><small>{r.document.거래일 || "거래월 확인 필요"} · 월간 매출 정산서</small></div><strong>{monthlyAmount(r)}</strong></div>
-      <div className="ledger-meta"><span className={`status-label ${r.status === 'reviewed' ? 'status-label--done' : 'status-label--review'}`}>{r.status === 'reviewed' ? '✓ 증빙 확인 완료' : '◷ 증빙 확인 필요'}</span><button type="button" className="ledger-detail-link" onClick={()=>setMonthlyDetail(r)}>거래 상세정보 <span aria-hidden>›</span></button></div></article>)}
-      {shownReceipts.map(r=><article className="card ledger-card" key={`receipt-${r.id}`}><div className="ledger-head"><div><strong>{r.vendor || "거래처 확인 필요"}</strong><small>{r.date ?? "거래일 확인 필요"}{combined && ` · ${r.direction === "sales" ? "매출" : "매입"}`}</small></div><strong>{r.amount == null ? "금액 확인 필요" : fmt.won(r.amount)}</strong></div>
-      <div className="ledger-meta"><span className="status-label status-label--review">◷ 분석 대기</span><button type="button" className="ledger-detail-link" onClick={()=>{setReceiptEditing(false);setReceiptDetail(r);}}>거래 상세정보 <span aria-hidden>›</span></button></div></article>)}
-      {shownRows.map(item=>{const waiting = isWaiting(item); return <article key={item.id} className="card ledger-card"><div className="ledger-head">{isSelectable(item) && <label className="ledger-selection"><input type="checkbox" aria-label={`${item.description || item.vendor} 분석 선택`} checked={visibleSelected.includes(item.id)} onChange={e=>setSelected(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/></label>}<div><strong>{item.description || item.vendor}</strong><small>{item.transaction_date}{combined && ` · ${item.direction === "sales" ? "매출" : "매입"}`}</small></div><strong>{fmt.won(item.total_amount)}</strong></div>
-      <div className="ledger-meta"><span className={`status-label ${reviewStatusClass(item)}`}>{waiting ? "◷ 분석 대기" : reviewLabel(item)}</span><button type="button" className="ledger-detail-link" disabled={busy} onClick={()=>item.state !== "confirmed" ? void openAsTransaction(()=>confirmTransaction(item.id)) : openDetail(item)}>거래 상세정보 <span aria-hidden>›</span></button></div>
-      {/* 분석 결과 버튼은 매입만 둔다. 매출은 '거래 상세정보 ›'로 본다. */}
-      {!waiting && item.state === "confirmed" && item.direction === "purchase" && <button className={`btn btn--sm ${needsReview(item) ? "btn--review" : "btn--result"}`} onClick={()=>openDetail(item, true)}>{needsReview(item) ? "추가 확인사항 보기" : "분석 결과 보기"}</button>}
-      </article>;})}
+      {monthlyVisible.map(r=><LedgerCard key={`monthly-${r.id}`} title={monthlyName(r)} date={r.document.거래일 || "거래월 확인 필요"} amount={monthlyAmount(r)}
+        status={r.status === 'reviewed' ? '증빙 확인 완료' : '증빙 확인 필요'} statusClass={r.status === 'reviewed' ? 'status-label--done' : 'status-label--review'} onDetail={()=>setMonthlyDetail(r)} />)}
+      {shownReceipts.map(r=><LedgerCard key={`receipt-${r.id}`} title={r.vendor || "거래처 확인 필요"} date={`${r.date ?? "거래일 확인 필요"}${combined ? ` · ${r.direction === "sales" ? "매출" : "매입"}` : ""}`}
+        amount={r.amount == null ? "금액 확인 필요" : formatWon(r.amount)} status="분석 대기" statusClass="status-label--wait" detailDisabled={busy} onDetail={()=>void openAsTransaction(()=>confirmTransactionFromReceipt(r.id))} />)}
+      {shownRows.map(item=>{const waiting = isWaiting(item); return <LedgerCard key={item.id}
+        select={isSelectable(item) && <input type="checkbox" aria-label={`${item.description || item.vendor} 분석 선택`} checked={visibleSelected.includes(item.id)} onChange={e=>setSelected(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}
+        title={item.description || item.vendor} date={`${item.transaction_date}${combined ? ` · ${item.direction === "sales" ? "매출" : "매입"}` : ""}`} amount={formatWon(item.total_amount)}
+        status={waiting ? "분석 대기" : reviewLabel(item)} statusClass={waiting ? "status-label--wait" : reviewStatusClass(item)} detailDisabled={busy}
+        onDetail={()=>item.state !== "confirmed" ? void openAsTransaction(()=>confirmTransaction(item.id)) : openDetail(item)}
+        // 분석 결과 칸은 분석이 끝난 매입 거래만 둔다. 매출은 '상세 ›'로 본다.
+        result={!waiting && item.state === "confirmed" && item.direction === "purchase" ? { kind: needsReview(item) ? "review" : item.review_status === "excluded" ? "nondeductible" : "deductible", onClick: () => openDetail(item, true) } : undefined} />;})}
       {hiddenCount > 0 && <button type="button" className="btn btn--secondary view-all" onClick={()=>navigate(`/storage/${direction}/receipts?${new URLSearchParams({ period, month, status, order })}`)}>전체 보기 ({receipts.length + filtered.length}건)</button>}
     </>}
     {!(purchase && judgedTab) && <div className="vault-actions">{purchase && analyzeTab && <><p className="muted">{includeWaiting ? `분석 대기 ${waitingCount}건` : `다시 분석할 거래 ${visibleSelected.length}건`}</p><button className="btn btn--primary" disabled={!(waitingCount + visibleSelected.length) || busy} onClick={()=>void analyzeAll()}>{busy?"분석 준비 중":"거래 분석하기"}</button></>}<button className="btn btn--secondary" onClick={()=>navigate(`/capture?direction=${direction}`)}>＋ {purchase?"매입":"매출"} 증빙 추가</button></div>}
@@ -172,16 +166,11 @@ export function PurchaseTransactionStoragePage({ direction = "purchase" }: { dir
   {scrolled && <button className="scroll-top" aria-label="맨 위로 이동" onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}>↑</button>}
   {(deleteTarget || monthlyDelete) && <DeleteConfirmation name={monthlyDelete ? monthlyName(monthlyDelete) : deleteTarget ? deleteTarget.description || deleteTarget.vendor : ""} busy={deleting} error={deleteError} onCancel={()=>{setDeleteTarget(null);setMonthlyDelete(null);}} onConfirm={()=>void remove()} />}
   <SlidePanel open={!!monthlyDetail} label="정산서 상세" title={monthlyDetail ? monthlyName(monthlyDetail) : ""} onClose={()=>setMonthlyDetail(null)}>{monthlyDetail && <><p>{monthlyDetail.document.거래일 || "거래월 확인 필요"} · 월간 매출 정산서</p><div className="peek-amount-row"><strong className="peek-amount">{monthlyAmount(monthlyDetail)}</strong><button type="button" className="text-link" onClick={()=>navigate(`/receipts/monthly/${monthlyDetail.id}/review`)}>수정하기</button></div>
-    <p className={`status-label ${monthlyDetail.status === 'reviewed' ? 'status-label--done' : 'status-label--review'}`}>{monthlyDetail.status === 'reviewed' ? '✓ 증빙 확인 완료' : '◷ 증빙 확인 필요'}</p>
+    <p className={`status-label ${monthlyDetail.status === 'reviewed' ? 'status-label--done' : 'status-label--review'}`}>{monthlyDetail.status === 'reviewed' ? '증빙 확인 완료' : '증빙 확인 필요'}</p>
     <div className="field-row"><span>사업자등록번호</span><span>{monthlyDetail.document.사업장.사업자등록번호 ?? "확인 필요"}</span></div>
     <ReceiptPreview id={monthlyDetail.id} monthly controls/>
     <button type="button" className="text-link danger" onClick={()=>{setDeleteError("");setMonthlyDelete(monthlyDetail);}}>거래 삭제</button></>}</SlidePanel>
-  <SlidePanel open={!!detail} label={resultMode ? "분석 결과" : "거래 상세"} title={detail ? detail.description || detail.vendor : ""} onClose={()=>setDetail(null)}>{detail && (resultMode ? <AnalysisResult transaction={detail}/> : <><p>{detail.transaction_date} · {detail.vendor}</p><div className="peek-amount-row"><strong className="peek-amount">{fmt.won(detail.total_amount)}</strong>{detail.receipt_id && <button type="button" className="text-link" onClick={()=>setEditing(v=>!v)}>{editing ? "수정 취소" : "수정하기"}</button>}</div>
-    <div className="field-row"><span>거래처</span><strong>{detail.vendor}</strong></div><div className="field-row"><span>공급가액</span><span>{detail.supply_amount==null?"확인 필요":fmt.won(detail.supply_amount)}</span></div><div className="field-row"><span>부가세</span><span>{detail.vat_amount==null?"확인 필요":fmt.won(detail.vat_amount)}</span></div>
-    {detail.direction === "purchase" && <><label className="check-row"><input type="checkbox" checked={detail.is_fixed_asset} disabled={fixedAssetBusy} onChange={e=>void toggleFixedAsset(detail, e.target.checked)}/>고정자산 (1년 이상 쓰는 장비·시설)</label>
-      <p className="footnote fixed-asset-note">{fixedAssetError || "세금계산서로 받으면 신고서 (12) 고정자산매입에 들어갑니다. 체크해도 공제 분석은 다시 하지 않아요."}</p></>}
-    {detail.receipt_id && <><ReceiptPreview id={detail.receipt_id} controls/><ReceiptDocumentDetails receiptId={detail.receipt_id} edit={editing ? { save: (doc, details) => editTransactionReceipt(detail.id, doc, details).then(setDetail), onCancel: () => setEditing(false), onSaved: () => { setEditing(false); void refresh(); } } : undefined}/></>}
-    {!editing && <>{detail.direction === "purchase" && <TransactionQuestions id={detail.id} onSaved={()=>void refresh()}/>}
-    <button type="button" className="text-link danger" onClick={()=>{setDeleteError("");setDeleteTarget(detail);}}>거래 삭제</button></>}</>)}</SlidePanel>
-  <SlidePanel open={!!receiptDetail} label="영수증 상세" title={receiptDetail?.vendor || "영수증"} onClose={()=>setReceiptDetail(null)}>{receiptDetail && <><p>{receiptDetail.date ?? "거래일 확인 필요"} · {receiptDetail.vendor}</p><div className="peek-amount-row"><strong className="peek-amount">{receiptDetail.amount == null ? "금액 확인 필요" : fmt.won(receiptDetail.amount)}</strong><button type="button" className="text-link" onClick={()=>setReceiptEditing(v=>!v)}>{receiptEditing ? "수정 취소" : "수정하기"}</button></div><p className="status-label status-label--review">◷ 분석 대기</p><ReceiptPreview id={receiptDetail.id} controls/><ReceiptDocumentDetails receiptId={receiptDetail.id} edit={receiptEditing ? { save: (doc, details, receipt) => saveReceiptEdits(receipt, doc, details).then(setReceiptDetail), onCancel: () => setReceiptEditing(false), onSaved: () => { setReceiptEditing(false); void refresh(); } } : undefined}/></>}</SlidePanel></div>;
+  <TransactionDetailSheet transaction={detail} resultMode={resultMode} onClose={()=>setDetail(null)} onSaved={()=>void refresh()} onDelete={t=>{setDeleteError("");setDeleteTarget(t);}}
+    onUpdated={updated=>{setDetail(updated);setTransactions(rows=>rows.map(r=>r.id===updated.id?updated:r));}} />
+  <SlidePanel open={!!receiptDetail} label="영수증 상세" title={receiptDetail?.vendor || "영수증"} onClose={()=>setReceiptDetail(null)}>{receiptDetail && <><p>{receiptDetail.date ?? "거래일 확인 필요"} · {receiptDetail.vendor}</p><div className="peek-amount-row"><strong className="peek-amount">{receiptDetail.amount == null ? "금액 확인 필요" : formatWon(receiptDetail.amount)}</strong><button type="button" className="text-link" onClick={()=>setReceiptEditing(v=>!v)}>{receiptEditing ? "수정 취소" : "수정하기"}</button></div><p className="status-label status-label--review">분석 대기</p><ReceiptPreview id={receiptDetail.id} controls/><ReceiptDocumentDetails receiptId={receiptDetail.id} edit={receiptEditing ? { save: (doc, details, receipt) => saveReceiptEdits(receipt, doc, details).then(setReceiptDetail), onCancel: () => setReceiptEditing(false), onSaved: () => { setReceiptEditing(false); void refresh(); } } : undefined}/></>}</SlidePanel></div>;
 }

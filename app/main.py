@@ -3,19 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlmodel import Session
 
-
 from app.auth.router import router as auth_router
 from app.business.router import router as business_router, v2_router as business_v2_router
 from app.common.exceptions import register_exception_handlers
 from app.core.database import get_session
 from app.core.config import settings
 from app.deduction.rag.router import router as rag_router
-from app.deduction.router import router as deduction_router
 from app.receipts.router import router as receipts_router
 from app.transactions.router import router as transactions_v2_router
 from app.jobs.router import router as jobs_v2_router
 from app.sales_monthly.router import router as monthly_sales_router
 from app.sales_filing.router import router as sales_filing_router
+from app.team_benchmark.router import router as team_benchmark_router
 
 app = FastAPI(title="VAT-AI")
 
@@ -33,13 +32,11 @@ app.include_router(auth_router)
 app.include_router(business_router)
 app.include_router(business_v2_router)
 app.include_router(receipts_router)
-app.include_router(deduction_router)
 app.include_router(transactions_v2_router)
 app.include_router(jobs_v2_router)
 app.include_router(monthly_sales_router)
 app.include_router(sales_filing_router)
 app.include_router(rag_router)
-from app.team_benchmark.router import router as team_benchmark_router
 app.include_router(team_benchmark_router)
 
 @app.get("/health", tags=["health"])

@@ -23,6 +23,7 @@ export interface ReceiptReview {
   evidence_type: 'tax_invoice' | 'card_receipt' | 'cash_receipt' | 'tax_free_receipt' | 'manual' | 'unknown';
   business_related: boolean | null;
   tax_treatment: 'standard' | 'zero' | 'exempt' | 'unknown';
+  is_fixed_asset?: boolean;
 }
 
 export interface ReceiptApi {
@@ -74,14 +75,9 @@ export interface ReceiptExtractionInput {
   question_answers?: Record<string,string>;
   purpose?: string | null;
   evidence_type?: ReceiptReview['evidence_type'];
+  is_fixed_asset?: boolean;
   business_related?: boolean | null;
   tax_treatment?: ReceiptReview['tax_treatment'];
-}
-
-export function uploadReceipt(file: File) {
-  const formData = new FormData();
-  formData.append("file", file);
-  return apiClient.post<ReceiptApi>("/receipts", formData).then((res) => res.data);
 }
 
 export async function enqueueReceiptOcr(file: File, direction: "purchase" | "sales"): Promise<{ job_id: string; receipt_id: number; status: "PENDING" }> {

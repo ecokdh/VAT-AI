@@ -87,6 +87,9 @@ FIELDS: list[Field] = [
     Field("filed.signer", "신고인 성명", (420.0, 712.9, 478.0, 722.8), "text"),
 ]
 FIELD_BY_ID = {f.id: f for f in FIELDS}
+# 앱이 다루지 않는 칸(매입자발행·영세율·예정신고 누락·대손·수출기업 납부유예). 신고서에 '예외'로 표시하고 모델 검증에서는 뺀다.
+EXCEPTION_FIELDS = tuple(f"r{row}.{col}" for row in (2, 5, 6, 7, 8, 11, 13, 14) for col in ("amount", "tax")
+                         if f"r{row}.{col}" in FIELD_BY_ID)
 # 하이픈이 인쇄된 사업자등록번호 칸 위치(0부터).
 REG_NO_DASH_CELLS = (3, 6)
 

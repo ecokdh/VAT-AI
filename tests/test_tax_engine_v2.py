@@ -173,3 +173,33 @@ def test_manufacturing_second_period_deemed_credit_is_held_for_annual_adjustment
     assert estimate.deemed_input_vat == 0
     assert estimate.uncalculated_transaction_count == 1
     assert any("연간 합산 조정" in note for note in estimate.notes)
+
+
+def card_sales(total, supply, vat):
+    return line(direction="sales", evidence_type="card_receipt", total_amount=total, supply_amount=supply, vat_amount=vat)
+
+
+def test_card_issuance_credit_applies_only_to_individuals():
+    sales = [card_sales(11_000_000, 10_000_000, 1_000_000), line(direction="sales", total_amount=1_100_000, supply_amount=1_000_000, vat_amount=100_000)]
+    individual = calculate_estimate(tax_type="general", period="2026-H1", lines=sales, entity_type="individual")
+    assert individual.card_issuance_base == 11_000_000  # 세금계산서 매출은 기준에서 빠진다
+    assert individual.card_issuance_credit == 143_000  # 11,000,000 × 1.3%
+    assert individual.payable_estimate == 1_100_000 - 143_000
+    corporation = calculate_estimate(tax_type="general", period="2026-H1", lines=sales, entity_type="corporation")
+    assert corporation.card_issuance_credit == 0
+    assert corporation.payable_estimate == 1_100_000
+    unknown = calculate_estimate(tax_type="general", period="2026-H1", lines=sales)
+    assert unknown.card_issuance_credit == 0
+
+
+def test_card_issuance_credit_is_capped_by_payable_and_annual_limit():
+    second_half = line(direction="sales", evidence_type="card_receipt", transaction_date=date(2026, 8, 1),
+                       total_amount=1_100_000_000, supply_amount=1_000_000_000, vat_amount=100_000_000)
+    capped = calculate_estimate(tax_type="general", period="2026-H2", lines=[second_half],
+                                entity_type="individual", card_issuance_credit_used=4_000_000)
+    assert capped.card_issuance_credit == 6_000_000  # 연 1,000만원 중 1기에 쓴 400만원을 뺀 나머지
+    small_payable = calculate_estimate(tax_type="general", period="2026-H1", lines=[
+        card_sales(11_000_000, 10_000_000, 1_000_000), line(vat_amount=950_000),
+    ], entity_type="individual")
+    assert small_payable.card_issuance_credit == 50_000  # 납부세액(50,000원)을 넘지 않는다
+    assert small_payable.payable_estimate == 0

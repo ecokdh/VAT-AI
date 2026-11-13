@@ -6,6 +6,9 @@ from typing import Iterable, Literal
 RULE_VERSION = "KR-VAT-2026-v1"
 STANDARD_RATE = 10
 SIMPLIFIED_INPUT_CREDIT_RATE_PER_10000 = 50  # 0.5%
+# 신용카드매출전표 등 발행세액공제(부가가치세법 제46조): 개인사업자만, 발행금액(부가세 포함)의 1.3%, 연 1,000만원 한도.
+CARD_ISSUANCE_CREDIT_RATE_PER_1000 = 13
+CARD_ISSUANCE_CREDIT_ANNUAL_LIMIT = 10_000_000
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,8 @@ class TaxEstimate:
     caution_transaction_count: int
     uncalculated_transaction_count: int
     notes: tuple[str, ...]
+    card_issuance_base: int = 0
+    card_issuance_credit: int = 0
 
 
 # 신고 기간별 [시작일, 종료일). 일반과세자는 1~3·1~6·7~9·7~12월, 간이과세자는 연간.
@@ -79,6 +84,7 @@ def calculate_estimate(
     industry_subtype: str | None = None,
     is_sme: bool | None = None,
     deemed_related_taxable_sales: int | None = None,
+    card_issuance_credit_used: int = 0,
 ) -> TaxEstimate:
     start, end = period_bounds(period, tax_type)
     selected = [line for line in lines if start <= line.transaction_date < end and line.state == "confirmed"]
@@ -94,6 +100,7 @@ def calculate_estimate(
     deemed_candidate_count = 0
     deemed_ready_count = 0
     simplified_deemed_count = 0
+    card_issuance_base = 0
 
     if tax_type == "simplified" and simplified_industry_rate not in {15, 20, 25, 30, 40}:
         return TaxEstimate("UNAVAILABLE", None, None, None, None, 0, 0, len(selected), ("국세청 과세유형과 확인된 업종별 부가가치율이 필요합니다.",))
@@ -115,6 +122,9 @@ def calculate_estimate(
                     uncalculated += 1
                     continue
                 output_vat += amount
+            if line.evidence_type == "card_receipt" and line.tax_treatment == "standard":
+                # 신고서 (3) 신용카드·현금영수증 발행분의 공급대가가 발행세액공제의 기준이다.
+                card_issuance_base += line.total_amount
             included += 1
             continue
 
@@ -225,9 +235,22 @@ def calculate_estimate(
     if tax_type == "simplified" and input_vat > output_vat:
         notes.append("간이과세자는 공제액이 납부세액을 초과하는 부분을 환급으로 계산하지 않습니다.")
     payable = max(0, output_vat - input_vat - deemed_input_vat)
+    card_issuance_credit = 0
+    if card_issuance_base:
+        if entity_type == "individual":
+            # 공제액은 납부세액을 넘지 못하고, 같은 해 앞선 기간에 쓴 공제와 합쳐 연 한도를 넘지 못한다.
+            remaining_limit = max(0, CARD_ISSUANCE_CREDIT_ANNUAL_LIMIT - card_issuance_credit_used)
+            card_issuance_credit = min(card_issuance_base * CARD_ISSUANCE_CREDIT_RATE_PER_1000 // 1000, remaining_limit, payable)
+            payable -= card_issuance_credit
+            notes.append("신용카드·현금영수증 발행분(공급대가)의 1.3%를 발행세액공제로 뺐습니다. 직전연도 공급가액이 10억원을 넘으면 받을 수 없습니다. (부가가치세법 제46조)")
+        elif entity_type == "corporation":
+            notes.append("법인사업자는 신용카드매출전표 등 발행세액공제를 받을 수 없어 계산하지 않았습니다.")
+        else:
+            notes.append("개인·법인 구분이 확인되지 않아 신용카드매출전표 등 발행세액공제를 계산하지 않았습니다.")
     if caution:
         notes.append("CAUTION 및 검토 중인 매입은 공제액에서 제외했습니다.")
     if uncalculated:
         notes.append("정보가 부족하거나 지원 규칙 검증이 필요한 거래는 계산에서 제외했습니다.")
     status = "PARTIAL" if caution or uncalculated else "COMPLETE"
-    return TaxEstimate(status, output_vat, input_vat, deemed_input_vat, payable, included, caution, uncalculated, tuple(notes))
+    return TaxEstimate(status, output_vat, input_vat, deemed_input_vat, payable, included, caution, uncalculated, tuple(notes),
+                       card_issuance_base, card_issuance_credit)

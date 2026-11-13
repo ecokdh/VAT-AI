@@ -49,6 +49,7 @@ class Transaction(SQLModel, table=True):
 
 class TransactionRevision(SQLModel, table=True):
     __tablename__ = "transaction_revisions"
+    __table_args__ = (UniqueConstraint("transaction_id", "revision", name="uq_transaction_revision"),)
 
     id: Optional[int] = Field(default=None, primary_key=True)
     transaction_id: int = Field(foreign_key="transactions.id", nullable=False, index=True)

@@ -6,6 +6,7 @@ import { RecognitionDetails } from "../../components/RecognitionDetails";
 import { ReceiptPreview } from "../../components/ReceiptPreview";
 import { confirmTransaction, createTransactionFromReceipt } from "../../api/transactions";
 import { PageHeader } from "../../components/PageHeader";
+import { NumberInput } from "../../components/NumberInput";
 
 export function OcrResultEditPage() {
   const navigate = useNavigate();
@@ -91,7 +92,7 @@ export function OcrResultEditPage() {
 
   return (
     <div className="page">
-      <PageHeader title="추출 거래 확인" showAmountToggle onBack={() => navigate(`/storage/${direction}`)} />
+      <PageHeader title="추출 거래 확인" onBack={() => navigate(`/storage/${direction}`)} />
       <div className="page__body">
         <div className="banner banner--warning" style={{ marginBottom: 20 }}>
           <span>⚠️</span>
@@ -113,16 +114,16 @@ export function OcrResultEditPage() {
             <div className="form-field"><label className="form-field__label" htmlFor="transaction-purpose">거래 목적</label><input id="transaction-purpose" className="input" value={purpose} maxLength={1000} onChange={e=>setPurpose(e.target.value)} /></div>
             <div className="form-field">
               <label className="form-field__label" htmlFor="transaction-total">거래 총액 (원)</label>
-              <input id="transaction-total" className="input" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))} />
+              <NumberInput id="transaction-total" className="input" value={amount} onValueChange={setAmount} />
             </div>
-            <div className="field-grid"><label className="form-field"><span className="form-field__label">공급가액 (원)</span><input className="input" inputMode="numeric" value={supplyAmount} onChange={e=>setSupplyAmount(e.target.value.replace(/[^0-9]/g,""))}/></label><label className="form-field"><span className="form-field__label">부가세 (원)</span><input className="input" inputMode="numeric" value={vatAmount} onChange={e=>setVatAmount(e.target.value.replace(/[^0-9]/g,""))}/></label></div>
+            <div className="field-grid"><label className="form-field"><span className="form-field__label">공급가액 (원)</span><NumberInput className="input" value={supplyAmount} onValueChange={setSupplyAmount}/></label><label className="form-field"><span className="form-field__label">부가세 (원)</span><NumberInput className="input" value={vatAmount} onValueChange={setVatAmount}/></label></div>
             <p className="footnote">원본에 표시된 값을 확인해 주세요. 빈 금액은 총액에서 임의로 추정하지 않습니다.</p>
             <div className="form-field">
               <label className="form-field__label" htmlFor="transaction-date">거래일</label>
               <input id="transaction-date" className="input" type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} />
             </div>
-            <div className="form-field"><label className="form-field__label" htmlFor="transaction-supply">공급가액 (원 · 원본 확인)</label><input id="transaction-supply" className="input" inputMode="numeric" value={supplyAmount} onChange={e => setSupplyAmount(e.target.value.replace(/[^0-9]/g, ""))} /></div>
-            <div className="form-field"><label className="form-field__label" htmlFor="transaction-vat">부가세 (원 · 원본 확인)</label><input id="transaction-vat" className="input" inputMode="numeric" value={vatAmount} onChange={e => setVatAmount(e.target.value.replace(/[^0-9]/g, ""))} /></div>
+            <div className="form-field"><label className="form-field__label" htmlFor="transaction-supply">공급가액 (원 · 원본 확인)</label><NumberInput id="transaction-supply" className="input" value={supplyAmount} onValueChange={setSupplyAmount} /></div>
+            <div className="form-field"><label className="form-field__label" htmlFor="transaction-vat">부가세 (원 · 원본 확인)</label><NumberInput id="transaction-vat" className="input" value={vatAmount} onValueChange={setVatAmount} /></div>
             <div className="form-field">
               <label className="form-field__label" htmlFor="tax-treatment">증빙 과세 구분</label>
               <select id="tax-treatment" className="input" value={taxTreatment} onChange={(e) => { const value = e.target.value as typeof taxTreatment; setTaxTreatment(value); if (value !== "exempt") setDeemedInput(false); }}>

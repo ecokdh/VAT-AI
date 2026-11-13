@@ -20,7 +20,7 @@ from app.business.models import BusinessProfile, TaxProfileV2
 from app.common.exceptions import AppException
 from app.sales_filing.models import SalesFilingWorkflow
 from app.sales_monthly.models import MonthlySalesDocument
-from app.sales_monthly.spreadsheet import PG_PAYMENTS, VERSION as SPREADSHEET_VERSION, restore_document
+from app.sales_monthly.spreadsheet import VERSION as SPREADSHEET_VERSION, restore_document
 from app.vat_return.engine import STANDARD_RATE, period_bounds
 
 SOURCE_STATUSES = {"확인 완료", "해당 없음 확인", "자료 없음", "검토 필요"}
@@ -351,37 +351,20 @@ def _normalize_document_rows(
                 source=source, documents=[document_id], row=index, impact=raw.get("합계금액")))
             continue
         treatment = (raw.get("과세구분") or "").strip()
-        pg_amounts = None
         if pg_sheet:
-            gross = raw["합계금액"]
+            gross = raw.get("합계금액")
             if gross == 0 and raw["건수"] == 0:
                 continue
-            if gross <= 0:
+            if isinstance(gross, int) and gross < 0:
                 issues.append(_issue("PG_NET_AMOUNT_REVIEW", ref,
                     f"문서 {document_id} {index + 1}행의 취소·환불과 원거래를 대조해 주세요.",
                     source=source, documents=[document_id], row=index, impact=gross))
                 continue
-            input_key = f"document:{document_id}:{index}"
-            issue = _issue("PG_SPREADSHEET_RECONCILIATION_REQUIRED", {**ref, "row_hash": _fingerprint(raw)},
-                f"{row_date_value} {raw['업체명']} {gross:,}원의 카드·현금영수증·세금계산서 반영 여부를 대조해 주세요. 누락분만 결제 구분과 금액을 확인해 반영합니다.",
-                source=source, documents=[document_id], row=index, input_key=input_key, impact=gross)
-            issue["pg_classification_confirmed"] = treatment in TAXABLE_VALUES and raw.get("결제수단") in PG_PAYMENTS
-            resolution = resolutions.get(issue["issue_id"], {})
-            if resolution.get("action") == "중복 확인" and resolution.get("amount") == gross:
-                continue
-            corrected = tuple(resolution.get(key) for key in ("supply_amount", "vat_amount", "total_amount"))
-            if (resolution.get("action") != "누락 확인" or not issue["pg_classification_confirmed"]
-                or not all(isinstance(value, int) and value >= 0 for value in corrected)
-                or not 0 < corrected[2] <= gross or corrected[0] + corrected[1] != corrected[2]
-                or corrected[1] != corrected[0] * STANDARD_RATE // 100):
-                issues.append(issue)
-                continue
-            pg_amounts = corrected
         cash_summary = source == "hometax_cash_receipt" and document_basis == "거래년월"
         cash_amounts_confirmed = cash_summary and isinstance(raw.get("부가세"), int) and (
             raw["부가세"] != 0 or raw.get("합계금액") == raw.get("공급가액") == raw["부가세"] == 0
         )
-        if treatment not in TAXABLE_VALUES and not ((card_sheet or cash_amounts_confirmed) and not treatment):
+        if treatment not in TAXABLE_VALUES and not ((card_sheet or cash_amounts_confirmed or pg_sheet) and not treatment):
             issues.append(_issue("OUT_OF_SCOPE_TAX_TREATMENT", ref, f"문서 {document_id} {index + 1}행에 면세·영세율 또는 미확인 과세 구분이 있습니다. 해당 자료를 검토해 주세요.", source=source, documents=[document_id], row=index, impact=raw.get("합계금액")))
             continue
         if (raw.get("비과세금액") or 0) > 0 or (raw.get("봉사료") or 0) > 0:
@@ -398,7 +381,7 @@ def _normalize_document_rows(
             source=source, documents=[document_id], row=index, impact=abs(cancellation or raw_total or 0),
         ) if is_cancellation else None
         resolution = resolutions.get(cancellation_issue["issue_id"]) if cancellation_issue else None
-        values = pg_amounts if pg_sheet else _amounts(raw, allow_negative=is_cancellation)
+        values = _amounts(raw, allow_negative=is_cancellation)
         if is_cancellation and resolution and resolution.get("action") == "금액 정정":
             corrected = (resolution.get("supply_amount"), resolution.get("vat_amount"), resolution.get("total_amount"))
             all_nonnegative = all(isinstance(amount, int) and amount >= 0 for amount in corrected)
@@ -425,10 +408,14 @@ def _normalize_document_rows(
             continue
         supply, vat, total = values
         card_part, other_part = raw.get("카드금액"), raw.get("기타결제금액")
-        if not pg_sheet and (card_part is not None or other_part is not None) and (card_part or 0) + (other_part or 0) != total:
+        has_payment_split = card_part is not None or other_part is not None
+        if has_payment_split and ((card_part or 0) + (other_part or 0) != total or (
+            pg_sheet and not all(isinstance(part, int) and part >= 0 for part in (card_part, other_part))
+        )):
             issues.append(_issue("PAYMENT_COMPONENT_MISMATCH", ref, f"문서 {document_id} {index + 1}행의 카드·기타 결제 구성액이 합계 {total:,}원과 맞는지 확인해 주세요.", source=source, documents=[document_id], row=index, impact=total))
             continue
-        if vat != supply * STANDARD_RATE // 100:
+        # 카드 매출처럼 합계만 있는 자료는 공급가액을 합계×100/110으로 나눠 1원 차이가 날 수 있어, 원본에 공급가액이 있을 때만 대조한다.
+        if not pg_sheet and raw.get("공급가액") is not None and vat != supply * STANDARD_RATE // 100:
             issues.append(_issue("STANDARD_RATE_MISMATCH", ref, f"문서 {document_id} {index + 1}행은 공급가액의 10%와 세액이 다릅니다. 과세 구분과 금액을 확인해 주세요.", source=source, documents=[document_id], row=index, impact=total))
         payment_method = (raw.get("결제수단") or "").lower()
         line_number = 1 if source == "hometax_sales_invoice" else 3 if source in CARD_SOURCES or any(token in payment_method for token in ("카드", "현금영수증", "card")) else 4
@@ -451,16 +438,14 @@ def _normalize_document_rows(
         if "row_hash" in ref:
             normalized_row["spreadsheet_review_hash"] = ref["row_hash"]
         if pg_sheet:
-            normalized_row["input_key"] = input_key
             normalized_row["pg_sheet_key"] = (row_date_value, re.sub(r"\s+", "", raw["업체명"]).casefold())
-        elif source in {"pg", "unissued_sales"}:
+        elif source == "unissued_sales":
             input_key = f"document:{document_id}:{index}"
             normalized_row["input_key"] = input_key
             issue = _issue(
-                "PG_RECONCILIATION_REQUIRED" if source == "pg" else "UNISSUED_SALE_CONFIRMATION_REQUIRED",
+                "UNISSUED_SALE_CONFIRMATION_REQUIRED",
                 input_key,
-                (f"문서 {document_id} {index + 1}행의 PG·플랫폼 매출 {total:,}원이 홈택스 자료에 포함됐는지 확인해 주세요."
-                 if source == "pg" else f"문서 {document_id} {index + 1}행의 미발급 매출 {total:,}원이 실제 공급이고 신고자료에서 빠졌는지 확인해 주세요."),
+                f"문서 {document_id} {index + 1}행의 미발급 매출 {total:,}원이 실제 공급이고 신고자료에서 빠졌는지 확인해 주세요.",
                 source=source, documents=[document_id], row=index, input_key=input_key, impact=total,
             )
             resolution = resolutions.get(issue["issue_id"])
@@ -488,23 +473,20 @@ def _manual_rows(case: SalesFilingWorkflow, resolutions: dict[str, dict[str, Any
     for item in _loads(case.manual_inputs_json, []):
         source = item.get("source")
         input_key = item.get("input_key")
-        issue = _issue(
-            "PG_RECONCILIATION_REQUIRED" if source == "pg" else "UNISSUED_SALE_CONFIRMATION_REQUIRED",
-            input_key,
-            (f"{item.get('date') or '신고기간'} PG·플랫폼 매출 {item.get('total_amount') or 0:,}원이 홈택스에 포함됐는지 확인해 주세요."
-             if source == "pg" else f"{item.get('date') or '신고기간'} 현금·계좌이체 공급 {item.get('total_amount') or item.get('supply_amount') or 0:,}원이 실제 공급이고 신고자료에 빠졌는지 확인해 주세요."),
-            source=source, input_key=input_key, impact=item.get("total_amount"),
-        )
-        resolution = resolutions.get(issue["issue_id"])
-        if resolution is None:
-            issues.append(issue)
-            continue
-        action = resolution.get("action")
-        if action in {"중복 확인", "해당 없음"}:
-            continue
-        if action != "누락 확인":
-            issues.append(issue)
-            continue
+        resolution = {}
+        if source == "unissued_sales":
+            issue = _issue(
+                "UNISSUED_SALE_CONFIRMATION_REQUIRED", input_key,
+                f"{item.get('date') or '신고기간'} 현금·계좌이체 공급 {item.get('total_amount') or item.get('supply_amount') or 0:,}원이 실제 공급이고 신고자료에 빠졌는지 확인해 주세요.",
+                source=source, input_key=input_key, impact=item.get("total_amount"),
+            )
+            resolution = resolutions.get(issue["issue_id"], {})
+            action = resolution.get("action")
+            if action in {"중복 확인", "해당 없음"}:
+                continue
+            if action != "누락 확인":
+                issues.append(issue)
+                continue
         tax_treatment = (item.get("tax_treatment") or "").strip()
         if tax_treatment not in TAXABLE_VALUES:
             issues.append(_issue("OUT_OF_SCOPE_TAX_TREATMENT", input_key, f"{SOURCE_LABELS[source]} 입력 {input_key}에 면세·영세율 또는 미확인 과세 구분이 있어 검토가 필요합니다.", source=source, input_key=input_key, impact=item.get("total_amount")))
@@ -736,8 +718,9 @@ def _build_result(
         issues.append(_issue("BUSINESS_PROFILE_MISSING", case.period, "일반과세 사업장 정보를 확인해 주세요."))
     elif profile.tax_type_code != "01":
         issues.append(_issue("UNSUPPORTED_TAXPAYER", case.period, "이 매출 집계는 일반과세자 1사업장만 지원합니다. 과세유형을 확인해 주세요."))
-    if tax_profile is None or tax_profile.confirmed_at is None or tax_profile.entity_type != "individual":
-        issues.append(_issue("BUSINESS_ENTITY_UNCONFIRMED", case.period, "개인사업자 여부가 확인된 사업자 정보를 입력해 주세요."))
+    # 법인도 집계할 수 있다. 법인은 세액 계산에서 신용카드 발행세액공제만 빠진다.
+    if tax_profile is None or tax_profile.confirmed_at is None or tax_profile.entity_type not in {"individual", "corporation"}:
+        issues.append(_issue("BUSINESS_ENTITY_UNCONFIRMED", case.period, "마이페이지에서 개인·법인 구분을 포함한 사업자 정보를 확인해 주세요."))
     if profile and not _digits(profile.business_number):
         issues.append(_issue("BUSINESS_NUMBER_MISSING", case.period, "사업자등록번호를 확인해 주세요."))
 
@@ -790,6 +773,19 @@ def _build_result(
     rows = _deduplicate_and_choose_scope(rows, resolutions, issues, deduplicated)
     _apply_cross_source_duplicates(rows, resolutions, issues, deduplicated)
 
+    payment_rows = []
+    for row in rows:
+        raw = row["raw_row"]
+        if row.get("pg_sheet_key") and raw.get("카드금액") is not None:
+            for line, amount in ((3, raw["카드금액"]), (4, raw["기타결제금액"])):
+                if not amount:
+                    continue
+                supply, vat, total = _amounts({"합계금액": amount})
+                payment_rows.append({**row, "line": line, "supply_amount": supply, "vat_amount": vat, "total_amount": total})
+        else:
+            payment_rows.append(row)
+    rows = payment_rows
+
     totals = {line: {"supply_amount": 0, "vat_amount": 0, "total_amount": 0} for line in (1, 3, 4)}
     for row in rows:
         if row["line"] not in totals:
@@ -810,7 +806,7 @@ def _build_result(
         "included_rows": rows,
         "deduplicated_rows": deduplicated,
         "issue_count": len({item["issue_id"] for item in issues}),
-        "basis": "확인 완료 홈택스 자료 + 누락 확인 PG·미발급 매출",
+        "basis": "확인 완료 홈택스·판매결제대행 자료 + 누락 확인 미발급 매출",
     }
     return aggregate, issues
 
@@ -843,6 +839,7 @@ def refresh(session: Session, user: User, period: str) -> SalesFilingWorkflow:
         "period": period, "profile": profile_observation, "checks": checks,
         "inputs": manual_inputs, "feedback": feedback, "documents": document_observation,
         "missing_document_ids": missing_ids,
+        **({"pg_aggregation": "gross"} if checks["pg"].get("document_ids") or any(item.get("source") == "pg" for item in manual_inputs) else {}),
     })
     changed_after_confirmation = case.status == "확정" and case.input_fingerprint != fingerprint
     if changed_after_confirmation:
@@ -1023,20 +1020,6 @@ def add_feedback(session: Session, user: User, period: str, payload: dict[str, A
     signed_cancellation = issue.get("reason_code") == "CANCELLATION_RECONCILIATION_REQUIRED" and action == "금액 정정"
     corrected = [payload.get(name) for name in ("supply_amount", "vat_amount", "total_amount")]
     amount = payload.get("amount")
-    if issue.get("reason_code") == "PG_SPREADSHEET_RECONCILIATION_REQUIRED":
-        gross = issue["impact_amount"]
-        if action == "누락 확인" and not issue.get("pg_classification_confirmed"):
-            raise AppException(400, "PG_CLASSIFICATION_REQUIRED", "연결 문서에서 누락분의 과세·결제 구분을 먼저 확인해 주세요.")
-        if action == "중복 확인" and amount != gross:
-            raise AppException(400, "DUPLICATE_AMOUNT_REQUIRED", "전액 중복이면 원본 매출금액 전체를 입력해 주세요.")
-        if action == "누락 확인" and (
-            not all(isinstance(value, int) and value >= 0 for value in corrected)
-            or not 0 < corrected[2] <= gross or corrected[0] + corrected[1] != corrected[2]
-            or corrected[1] != corrected[0] * STANDARD_RATE // 100
-        ):
-            raise AppException(400, "INVALID_PG_MISSING_AMOUNT", "누락분의 공급가액·세액·공급대가를 입력하세요. 공급대가는 원본 매출금액 이하여야 합니다.")
-        if action not in {"중복 확인", "누락 확인"}:
-            raise AppException(400, "INVALID_FEEDBACK_ACTION", "전액 중복 또는 누락분을 확인해 주세요.")
     if amount is not None and (not isinstance(amount, int) or amount < 0):
         raise AppException(400, "INVALID_FEEDBACK_AMOUNT", "확인 금액은 0 이상의 원 단위로 입력해 주세요.")
     if any(value is not None and not isinstance(value, int) for value in corrected):

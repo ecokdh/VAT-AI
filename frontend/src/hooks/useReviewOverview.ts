@@ -4,12 +4,15 @@ import { getMe, type AuthUser } from "../api/auth";
 import { listReceiptInbox, type ReceiptProcessingApi } from "../api/receipts";
 import { getFilingReadiness, getTaxEstimate, listTransactions, type FilingReadiness, type TaxEstimateApi, type TransactionApi } from "../api/transactions";
 import { defaultPeriod, isPeriod, summarizeReview, inPeriod } from "./reviewState";
+import { rememberPeriod, rememberedPeriod, useReturnedPeriod } from "./currentPeriod";
 export { periodLabel, periodOptions, inPeriod, isPeriod, defaultPeriod, needsReview } from "./reviewState";
 
 export function useReviewOverview() {
  const [params,setParams]=useSearchParams();
  const requested=params.get("period");
- const period=isPeriod(requested)?requested:defaultPeriod();
+ // 다른 화면에서 고른 기간을 이어서 보여준다.
+ const period=useReturnedPeriod()??(isPeriod(requested)?requested:rememberedPeriod()??defaultPeriod());
+ useEffect(()=>{rememberPeriod(period);},[period]);
  const setPeriod=(value:string)=>setParams({period:value},{replace:true});
  const [user,setUser]=useState<AuthUser|null>(null);
  const [rows,setRows]=useState<TransactionApi[]>([]);
@@ -31,7 +34,9 @@ export function useReviewOverview() {
  },[period,setParams]);
  const summary=summarizeReview(rows,inbox,period);
  const current=readiness?.period===period?readiness:null;
- return {user,period,setPeriod,estimate:estimate?.period===period?estimate:null,loading,error,readiness:current,
+ const currentEstimate=estimate?.period===period?estimate:null;
+ const salesPending=currentEstimate?.tax_type==="general" && !!currentEstimate.sales_aggregate_status && currentEstimate.sales_aggregate_status!=="확정";
+ return {user,period,setPeriod,estimate:currentEstimate,salesPending,loading,error,readiness:current,
   transactions:rows.filter(r=>!r.deleted_at&&inPeriod(r.transaction_date,period)),
   receipts:inbox.filter(r=>!r.date||inPeriod(r.date,period)),...summary,
   total:current?.total??summary.total,unconfirmed:current?.unconfirmed??summary.unconfirmed,pending:current?.pending??summary.pending};

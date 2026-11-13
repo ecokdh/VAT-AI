@@ -117,7 +117,7 @@ export function OcrProcessingPage() {
           "증빙 정보를 분석하고 있어요…"} />
 
         {receipt && (receipt.vendor || receipt.amount != null || receipt.date) && !unsupported && !retake && (
-          <div className="card" style={{ marginTop: 18 }}>
+          <div className="card" style={{ marginTop: 16 }}>
             <div className="field-row"><span className="field-row__label">거래처</span><span className="field-row__value">{receipt.vendor ?? "확인 필요"}</span></div>
             <div className="field-row"><span className="field-row__label">금액</span><span className="field-row__value">{receipt.amount?.toLocaleString("ko-KR") ?? "확인 필요"}</span></div>
             <div className="field-row"><span className="field-row__label">거래일</span><span className="field-row__value">{receipt.date ?? "확인 필요"}</span></div>
@@ -125,13 +125,13 @@ export function OcrProcessingPage() {
         )}
 
         {(unsupported || retake) && (
-          <div className="banner banner--warning" style={{ marginTop: 18 }}>
+          <div className="banner banner--warning" style={{ marginTop: 16 }}>
             {statusDescription}
           </div>
         )}
 
         {!unsupported && !retake && receipt?.ocr_warnings.map((warning) => (
-          <div className="banner banner--warning" style={{ marginTop: 14 }} key={warning}>{warning}</div>
+          <div className="banner banner--warning" style={{ marginTop: 16 }} key={warning}>{warning}</div>
         ))}
         {error && <div className="banner banner--error" style={{ marginTop: 20 }} role="alert">{error}</div>}
 

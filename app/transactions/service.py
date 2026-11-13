@@ -10,11 +10,11 @@ from sqlmodel import Session, select
 from app.auth.models import User
 from app.business.models import BusinessProfile, TaxProfileV2
 from app.common.exceptions import AppException
-from app.deduction.models import Deduction
-from app.deduction.schemas import ReportItem, ReportOut
 from app.receipts.models import Receipt
 from app.sales_filing import service as sales_filing
 from app.vat_return.engine import (
+    CARD_ISSUANCE_CREDIT_ANNUAL_LIMIT,
+    CARD_ISSUANCE_CREDIT_RATE_PER_1000,
     FIRST_HALF_PERIODS,
     PERIODS,
     RULE_VERSION,
@@ -112,6 +112,8 @@ def create_from_receipt(
     item.question_rule_version=review.get('question_version')
     if review.get('question_answers'):
         item.purpose=review.get('purpose');item.business_related=review.get('business_related')
+    # 추출 결과 확인 화면에서 고른 고정자산 여부를 거래에 옮긴다.
+    item.is_fixed_asset=item.is_fixed_asset or bool(review.get('is_fixed_asset'))
     session.add(item)
     session.flush()
     _record_revision(session, item)
@@ -328,7 +330,7 @@ def restore_from_trash(session: Session, user_id: uuid.UUID, transaction_id: int
 
 
 def delete_permanently(session: Session, user_id: uuid.UUID, transaction_id: int) -> None:
-    """휴지통에 있는 거래와 연결된 영수증·공제 판별·원본 사진을 지운다. 되돌릴 수 없고, 필요하면 다시 촬영한다."""
+    """휴지통에 있는 거래와 연결된 영수증·원본 사진을 지운다. 되돌릴 수 없고, 필요하면 다시 촬영한다."""
     from app.receipts import service as receipt_service
 
     item = _owned(session, user_id, transaction_id)
@@ -337,11 +339,10 @@ def delete_permanently(session: Session, user_id: uuid.UUID, transaction_id: int
     receipt = session.get(Receipt, item.receipt_id) if item.receipt_id else None
     for revision in session.exec(select(TransactionRevision).where(TransactionRevision.transaction_id == item.id)).all():
         session.delete(revision)
+    session.flush()  # 거래를 가리키는 수정 이력을 먼저 지운다(DB 외래키 순서).
     session.delete(item)
     session.flush()  # 영수증을 가리키는 거래부터 지운다.
     if receipt:
-        for deduction in session.exec(select(Deduction).where(Deduction.receipt_id == receipt.id)).all():
-            session.delete(deduction)
         session.delete(receipt)
     session.commit()
     if receipt:
@@ -423,6 +424,17 @@ def period_transactions(session: Session, user_id: uuid.UUID, start, end, tax_pr
     return rows
 
 
+def _first_half_card_credit(session: Session, user: User) -> int:
+    """2기 연 한도 계산용: 확정된 1기 매출 집계의 (3) 발행분에 대한 공제액(1기 납부세액 한도는 반영하지 않은 상한)."""
+    case = session.exec(select(sales_filing.SalesFilingWorkflow).where(
+        sales_filing.SalesFilingWorkflow.user_id == user.id, sales_filing.SalesFilingWorkflow.period == "2026-H1",
+    )).first()
+    if not case or case.status != "확정":
+        return 0
+    base = json.loads(case.aggregate_json or "{}").get("lines", {}).get("3", {}).get("total_amount") or 0
+    return min(base * CARD_ISSUANCE_CREDIT_RATE_PER_1000 // 1000, CARD_ISSUANCE_CREDIT_ANNUAL_LIMIT)
+
+
 def calculate_period_estimate(
     session: Session,
     user: User,
@@ -434,14 +446,6 @@ def calculate_period_estimate(
     if tax_type_code not in {"01", "02"}:
         raise AppException(409, "TAX_TYPE_UNAVAILABLE", "국세청 과세유형 조회가 필요합니다.")
     tax_type = "general" if tax_type_code == "01" else "simplified"
-    if period.startswith("2025-"):
-        from app.jobs.readiness import filter_bounds
-        filter_bounds(period)
-        return {"period": period, "tax_type": tax_type, "status": "UNAVAILABLE", "output_vat": None,
-                "eligible_input_vat": None, "deemed_input_vat": None, "payable_estimate": None,
-                "included_transaction_count": 0, "caution_transaction_count": 0, "uncalculated_transaction_count": 0,
-                "rule_version": RULE_VERSION, "notes": ["2025년 거래를 조회할 수 있습니다. 현재 계산 규칙은 2026년 전용이므로 2025년 예상세액과 PDF 생성은 제공하지 않습니다."],
-                "sales_aggregate_id": None, "sales_aggregate_status": None, "sales_aggregate": None, "draft": True}
     tax_profile = session.exec(select(TaxProfileV2).where(TaxProfileV2.user_id == user.id)).first()
     if tax_profile and tax_profile.tax_type_change_date:
         change_date = tax_profile.tax_type_change_date
@@ -508,6 +512,7 @@ def calculate_period_estimate(
         deemed_sales_fact = tax_profile.deemed_related_taxable_sales_h1 if period in FIRST_HALF_PERIODS else tax_profile.deemed_related_taxable_sales_h2 if period in SECOND_HALF_PERIODS else None
     if tax_type == "simplified" and tax_profile:
         simplified_industry_rate = tax_profile.simplified_industry_rate
+    card_credit_used = _first_half_card_credit(session, user) if period in SECOND_HALF_PERIODS else 0
     estimate = calculate_estimate(
         tax_type=tax_type,
         period=period,
@@ -517,6 +522,7 @@ def calculate_period_estimate(
         industry_subtype=tax_profile.industry_subtype if tax_profile and tax_profile.confirmed_at else None,
         is_sme=tax_profile.is_sme if tax_profile and tax_profile.confirmed_at else None,
         deemed_related_taxable_sales=deemed_sales_fact,
+        card_issuance_credit_used=card_credit_used,
         lines=[
             TaxLine(
                 direction=row.direction,
@@ -557,6 +563,8 @@ def calculate_period_estimate(
         "eligible_input_vat": estimate.eligible_input_vat,
         "deemed_input_vat": estimate.deemed_input_vat,
         "payable_estimate": estimate.payable_estimate if sales_case.status == "확정" else None,
+        "card_issuance_base": estimate.card_issuance_base if sales_case.status == "확정" else None,
+        "card_issuance_credit": estimate.card_issuance_credit if sales_case.status == "확정" else None,
         "included_transaction_count": estimate.included_transaction_count,
         "caution_transaction_count": estimate.caution_transaction_count,
         "uncalculated_transaction_count": estimate.uncalculated_transaction_count,

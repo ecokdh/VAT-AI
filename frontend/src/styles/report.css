@@ -1,0 +1,33 @@
+/* 신고서 생성 — 보관함과 같은 머리 배치·IBM Plex 굵기(500/600/700)·연파랑 테두리, 393×852 한 화면 */
+.page.report-page { height: 100dvh; min-height: 0; overflow: hidden; }
+.page.report-page .report-body {
+  display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+.qa-page .report-body .report-period { margin: 0; }
+.report-period select { width: 100%; color: var(--color-text); font-size: 15px; font-weight: 500; }
+
+/* 예상 납부세액: 진한 남색 강조 카드 */
+.report-hero { display: flex; flex-direction: column; padding: 12px 20px; border-radius: 16px; background: #172554; color: #fff; }
+.report-hero__label { font-size: 13px; line-height: 20px; color: rgb(255 255 255 / .72); }
+.report-hero__amount { margin-top: 4px; font-size: 32px; font-weight: 700; line-height: 40px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.report-hero__caption { margin-top: 4px; font-size: 12px; line-height: 16px; color: rgb(255 255 255 / .6); }
+
+.report-card { padding: 12px 16px; border: 1px solid #c6dcff; border-radius: 16px; background: var(--color-surface, #fff); }
+
+/* 계산 내역 */
+.qa-page .report-details > summary { display: flex; align-items: center; min-height: 24px; padding: 0; color: var(--color-text); font-size: 15px; font-weight: 600; line-height: 24px; cursor: pointer; }
+.report-details[open] > summary { margin-bottom: 8px; }
+.report-details__row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid #eef2f8; font-size: 14px; line-height: 20px; }
+.report-details__row strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.report-details__note { margin: 8px 0 0; color: #8a94a6; font-size: 12px; line-height: 16px; }
+
+
+.report-check { display: flex; align-items: center; gap: 8px; min-height: 24px; color: var(--color-text); font-size: 14px; font-weight: 500; line-height: 20px; }
+.report-check input { width: 20px; height: 20px; margin: 0; accent-color: var(--color-primary); }
+.qa-page .report-cta { flex: 0 0 auto; height: 52px; min-height: 52px; border-radius: 12px; font-size: 16px; font-weight: 600; }
+.qa-page .report-footnote { margin: 0; color: #8a94a6; font-size: 12px; line-height: 16px; text-align: center; }
+.report-details > summary::-webkit-details-marker { display: none; }
+.report-details > summary { list-style: none; }
+.report-details > summary::after { content: "›"; margin-left: auto; color: #8a94a6; font-size: 18px; transition: transform .2s ease; }
+.report-details[open] > summary::after { transform: rotate(90deg); }

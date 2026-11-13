@@ -200,7 +200,7 @@ def confirm_receipt_extraction(
         original['review'] = {
             'question_answers':answers,'question_version':VERSION,
             'document':corrected,'purpose':data.purpose.strip() if data.purpose else answer_purpose,
-            'evidence_type':data.evidence_type,'business_related':related if answers else data.business_related,'tax_treatment':data.tax_treatment,
+            'evidence_type':data.evidence_type,'business_related':related if answers else data.business_related,'tax_treatment':data.tax_treatment,'is_fixed_asset':data.is_fixed_asset,
             'field_sources':{k:'user_edit' if v != old_fields.get(k) else 'user_confirmed' for k,v in corrected['fields'].items()},
             'saved_at':_now().isoformat(),'user_id':str(user_id),
         }
@@ -237,8 +237,9 @@ def retry_receipt_ocr(session: Session, user_id: uuid.UUID, receipt_id: int):
     ).first()
     if receipt is None:
         raise AppException(404, "NOT_FOUND", "영수증을 찾을 수 없습니다.")
-    if receipt.status != "failed":
-        raise AppException(409, "OCR_RETRY_NOT_AVAILABLE", "실패한 OCR 작업만 다시 시도할 수 있습니다.")
+    # 일시 오류와 '영수증이 아님' 판정만 같은 사진으로 다시 분석할 수 있다.
+    if receipt.status not in {"failed", "unsupported"}:
+        raise AppException(409, "OCR_RETRY_NOT_AVAILABLE", "실패했거나 영수증이 아니라고 판정된 사진만 다시 분석할 수 있습니다.")
     if receipt.ocr_user_attempts >= 2:
         raise AppException(409, "OCR_RETRY_LIMIT", "같은 사진으로 재시도할 수 있는 횟수를 모두 사용했습니다.")
     receipt.ocr_user_attempts += 1

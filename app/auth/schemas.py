@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 
@@ -69,3 +70,8 @@ class PasswordResetRequest(BaseModel):
 class PasswordResetConfirmation(BaseModel):
     token: str = Field(min_length=32, max_length=128)
     password: str = Field(min_length=8, max_length=72)
+
+
+class PasswordResetCodeVerification(BaseModel):
+    request_id: UUID
+    code: str = Field(pattern=r"^[0-9]{6}$")

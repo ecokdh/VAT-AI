@@ -1,22 +1,115 @@
-/* 회원가입 — 모바일 한 화면에 들어가도록 간격 축소 */
-.page.signup-page .page-header { min-height: 64px; padding-top: calc(8px + env(safe-area-inset-top)); padding-bottom: 8px; }
-.page.signup-page .page-header .icon-btn { width: 44px; height: 44px; }
-.page.signup-page .page__body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
-.page.signup-page .form-field { margin-bottom: 12px; }
-.page.signup-page .form-field__label { margin-bottom: 6px; }
-.page.signup-page .form-field__hint { margin-top: 4px; }
-.page.signup-page .input { min-height: 48px; padding-top: 11px; padding-bottom: 11px; }
-.page.signup-page .btn--sm { min-height: 48px; }
-.page.signup-page .btn--primary { min-height: 50px; padding-top: 12px; padding-bottom: 12px; }
+/* 회원가입 — 흰 배경 · 밑줄 입력칸 · 아래 고정 버튼 (393×852 · 4pt 그리드) */
+.page.signup-page { min-height: 100dvh; background: #fff; }
+.page.signup-page .page-header { min-height: 56px; padding: calc(8px + env(safe-area-inset-top)) 8px 0; }
+.page.signup-page .page-header .icon-btn { width: 48px; height: 48px; background: transparent; font-size: 32px; font-weight: 300; color: #0f172a; }
+.page.signup-page .page-header__title { font-size: 16px; font-weight: 500; }
+.page.signup-page .page__body { display: flex; flex-direction: column; padding-top: 0; padding-bottom: 0; }
 
-/* 화면 높이가 낮은 폰(주소창 포함 기준)에서도 스크롤 없이 한 화면 */
-@media (max-height: 620px) {
-  .page.signup-page .page-header { min-height: 52px; padding-top: calc(4px + env(safe-area-inset-top)); padding-bottom: 4px; }
-  .page.signup-page .page-header .icon-btn { width: 40px; height: 40px; }
-  .page.signup-page .page__body { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-  .page.signup-page .form-field { margin-bottom: 8px; }
-  .page.signup-page .form-field__label { margin-bottom: 4px; }
-  .page.signup-page .input { min-height: 42px; padding-top: 8px; padding-bottom: 8px; }
-  .page.signup-page .btn--sm { min-height: 42px; }
-  .page.signup-page .btn--primary { min-height: 46px; padding-top: 10px; padding-bottom: 10px; }
+/* 진행 막대 */
+.signup-progress { display: flex; gap: 4px; }
+.signup-progress span { position: relative; flex: 1; height: 4px; overflow: hidden; border-radius: 2px; background: #e5eaf3; }
+.signup-progress span::after { content: ""; position: absolute; inset: 0; background: var(--color-primary); transform: scaleX(0); transform-origin: left; transition: transform .5s cubic-bezier(.22, 1, .36, 1); }
+.signup-progress span.is-on::after { transform: scaleX(1); }
+
+/* 단계 화면 — 바뀔 때 오른쪽에서 밀려 들어옴 */
+.signup-pane { flex: 1; display: flex; flex-direction: column; padding-top: 24px; animation: signup-in .45s cubic-bezier(.22, 1, .36, 1) both; }
+.signup-step { margin: 0; color: var(--color-primary); font-size: 13px; line-height: 20px; }
+.signup-title { margin: 4px 0 0; font-size: 24px; font-weight: 600; line-height: 32px; letter-spacing: -.02em; }
+.signup-sub { margin: 8px 0 0; color: #6b7385; font-size: 14px; line-height: 20px; }
+
+/* 입력 — 밑줄형 */
+.page.signup-page .form-field { margin: 24px 0 0; }
+.page.signup-page .form-field__label { margin: 0; color: #4b5568; font-size: 13px; font-weight: 400; line-height: 20px; }
+.page.signup-page .input {
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid #d5dce8;
+  border-radius: 0;
+  background: transparent;
+  font-size: 16px;
+  outline: none;
+  transition: border-color .2s ease;
+}
+.page.signup-page .input:focus { border-bottom: 2px solid var(--color-primary); outline: none; }
+.page.signup-page .input::placeholder { color: #a3acbd; }
+.page.signup-page select.input { padding-right: 24px; }
+.page.signup-page .form-field__input-row { align-items: center; gap: 12px; border-bottom: 1px solid #d5dce8; transition: border-color .2s ease; }
+.page.signup-page .form-field__input-row:focus-within { border-bottom-color: var(--color-primary); box-shadow: 0 1px 0 var(--color-primary); }
+.page.signup-page .form-field__input-row > .input, .page.signup-page .form-field__input-row > .input:focus { border-bottom: 0; }
+.signup-inline-btn { flex-shrink: 0; height: 40px; padding: 0 16px; border: 1px solid #c9d6f2 !important; border-radius: 12px; color: var(--color-primary); font-size: 14px; font-weight: 500; white-space: nowrap; }
+.signup-inline-btn:disabled { border-color: #e5eaf3 !important; color: #a3acbd; cursor: not-allowed; }
+.signup-eye { flex-shrink: 0; width: 40px; height: 40px; display: grid; place-items: center; color: #8a94a6; }
+.page.signup-page .form-field__hint { margin-top: 8px; color: #6b7385; font-size: 13px; line-height: 20px; }
+.page.signup-page .form-field__hint[role="status"] { color: #1d7a5a; }
+.page.signup-page .form-field__hint--error { color: var(--color-danger); }
+.signup-rules { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 8px 0 0; padding: 0; list-style: none; color: #a3acbd; font-size: 13px; line-height: 20px; }
+.signup-rules .is-met { color: var(--color-primary); }
+
+/* 2단계 — 사업자·과세기간 정보 */
+.page.signup-page .signup-tax-profile { margin: 32px calc(-1 * var(--page-gutter)) 0; padding: 24px var(--page-gutter) 0; border-top: 8px solid #f4f6fa; }
+.page.signup-page .signup-tax-profile .section-title { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; letter-spacing: 0; }
+.signup-tax-type { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 16px; padding-bottom: 12px; border-bottom: 1px solid #eef1f6; color: #4b5568; font-size: 13px; line-height: 20px; }
+.signup-tax-type strong { color: var(--color-primary); font-size: 16px; font-weight: 600; line-height: 24px; }
+.signup-note, .page.signup-page .tax-profile-fields .muted, .page.signup-page .business-filing-fields .footnote { margin: 8px 0 0; color: #6b7385; font-size: 13px; line-height: 20px; text-align: left; }
+.page.signup-page .tax-profile-fields .muted { margin-top: 32px; }
+.page.signup-page .business-filing-fields { margin-top: 32px; padding-top: 24px; border-top: 1px solid #eef1f6; }
+.page.signup-page .business-filing-fields .section-title { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; letter-spacing: 0; }
+.page.signup-page .banner { border-radius: 12px; font-size: 13px; line-height: 20px; }
+.page.signup-page .identity-check { margin: 24px 0 0; }
+.page.signup-page .identity-check .btn { height: 48px; min-height: 48px; border-radius: 12px; font-size: 15px; font-weight: 500; margin-top: 12px; }
+.page.signup-page .identity-check .btn--primary { font-weight: 600; }
+.page.signup-page .identity-check .form-field__hint { margin-top: 8px; }
+.page.signup-page .field-row { padding: 16px 0 0; font-size: 13px; color: #4b5568; }
+.page.signup-page .check-row { display: flex; align-items: center; gap: 12px; margin-top: 24px; font-size: 14px; }
+
+/* 3단계 — 약관 */
+.signup-terms { margin-top: 24px; }
+.signup-terms label { display: flex; align-items: center; gap: 12px; min-height: 56px; border-bottom: 1px solid #eef1f6; font-size: 15px; cursor: pointer; }
+.signup-terms label:last-child { border-bottom: 0; color: #4b5568; }
+.signup-terms label > span:nth-of-type(1) { flex: 1; }
+.signup-terms__arrow { color: #a3acbd; font-size: 20px; }
+.signup-error { margin-top: 16px; }
+
+/* 체크박스 — 로그인 화면과 같은 모양 */
+.page.signup-page input[type="checkbox"] {
+  appearance: none;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 1.5px solid #c2cbdb;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+.page.signup-page input[type="checkbox"]:checked {
+  border-color: var(--color-primary);
+  background: var(--color-primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center / 12px no-repeat;
+}
+.page.signup-page input[type="checkbox"]:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* 다음 · 가입 완료 — 화면 아래 고정 */
+.signup-cta { position: sticky; bottom: 0; margin-top: auto; padding: 32px 0 calc(40px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, rgb(255 255 255 / 0), #fff 32px); }
+.page.signup-page .signup-cta .btn { height: 52px; min-height: 52px; border-radius: 12px; font-size: 16px; font-weight: 600; }
+
+@keyframes signup-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+
+/* 화면 높이가 낮은 폰 */
+/* 안내 문구(사용 가능 이메일 · 안전한 비밀번호 등)가 모두 떠도 스크롤 없이 한 화면에 들어가도록 높이별로 간격을 줄인다 */
+@media (max-height: 819px) {
+  .page.signup-page .form-field { margin-top: 16px; }
+  .signup-cta { padding-top: 16px; }
+}
+@media (max-height: 719px) {
+  .signup-pane { padding-top: 16px; }
+  .page.signup-page .form-field { margin-top: 12px; }
+  .page.signup-page .form-field__hint, .signup-rules { margin-top: 4px; }
+  .signup-cta { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signup-pane { animation: none; }
+  .signup-progress span::after { transition: none; }
 }

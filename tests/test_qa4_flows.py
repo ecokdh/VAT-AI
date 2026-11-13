@@ -44,11 +44,14 @@ def test_reset_is_one_time_and_revokes_previous_sessions(client, registration, m
     old_token = registered["access_token"]
     known = client.post("/auth/forgot-password", json={"email": registration["email"]})
     unknown = client.post("/auth/forgot-password", json={"email": "missing@example.com"})
-    assert known.status_code == unknown.status_code == 202
-    assert known.json() == unknown.json()
+    assert known.status_code == 202
+    assert unknown.status_code == 404
+    assert unknown.json()["error"]["code"] == "EMAIL_NOT_REGISTERED"
     assert len(mail) == 1
-    token = mail[0][1]
-    assert token not in str(known.json())
+    code = mail[0][1]
+    verified = client.post("/auth/verify-reset-code", json={"request_id": known.json()["request_id"], "code": code})
+    assert verified.status_code == 200
+    token = verified.json()["token"]
     session = next(app.dependency_overrides[get_session]())
     stored = session.exec(select(PasswordResetToken).where(PasswordResetToken.token_hash == hashlib.sha256(token.encode()).hexdigest())).one()
     assert stored.token_hash != token
@@ -65,21 +68,23 @@ def test_reset_is_one_time_and_revokes_previous_sessions(client, registration, m
 
 def test_reset_expiry_throttling_and_missing_mail_config(client, registration, mail, monkeypatch):
     client.post("/auth/register", json=registration)
-    for _ in range(5):
-        assert client.post("/auth/forgot-password", json={"email": registration["email"]}).status_code == 202
-    assert len(mail) == 3
+    known = client.post("/auth/forgot-password", json={"email": registration["email"]})
+    assert known.status_code == 202
+    assert client.post("/auth/forgot-password", json={"email": registration["email"]}).status_code == 202
+    assert len(mail) == 1
     session = next(app.dependency_overrides[get_session]())
     for item in session.exec(select(PasswordResetToken)).all():
         item.expires_at = datetime.utcnow() - timedelta(minutes=1)
+        item.created_at = datetime.utcnow() - timedelta(hours=2)
         session.add(item)
     session.commit()
     session.close()
-    assert client.post("/auth/reset-password", json={"token": mail[-1][1], "password": "Changed-456!"}).status_code == 400
+    assert client.post("/auth/verify-reset-code", json={"request_id": known.json()["request_id"], "code": mail[-1][1]}).status_code == 400
     monkeypatch.setattr(settings, "SMTP_HOST", "")
-    for email in (registration["email"], "missing@example.com"):
-        response = client.post("/auth/forgot-password", json={"email": email})
-        assert response.status_code == 503
-        assert response.json()["error"]["code"] == "EMAIL_NOT_CONFIGURED"
+    response = client.post("/auth/forgot-password", json={"email": registration["email"]})
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "EMAIL_NOT_CONFIGURED"
+    assert client.post("/auth/forgot-password", json={"email": "missing@example.com"}).status_code == 404
 
 
 def test_registration_saves_profile_atomically_and_remembers_guide(client, registration):
@@ -136,15 +141,14 @@ def test_pdf_requires_only_final_acknowledgement(db, monkeypatch):
     assert jobs.enqueue_pdf(session,user,"2026-H2",reviewed=True).job_type == "pdf"
 
 
-def test_2025_query_does_not_apply_2026_tax_rules(db):
+def test_2025_periods_are_not_supported(db):
     session,user=db
     session.add(BusinessProfile(user_id=user.id,business_number="1234567890",tax_type_code="01"))
-    session.add(Transaction(user_id=user.id,direction="sales",transaction_date=date(2025,3,1),vendor="QA",total_amount=11000,state="confirmed"))
     session.commit()
-    estimate=calculate_period_estimate(session,user,"2025-Q1",None)
-    assert estimate["status"]=="UNAVAILABLE" and estimate["payable_estimate"] is None
-    assert filing_readiness(session,user,"2025-Q1",estimate)["total"]==1
-    assert filing_readiness(session,user,"2026-Q1",estimate)["total"]==0
+    for check in (lambda: calculate_period_estimate(session,user,"2025-H1",None), lambda: filing_readiness(session,user,"2025-H1",{})):
+        with pytest.raises(AppException) as error:
+            check()
+        assert error.value.code=="UNSUPPORTED_TAX_PERIOD"
 
 
 def test_pdf_worker_uses_portable_renderer_without_wkhtmltopdf(db, monkeypatch):

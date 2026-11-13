@@ -13,7 +13,6 @@ from app.transactions.models import AnalysisRun, Transaction, TransactionRevisio
 from app.transactions.schemas import AnalysisRunCreate, TransactionCreate, TransactionUpdate
 from app.jobs.worker import process_analysis_run
 from app.receipts.models import Receipt
-from app.deduction.models import Deduction
 
 
 def setup_session():
@@ -80,11 +79,10 @@ def test_trash_removes_transaction_and_restore_requires_reanalysis():
     assert len(session.exec(select(TransactionRevision).where(TransactionRevision.transaction_id == item.id)).all()) == 4
 
 
-def test_permanent_delete_removes_transaction_receipt_and_deduction_only_from_trash():
+def test_permanent_delete_removes_transaction_and_receipt_only_from_trash():
     session, user = setup_session()
     receipt = Receipt(user_id=user.id, image_url="gone.png", status="done", vendor="문구점", amount=1100)
     session.add(receipt); session.commit(); session.refresh(receipt)
-    session.add(Deduction(receipt_id=receipt.id, is_deductible=True, reason="업무용", category="소모품", amount=1100))
     item = Transaction(user_id=user.id, receipt_id=receipt.id, direction="purchase", transaction_date=date(2026, 3, 2), vendor="문구점", total_amount=1100)
     session.add(item); session.commit(); session.refresh(item)
     try:
@@ -97,7 +95,7 @@ def test_permanent_delete_removes_transaction_receipt_and_deduction_only_from_tr
     service.delete_permanently(session, user.id, item.id)
     assert session.exec(select(Transaction)).all() == []
     assert session.exec(select(TransactionRevision)).all() == []
-    assert session.exec(select(Receipt)).all() == [] and session.exec(select(Deduction)).all() == []
+    assert session.exec(select(Receipt)).all() == []
 
 
 def test_worker_skips_run_when_selected_transaction_revision_changed():
@@ -156,21 +154,22 @@ def test_ocr_values_enter_estimate_only_after_transaction_confirmation():
                 for direction in ("purchase", "sales")]
     session.add_all(receipts)
     session.commit()
-    assert service.calculate_period_estimate(session, user, "2026-H1", None)["output_vat"] == 0
+    # 매출세액은 신고용 매출 집계에서만 오므로, 매출 거래를 확정해도 표시하지 않는다.
+    assert service.calculate_period_estimate(session, user, "2026-H1", None)["output_vat"] is None
 
     items = [service.create_from_receipt(
         session, user.id, receipt.id,
         purchase_data().model_copy(update={"direction": receipt.direction}),
     ) for receipt in receipts]
     estimate = service.calculate_period_estimate(session, user, "2026-H1", None)
-    assert estimate["output_vat"] == 0
+    assert estimate["output_vat"] is None
     assert estimate["eligible_input_vat"] == 0
     assert estimate["included_transaction_count"] == 0
 
     for item in items:
         service.confirm_transaction(session, user.id, item.id)
     estimate = service.calculate_period_estimate(session, user, "2026-H1", None)
-    assert estimate["output_vat"] == 100
+    assert estimate["output_vat"] is None
     assert estimate["eligible_input_vat"] == 0
 
     purchase = items[0]
@@ -181,3 +180,15 @@ def test_ocr_values_enter_estimate_only_after_transaction_confirmation():
     assert service.calculate_period_estimate(session, user, "2026-H1", None)["eligible_input_vat"] == 100
     assert service.calculate_period_estimate(session, user, "2026-Q1", None)["eligible_input_vat"] == 100
     assert service.calculate_period_estimate(session, user, "2026-Q3", None)["included_transaction_count"] == 0
+
+
+def test_fixed_asset_choice_from_review_moves_to_transaction():
+    from tests.test_vat_return import setup_session
+    import json
+    session, user = setup_session()
+    receipt = Receipt(user_id=user.id, image_url="x.jpg", status="done", extraction_confirmed=True,
+                      ocr_raw=json.dumps({"review": {"is_fixed_asset": True}}))
+    session.add(receipt); session.commit(); session.refresh(receipt)
+    item = service.create_from_receipt(session, user.id, receipt.id, TransactionCreate(
+        direction="purchase", transaction_date=date(2026, 3, 2), vendor="중부냉장설비", total_amount=220000))
+    assert item.is_fixed_asset is True

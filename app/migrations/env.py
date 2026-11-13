@@ -7,7 +7,7 @@ from sqlmodel import SQLModel
 from alembic import context
 from app.core.config import settings
 
-# app.core.database를 import하면 모든 모델(User/Receipt/Deduction)이
+# app.core.database를 import하면 모든 모델이
 # SQLModel.metadata에 등록된다 — 새 모델을 추가하면 app/core/database.py의
 # import 목록에도 추가할 것.
 import app.core.database  # noqa: F401

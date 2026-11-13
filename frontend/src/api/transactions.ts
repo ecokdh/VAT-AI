@@ -39,11 +39,14 @@ export interface TaxEstimateApi {
   output_vat: number | null;
   eligible_input_vat: number | null;
   deemed_input_vat: number | null;
+  card_issuance_base?: number | null;
+  card_issuance_credit?: number | null;
   payable_estimate: number | null;
   included_transaction_count: number;
   caution_transaction_count: number;
   uncalculated_transaction_count: number;
   notes: string[];
+  sales_aggregate_status?: string | null;
 }
 
 export interface TaxProfileApi {
@@ -113,9 +116,13 @@ export async function editTransactionReceipt(id: number, document: ReceiptReview
 // 보관함에서 영수증을 누르면 별도 확인 화면 없이, 추출 결과 확인에서 저장한 값 그대로 거래를 만들고 확정한다.
 export async function confirmTransactionFromReceipt(receiptId: number): Promise<TransactionApi> {
   const receipt = await getReceipt(receiptId);
-  const fields = receipt.recognition?.document?.fields;
+  const fields = receipt.review?.document?.fields ?? receipt.recognition?.document?.fields;
   const number = (value: unknown) => typeof value === "number" ? Math.round(value) : null;
   const tax = receipt.review?.tax_treatment ?? "unknown";
+  const total = Math.round(receipt.amount ?? 0);
+  // 할인 등으로 공급가액+세액이 실제 결제액보다 크면 서버가 거절하므로, 이때는 두 값을 비워 '확인 필요'로 둔다.
+  let supply = number(fields?.supply_amount), vat = number(fields?.vat_amount);
+  if ((supply ?? 0) + (vat ?? 0) > total) { supply = null; vat = null; }
   const transaction = await createTransactionFromReceipt(receiptId, {
     direction: receipt.direction,
     transaction_date: receipt.date ?? "",
@@ -124,9 +131,9 @@ export async function confirmTransactionFromReceipt(receiptId: number): Promise<
     purpose: receipt.review?.purpose?.trim() || null,
     evidence_type: tax === "exempt" ? "tax_free_receipt" : receipt.review?.evidence_type ?? "unknown",
     business_related: receipt.review?.business_related ?? null,
-    total_amount: Math.round(receipt.amount ?? 0),
-    supply_amount: number(fields?.supply_amount),
-    vat_amount: number(fields?.vat_amount),
+    total_amount: total,
+    supply_amount: supply,
+    vat_amount: vat,
     tax_treatment: tax,
   });
   return confirmTransaction(transaction.id);

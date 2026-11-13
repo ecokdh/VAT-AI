@@ -1,0 +1,64 @@
+/* 마이페이지 — 이름 13 · 칸 48 · 설명 12, 이름→칸 8 · 칸→설명 4 · 칸 사이 24 (393×852 · 4pt 그리드) */
+.page.account-page { background: #fff; }
+
+/* 프로필 */
+.page.account-page .profile-card { gap: 16px; margin: 24px 0 0; padding: 0; }
+.page.account-page .profile-card .profile-avatar,
+.page.account-page .profile-card .profile-photo-trigger { width: 56px; height: 56px; min-width: 56px; border-radius: 16px; }
+.page.account-page .profile-card h1 { margin: 0; font-size: 18px; font-weight: 600; line-height: 24px; }
+.profile-card__email { margin: 0 !important; color: #6b7385; font-size: 13px; line-height: 20px; }
+.page.account-page .profile-photo-actions { display: flex; gap: 12px; margin-top: 4px; }
+.page.account-page .profile-photo-actions .text-link { min-height: 0; padding: 0; color: var(--color-primary); font-size: 13px; font-weight: 500; text-decoration: none; }
+.page.account-page .profile-photo-actions .text-link.danger { color: var(--color-danger); }
+
+/* 칸 */
+.page.account-page .form-field { display: flex; flex-direction: column; margin: 24px 0 0; }
+.page.account-page .form-field__label,
+.page.account-page .field-row > label { margin: 0 0 8px; color: #4b5568; font-size: 13px; font-weight: 500; line-height: 20px; }
+.page.account-page .input {
+  height: 48px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid #d5dce8;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 20px;
+}
+.page.account-page textarea.input { height: 72px; padding-top: 12px; resize: vertical; }
+.page.account-page .input::placeholder { color: #a3acbd; }
+.page.account-page .input:focus { border-color: var(--color-primary); outline: none; box-shadow: 0 0 0 3px var(--color-primary-light); }
+.page.account-page .input[readonly] { border-color: #d5dce8; }
+.page.account-page .form-field__input-row { gap: 8px; }
+.page.account-page .form-field__input-row .btn { height: 48px; min-height: 48px; padding: 0 16px; border: 1px solid #c9d6f2; border-radius: 8px; background: #fff; color: var(--color-primary); font-size: 14px; font-weight: 500; }
+.page.account-page .field-row { display: flex; flex-direction: column; align-items: stretch; gap: 0; margin: 24px 0 0; padding: 0; border: 0; }
+.page.account-page .field-grid { gap: 8px; }
+.page.account-page .field-grid .form-field { margin-top: 24px; }
+
+/* 설명 · 결과 문구 — 칸 바로 아래 작게 */
+.account-hint, .page.account-page .tax-profile-fields .muted, .page.account-page .business-filing-fields .footnote { margin: 4px 0 0; color: #8a94a6; font-size: 12px; line-height: 16px; }
+.page.account-page .tax-profile-fields .muted { margin-top: 24px; }
+.account-result { margin: 4px 0 0; color: #16a34a; font-size: 12px; line-height: 16px; }
+.account-result--error, .page.account-page .form-field__hint--error { color: var(--color-danger); font-size: 12px; }
+
+/* 사업자 정보 */
+.account-business { margin: 32px calc(-1 * var(--page-gutter)) 0; padding: 24px var(--page-gutter) 0; border-top: 8px solid #f4f6fa; }
+.account-business fieldset { margin: 0; padding: 0; border: 0; }
+.account-section-title { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; }
+.account-sub-title, .page.account-page .business-filing-fields .section-title { margin: 32px 0 0; font-size: 14px; font-weight: 600; line-height: 20px; letter-spacing: 0; }
+.account-info { margin: 16px 0 0; }
+.account-info > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 0; border-bottom: 1px solid #eef1f6; }
+.account-info > div:last-child { border-bottom: 0; }
+.account-info dt { color: #6b7385; font-size: 13px; }
+.account-info dd { margin: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.account-info__accent { color: var(--color-primary); font-weight: 600; }
+.account-confirm { display: flex; align-items: center; gap: 8px; margin-top: 32px; font-size: 14px; }
+.page.account-page input[type="checkbox"] { appearance: none; flex-shrink: 0; width: 20px; height: 20px; margin: 0; border: 1.5px solid #c2cbdb; border-radius: 4px; background: #fff; cursor: pointer; }
+.page.account-page input[type="checkbox"]:checked { border-color: var(--color-primary); background: var(--color-primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center / 12px no-repeat; }
+.page.account-page .account-save { height: 52px; min-height: 52px; margin-top: 16px; border-radius: 12px; font-size: 16px; font-weight: 600; }
+.account-business .account-result { text-align: center; margin-top: 8px; }
+
+/* 로그아웃 */
+.page.account-page .account-footer { justify-content: center; margin-top: 32px; padding: 16px 0 0; border-top: 0; }

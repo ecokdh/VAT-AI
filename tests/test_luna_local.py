@@ -131,25 +131,6 @@ def test_deadline_releases_lock(monkeypatch,tmp_path):
     with pytest.raises(luna_client.LunaFailure,match='TIMEOUT'):asyncio.run(luna_client.recognize(b'image','image/png'))
     assert not (tmp_path/'budget.lock').exists()
 
-def test_partial_fields_persist_and_are_exposed(client,monkeypatch):
-    from app.auth import service as auth
-    from app.business.schemas import BusinessVerifyResponse
-    from app.receipts import service
-    from io import BytesIO
-    from PIL import Image
-    monkeypatch.setattr(auth,'verify_business',lambda _:BusinessVerifyResponse(business_number='1234567890',business_status='계속사업자',business_status_code='01',tax_type='부가가치세 일반과세자',tax_type_code='01',verified=True))
-    reg=client.post('/auth/register',json={'email':'partial@example.com','password':'correct-password','name':'검증','business_name':'검증','business_number':'123-45-67890','terms_accepted':True,'privacy_accepted':True,'marketing_accepted':False,'tax_profile':{'business_start_date':'2025-01-01'}})
-    headers={'Authorization':'Bearer '+reg.json()['access_token']}
-    raw=sample();raw['h']['datetime']=None;doc=normalize(raw)
-    async def partial(*a):return ocr_client.OcrResult(vendor='검토상점',amount=11000,date=None,ocr_raw=json.dumps({'engine':'luna_low','document':doc,'confirmed':False}),review_required=True,engine='luna_low')
-    monkeypatch.setattr(ocr_client,'extract_receipt',partial)
-    b=BytesIO();Image.new('RGB',(4,4)).save(b,format='PNG')
-    response=client.post('/receipts',headers=headers,files={'file':('receipt.png',b.getvalue(),'image/png')})
-    assert response.status_code==201
-    body=response.json();assert body['status']=='done' and body['vendor']=='검토상점' and body['date'] is None
-    assert body['recognition']['document']['items'][0]['name']=='상품'
-    assert client.get('/receipts/'+str(body['id']),headers=headers).json()==body
-
 def test_worker_adapter_preserves_partial_and_reports_combined_stages(monkeypatch):
     from app.receipts.ocr import luna
     from app.receipts.ocr.contract import OcrPipelineInput

@@ -78,6 +78,7 @@ export function getMe() {
 
 export const updateNickname = (nickname: string) => apiClient.patch<AuthUser>("/auth/me", {nickname}).then(r => r.data);
 
-export const requestPasswordReset = (email: string) => apiClient.post<{message: string}>("/auth/forgot-password", {email}).then(r => r.data);
+export const requestPasswordReset = (email: string) => apiClient.post<{message: string; request_id: string; expires_in: number; retry_after: number}>("/auth/forgot-password", {email}).then(r => r.data);
+export const verifyPasswordResetCode = (request_id: string, code: string) => apiClient.post<{token: string; message: string}>("/auth/verify-reset-code", {request_id, code}).then(r => r.data);
 export const resetPassword = (token: string, password: string) => apiClient.post<{message: string}>("/auth/reset-password", {token, password}).then(r => r.data);
 export const markOcrGuideSeen = () => apiClient.post<AuthUser>("/auth/ocr-guide-seen").then(r => r.data);

@@ -165,28 +165,3 @@ async def import_spreadsheet(
         raise
     session.refresh(item)
     return output(item)
-
-@router.post('/extract', status_code=201)
-async def extract(file: UploadFile = File(...), user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    data = await file.read(settings.MAX_UPLOAD_SIZE_BYTES + 1)
-    mime, extension = receipt_service.validate_image(data, file.content_type)
-    digest=hashlib.sha256(data).hexdigest()
-    # 같은 사진은 다시 인식하지 않고 앞서 읽은 정산서를 그대로 연다(비용·매출 중복 방지).
-    find_previous=lambda: session.exec(select(MonthlySalesDocument).where(MonthlySalesDocument.user_id==user.id,MonthlySalesDocument.image_sha256==digest)).first()
-    if (previous:=find_previous()) is not None:
-        return set_trashed(session, previous, False) if previous.deleted_at else output(previous)  # 휴지통에 있던 사진이면 복원해서 연다
-    try:
-        result=await service.recognize(data, mime)
-    except LunaFailure as exc:
-        status = 400 if exc.code in {'INVALID_IMAGE_SIZE','INVALID_IMAGE','UNSUPPORTED_IMAGE'} else 503
-        raise AppException(status, exc.code, '매출 정산서를 읽지 못했습니다. 설정과 사진을 확인해 주세요.') from None
-    stored=receipt_service.storage.save(user.id,data,mime,extension)
-    try:
-        item=MonthlySalesDocument(user_id=user.id,image_key=stored.key,image_mime=mime,image_sha256=digest,raw_prediction_json=json.dumps(result['raw_prediction'],ensure_ascii=False),review_json=json.dumps(result['document'],ensure_ascii=False),ocr_json=json.dumps(result['ocr_response'],ensure_ascii=False),model_response_json=json.dumps(result['model_response'],ensure_ascii=False),contract_version=result['contract_version'])
-        session.add(item);session.commit();session.refresh(item)
-    except Exception as exc:
-        session.rollback(); receipt_service._delete_after_failure(stored.key)
-        if isinstance(exc,IntegrityError) and (previous:=find_previous()) is not None:
-            return output(previous)
-        raise
-    return output(item)

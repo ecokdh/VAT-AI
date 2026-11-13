@@ -2,24 +2,17 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { isAxiosError } from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
-import { Icon } from "../components/Icon";
 import { getMe, markOcrGuideSeen } from "../api/auth";
 import { CaptureGuide } from "../components/CaptureGuide";
-import { enqueueReceiptOcr } from "../api/receipts";
-import { apiClient } from "../api/client";
-import { MonthlyProcessing } from "../components/MonthlySalesReview";
-import type { StageStatuses } from "../components/ProcessingTimeline";
-import { parseSalesPeriod, salesPeriodQuery } from "../hooks/salesPeriod";
+import { enqueueReceiptOcr, getReceipt, retryReceiptOcr, type ReceiptProcessingApi } from "../api/receipts";
+import "../styles/capture.css";
 
 export function CapturePage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const direction = params.get("direction");
-  const salesPeriod = direction === "sales" ? parseSalesPeriod(params.get("period")) : undefined;
-  const periodSuffix = salesPeriod ? `?${salesPeriodQuery(salesPeriod)}` : "";
-  const backToStorage = `/storage/${direction}${periodSuffix}`;
+  // 증빙 촬영은 매입 영수증만 받는다.
+  const backToStorage = "/storage/purchase";
   const fileOnly = params.get("source") === "file";
-  const hasDirection = direction === "purchase" || direction === "sales";
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,14 +26,35 @@ export function CapturePage() {
   const [seconds,setSeconds] = useState(3);
   const [pendingFile,setPendingFile] = useState<File|null>(null);
   const [preview,setPreview] = useState("");
-  // 월간 정산서는 응답을 기다리는 동안 매입 영수증과 같은 분석 진행 화면을 보여 준다.
-  const [monthly,setMonthly] = useState<{statuses:StageStatuses;id?:number}|null>(null);
+  // 셔터를 누르면 찍은 화면을 멈춰 보여 주고 그 위에서 바로 인식을 시작한다.
+  const [frozen,setFrozen] = useState("");
+  // 올린 영수증의 인식 진행을 이 화면 위에서 따라간다(게이지·결과 안내).
+  const [receipt,setReceipt] = useState<ReceiptProcessingApi|null>(null);
+  const [receiptId,setReceiptId] = useState<number|null>(null);
+  const [poll,setPoll] = useState(0);
   useEffect(()=>{
-    if(!hasDirection)return;
+    if(receiptId===null)return;
+    let active=true, timer:number|undefined;
+    const load=()=>getReceipt(receiptId).then(result=>{
+      if(!active)return;
+      setReceipt(result);
+      if(result.status==="processing")timer=window.setTimeout(load,900);
+      else if(result.status==="done"||result.status==="needs_edit")navigate(`/receipts/${receiptId}/review`,{replace:true});
+    }).catch(()=>{if(active)setReceipt(current=>current&&{...current,status:"failed"});});
+    void load();
+    return()=>{active=false;window.clearTimeout(timer);};
+  },[receiptId,poll,navigate]);
+  function resetCapture(){setFrozen("");setReceipt(null);setReceiptId(null);setError("");}
+  async function retrySamePhoto(){
+    if(receiptId===null)return;
+    try{await retryReceiptOcr(receiptId);setReceipt(current=>current&&{...current,status:"processing"});setPoll(v=>v+1);}
+    catch(cause){setError(isAxiosError(cause)?cause.response?.data?.error?.message??"다시 분석하지 못했어요.":"다시 분석하지 못했어요.");}
+  }
+  useEffect(()=>{
     let active=true;
     getMe().then(user=>{if(active)setGuide(user.ocr_guide_seen?"ready":"show");}).catch(()=>{if(active)setGuide("error");});
     return()=>{active=false;};
-  },[hasDirection]);
+  },[]);
   useEffect(()=>{
     if(guide!=="show")return;
     const tick=window.setInterval(()=>setSeconds(value=>Math.max(0,value-1)),1000);
@@ -55,7 +69,8 @@ export function CapturePage() {
 
   // 카메라 스트림 시작/정리 — facingMode가 바뀔 때마다 재실행됨
   useEffect(() => {
-    if (!hasDirection || guide !== "ready" || pendingFile || fileOnly) return;
+    // 인식 중(찍은·고른 사진을 띄운 동안)에는 카메라를 켜지 않는다.
+    if (guide !== "ready" || pendingFile || fileOnly || frozen) return;
     let cancelled = false;
 
     async function startCamera() {
@@ -88,25 +103,16 @@ export function CapturePage() {
       cancelled = true;
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [facingMode, hasDirection, guide, pendingFile, fileOnly]);
+  }, [facingMode, guide, pendingFile, fileOnly, frozen]);
 
-  async function uploadAndNavigate(file: File) {
-    if (direction !== "purchase" && direction !== "sales") return;
+  async function upload(file: File) {
     setError("");
     setIsUploading(true);
     try {
-      // 매출 증빙은 월간 매출 정산서 하나로 받는다.
-      if (direction === "sales") {
-        setMonthly({statuses:{text_recognition:"processing"}});
-        const body = new FormData(); body.append("file", file);
-        const { data } = await apiClient.post<{ id: number }>("/sales/monthly/extract", body);
-        setMonthly({statuses:{text_recognition:"completed",transaction_extraction:"completed",missing_field_check:"completed"},id:data.id});
-        return;
-      }
-      const receipt = await enqueueReceiptOcr(file, direction);
-      navigate(`/receipts/${receipt.receipt_id}/processing`, { replace: true });
+      const job = await enqueueReceiptOcr(file, "purchase");
+      setReceiptId(job.receipt_id);
     } catch (requestError) {
-      setMonthly(null);
+      setFrozen("");
       const message = isAxiosError(requestError)
         ? requestError.response?.data?.error?.message
         : undefined;
@@ -127,15 +133,16 @@ export function CapturePage() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    setFrozen(canvas.toDataURL("image/jpeg", 0.6));
 
     canvas.toBlob(
       (blob) => {
         if (!blob) {
+          setFrozen("");
           setError("촬영에 실패했습니다. 다시 시도해주세요.");
           return;
         }
-        const file = new File([blob], `receipt-${Date.now()}.jpg`, { type: "image/jpeg" });
-        setPendingFile(file);
+        void upload(new File([blob], `receipt-${Date.now()}.jpg`, { type: "image/jpeg" }));
       },
       "image/jpeg",
       0.92
@@ -158,149 +165,61 @@ export function CapturePage() {
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
   }
 
-  if (!hasDirection) return <div className="page"><PageHeader title="증빙 등록" /><div className="page__body">
-    <h1 className="screen-title">어떤 거래의 증빙인가요?</h1><p className="muted">보관할 곳을 선택한 뒤 촬영하거나 파일을 올려주세요.</p>
-    <div className="stack-gap-sm" style={{ marginTop: 28 }}>{(["purchase", "sales"] as const).map((value) => <button className="card capture-choice" key={value} onClick={() => setParams({ direction: value })}><Icon name="folder" size={30} /><span><strong>{value === "purchase" ? "매입" : "매출"}</strong><small>{value === "purchase" ? "사업을 위해 지출한 거래" : "고객에게 판매한 거래"}</small></span><span>›</span></button>)}</div>
-  </div></div>;
-
   if(guide!=="ready")return <div className="page qa-page"><PageHeader title="증빙 촬영 안내" onBack={()=>navigate(backToStorage)}/>{guide==="show"?<CaptureGuide seconds={seconds}/>:<div className="page__body">{guide==="error"?<p className="banner banner--error">촬영 안내 정보를 불러오지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.</p>:<p role="status">촬영을 준비하고 있습니다.</p>}</div>}</div>;
-  if(monthly)return <MonthlyProcessing statuses={monthly.statuses} preview={preview} onDone={()=>navigate(`/receipts/monthly/${monthly.id}/review${periodSuffix}`,{replace:true})}/>;
-  if(pendingFile)return <div className="page qa-page"><PageHeader title="촬영한 증빙 확인" onBack={()=>setPendingFile(null)}/><main className="page__body"><h1 className="screen-title">글자가 선명하게 보이나요?</h1><p className="muted">영수증 전체가 보이고 금액·날짜를 읽을 수 있는지 확인해 주세요.</p><img className="capture-preview" src={preview} alt="분석할 증빙 미리보기"/>{error&&<p className="banner banner--error" role="alert">{error}</p>}<div className="btn-row"><button className="btn btn--secondary" disabled={isUploading} onClick={()=>{setPendingFile(null);setError("");}}>다시 촬영·선택</button><button className="btn btn--primary" disabled={isUploading} onClick={()=>void uploadAndNavigate(pendingFile)}>{isUploading?"증빙 분석 중…":"선명해요 · 분석하기"}</button></div></main></div>;
+  if(pendingFile)return <div className="page qa-page capture-confirm"><PageHeader title="촬영한 증빙 확인" onBack={()=>setPendingFile(null)}/><main className="page__body"><h1 className="screen-title">글자가 선명하게 보이나요?</h1><p className="muted">영수증 전체가 보이고 금액·날짜를 읽을 수 있는지 확인해 주세요.</p><img className="capture-preview" src={preview} alt="분석할 증빙 미리보기"/>{error&&<p className="banner banner--error" role="alert">{error}</p>}<div className="btn-row"><button className="btn btn--secondary" disabled={isUploading} onClick={()=>{setPendingFile(null);setError("");}}>다시 촬영·선택</button><button className="btn btn--primary" disabled={isUploading} onClick={()=>{setFrozen(URL.createObjectURL(pendingFile));setPendingFile(null);void upload(pendingFile);}}>{isUploading?"증빙 분석 중…":"선명해요 · 분석하기"}</button></div></main></div>;
   if(fileOnly)return <div className="page qa-page"><PageHeader title="영수증 사진 선택" onBack={()=>navigate(backToStorage)}/><main className="page__body"><h1 className="screen-title">다른 영수증 사진을 선택해 주세요</h1><p className="muted">영수증 전체와 금액·날짜가 선명하게 보이는 사진을 선택해 주세요.</p><input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} style={{display:'none'}}/><button className="btn btn--primary" onClick={openFilePicker}>앨범 및 파일 선택</button><button className="btn btn--secondary" onClick={()=>setParams(previous => { const next = new URLSearchParams(previous); next.delete("source"); return next; })}>직접 촬영하기</button></main></div>;
+  const progress = receipt?.status === "processing" ? receipt.processing_progress : receipt ? 100 : 5;
+  const canRetry = (receipt?.ocr_user_attempts ?? 2) < 2;
+  const outcome = receipt?.status === "unsupported" ? { title: "영수증이 아닌 것 같아요", description: receipt.guide_message || "인쇄된 구매 영수증만 인식할 수 있어요.", icon: "M6 3h12v18l-3-2-3 2-3-2-3 2zM4 4l16 16", canRetry }
+    : receipt?.status === "retake" ? { title: "사진을 다시 찍어 주세요", description: receipt.guide_message || "영수증 전체가 선명하게 나오게 찍어 주세요.", icon: "M4 8h3l2-3h6l2 3h3v11H4zM12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6", canRetry: false }
+    : receipt?.status === "failed" ? { title: "인식을 마치지 못했어요", description: "일시적인 오류예요. 다시 시도할 수 있어요.", icon: "M12 4l9 16H3zM12 10v4M12 17v.01", canRetry }
+    : null;
+
   return (
-    <div className="page capture-page" style={{ background: "#0c0c10" }}>
-      <header className="page-header" style={{ background: "transparent" }}>
-        <button className="icon-btn" style={{ color: "#fff" }} aria-label="보관함으로 돌아가기" onClick={() => navigate(backToStorage)}>
-          ‹
-        </button>
-        <span className="page-header__title" style={{ color: "#fff" }}>
-          {direction === "purchase" ? "매입" : "매출"} 증빙 촬영
-        </span>
-        <span className="icon-btn" style={{ color: "#fff" }}>
-          ⚡
-        </span>
-      </header>
-
-      <div
-        style={{
-          flex: 1,
-          position: "relative",
-          margin: "0 20px",
-          borderRadius: 16,
-          aspectRatio: "3 / 4",
-          maxHeight: 640,
-          overflow: "hidden",
-          background: "#000",
-        }}
-      >
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          playsInline
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-        <canvas ref={canvasRef} style={{ display: "none" }} />
-
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            border: "2px dashed rgba(61,90,254,0.9)",
-            borderRadius: 16,
-            pointerEvents: "none",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-            paddingBottom: 16,
-          }}
-        >
-          <div
-            style={{
-              background: "rgba(0,0,0,0.65)",
-              color: "#fff",
-              fontSize: 13,
-              padding: "10px 16px",
-              borderRadius: 999,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            ⬚ 어두운 배경 · 전체가 보이게 · 초점 맞추기
+    <div className="capture-page">
+      <video ref={videoRef} className="capture-video" autoPlay muted playsInline />
+      <canvas ref={canvasRef} hidden />
+      {frozen && <img className="capture-video" src={frozen} alt="" />}
+      <div className="capture-guide-frame" aria-hidden="true"><i /><i /><i /><i /></div>
+      <div className="capture-top">
+        <button className="capture-square" aria-label="보관함으로 돌아가기" onClick={() => navigate(backToStorage)}><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+        <span className="capture-title">매입 영수증 촬영</span>
+        <span className="capture-square capture-square--ghost" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 3L5 13h6l-1 8 8-10h-6z" /></svg></span>
+      </div>
+      {!frozen && <p className="capture-hint">영수증 전체가 모서리 안에 들어오게</p>}
+      {error && <p className="banner banner--error capture-error" role="alert">{error}</p>}
+      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} hidden />
+      <div className="capture-controls">
+        <CaptureControl label="앨범" path="M4 6h16v12H4zM4 15l5-5 4 4 3-3 4 4M15 9.5h.01" onClick={openFilePicker} disabled={isUploading} />
+        <button className="capture-shutter" onClick={captureFromVideo} disabled={isUploading || !cameraReady} aria-label="촬영"><i /></button>
+        <CaptureControl label="전환" path="M4 12a8 8 0 0 1 14-5.3M20 4v4h-4M20 12a8 8 0 0 1-14 5.3M4 20v-4h4" onClick={toggleCamera} disabled={isUploading} />
+      </div>
+      {frozen && (outcome
+        ? <div className="capture-result" role="alert">
+            <span className={`capture-result__icon capture-result__icon--${receipt?.status}`}><svg viewBox="0 0 24 24"><path d={outcome.icon} /></svg></span>
+            <h2>{outcome.title}</h2>
+            <p>{outcome.description}</p>
+            {error && <p className="capture-result__error">{error}</p>}
+            {outcome.canRetry
+              ? <button className="btn btn--primary" onClick={() => void retrySamePhoto()}>같은 사진으로 한 번 더 분석</button>
+              : <button className="btn btn--primary" onClick={resetCapture}>다시 촬영하기</button>}
+            <button className="btn capture-result__secondary" onClick={() => navigate("/dashboard")}>메인 화면으로 돌아가기</button>
           </div>
-        </div>
-      </div>
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png"
-        onChange={handleFileChange}
-        style={{ display: "none" }}
-      />
-
-      {error && (
-        <div className="banner banner--error" style={{ margin: "0 20px" }}>
-          <span>⚠️</span>
-          <div>{error}</div>
-        </div>
-      )}
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", padding: "28px 20px 40px" }}>
-        <CaptureControl icon="▧" label="앨범 및 파일 선택" onClick={openFilePicker} disabled={isUploading} />
-        <button
-          onClick={captureFromVideo}
-          disabled={isUploading || !cameraReady}
-          style={{
-            width: 76,
-            height: 76,
-            borderRadius: "50%",
-            border: "4px solid #fff",
-            background: "transparent",
-          }}
-          aria-label="촬영"
-        >
-          {isUploading ? "…" : ""}
-        </button>
-        <CaptureControl icon="🔄" label="카메라 전환" onClick={toggleCamera} disabled={isUploading} />
-      </div>
+        : <div className="capture-processing" role="status">
+            <div className="capture-processing__pill">
+              <div className="capture-progress__row"><span>인식 중</span><span>{progress}%</span></div>
+              <div className="capture-progress"><i style={{ width: `${progress}%` }} /></div>
+            </div>
+          </div>)}
     </div>
   );
 }
 
-function CaptureControl({
-  icon,
-  label,
-  onClick,
-  disabled = false,
-}: {
-  icon: string;
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
+function CaptureControl({ label, path, onClick, disabled = false }: { label: string; path: string; onClick: () => void; disabled?: boolean }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, color: "#fff" }}
-    >
-      <span
-        style={{
-          width: 48,
-          height: 48,
-          borderRadius: "50%",
-          background: "rgba(255,255,255,0.15)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 20,
-        }}
-      >
-        {icon}
-      </span>
-      <span style={{ fontSize: 12 }}>{label}</span>
+    <button className="capture-control" onClick={onClick} disabled={disabled}>
+      <span><svg viewBox="0 0 24 24"><path d={path} /></svg></span>
+      {label}
     </button>
   );
 }

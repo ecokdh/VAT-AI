@@ -1,3 +1,4 @@
+/* 시작·로그인 대기 화면 — 흰 배경 위 파란 로고 타일 */
 .splash {
   position: fixed;
   top: 0;
@@ -9,39 +10,46 @@
   z-index: 1000;
   display: grid;
   place-items: center;
-  background:
-    radial-gradient(120% 60% at 50% 0%, rgb(255 255 255 / .45), transparent 60%),
-    linear-gradient(180deg, #9bdcff 0%, #4fa8f6 48%, #1d4ed8 100%);
+  background: #fff;
 }
 .splash--intro { animation: splash-out .4s ease-in 2.6s forwards; }
 .splash--loading { animation: splash-in .2s ease-out both; }
-.splash-brand { display: flex; flex-direction: column; align-items: center; gap: 18px; margin-top: -8vh; }
-.splash-mark { width: 92px; height: 92px; filter: drop-shadow(0 12px 20px rgb(15 50 150 / .3)); animation: splash-pop .6s cubic-bezier(.2, .9, .3, 1.3) both; }
+.splash-brand { display: flex; flex-direction: column; align-items: center; margin-top: -64px; }
+.splash-logo {
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  border-radius: 28px;
+  background: var(--color-primary);
+  animation: splash-pop .7s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+.splash-mark { width: 56px; height: 56px; }
 .splash-mark .brand-mark__body { fill: #fff; }
-.splash-mark .brand-mark__line { fill: #1d4ed8; opacity: .25; }
-.splash-mark .brand-mark__spark { fill: #38bdf8; }
-.splash-mark .brand-mark__check { stroke: #1d4ed8; }
-.splash-wordmark { width: 176px; height: auto; animation: splash-rise .6s ease-out .25s both; }
-.splash-wordmark { filter: drop-shadow(0 4px 10px rgb(15 50 150 / .25)); }
-.splash-wordmark .brand-word__vat { fill: #fff; }
-.splash-wordmark .brand-word__ai { fill: #c8ecff; }
+.splash-mark .brand-mark__line { fill: var(--color-primary); opacity: .25; }
+.splash-mark .brand-mark__spark { fill: #7cc8ff; }
+.splash-mark .brand-mark__check { stroke: var(--color-primary); }
+.splash-wordmark { width: 160px; height: auto; margin-top: 24px; animation: splash-rise .7s cubic-bezier(.34, 1.56, .64, 1) .18s both; }
+.splash-wordmark .brand-word__vat { fill: #1f56e0; }
+.splash-wordmark .brand-word__ai { fill: #38a6f5; }
+.splash-caption { margin: 16px 0 0; color: #6b7385; font-size: 13px; font-weight: 400; letter-spacing: -.01em; animation: splash-in .5s ease-out .5s both; }
 .splash-spinner {
   width: 40px;
   height: 40px;
-  margin-top: 22px;
+  margin-top: 32px;
   border-radius: 50%;
-  border: 4px solid rgb(255 255 255 / .3);
-  border-top-color: #fff;
+  border: 4px solid var(--color-primary-light);
+  border-top-color: var(--color-primary);
   animation: splash-spin .9s linear infinite;
 }
-.splash-message { margin: 0; color: #fff; font-family: "Noto Sans KR", sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.3px; }
+.splash-message { margin: 16px 0 0; color: #4b5568; font-size: 15px; font-weight: 500; }
 
-@keyframes splash-pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
-@keyframes splash-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes splash-pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
+@keyframes splash-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes splash-out { to { opacity: 0; visibility: hidden; } }
 @keyframes splash-in { from { opacity: 0; } }
 @keyframes splash-spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .splash-mark, .splash-wordmark { animation: none; }
+  .splash-logo, .splash-wordmark, .splash-caption { animation: none; }
 }

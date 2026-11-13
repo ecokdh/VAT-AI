@@ -12,6 +12,7 @@ from app.auth.models import User
 from app.business.models import BusinessProfile, TaxProfileV2
 from app.common.exceptions import AppException
 from app.vat_return.engine import STANDARD_RATE, period_bounds
+from app.vat_return.fields import EXCEPTION_FIELDS
 from app.transactions import service as transactions
 from app.transactions.models import Transaction
 
@@ -19,7 +20,6 @@ KST = timezone(timedelta(hours=9))
 CARD_EVIDENCE = {"card_receipt", "cash_receipt"}
 PENDING_REVIEW = {"caution", "stale", "not_analyzed", "insufficient_info"}
 ALWAYS_PRINTED = (1, 3, 4, 9, 16, 18)  # 매출 구분과 합계 칸은 확인된 0도 표시한다.
-
 
 def _deductible(row: Transaction) -> bool:
     # tax_engine 일반과세자 매입 공제 조건과 같다(standard 세율 + 분석 결과 SAFE).
@@ -111,6 +111,9 @@ def build_vat_return(session: Session, user: User, period: str) -> dict:
     filing = transactions.get_filing_input(session, user.id, period) if final else None
     if filing and filing.preliminary_notice_tax:
         r[24] = [0, filing.preliminary_notice_tax]
+    if estimate.get("card_issuance_credit"):
+        r[20] = [estimate["card_issuance_base"], estimate["card_issuance_credit"]]
+    r[21] = [0, r[19][1] + r[20][1]]  # (21) 경감·공제세액 합계 = (19) + (20)
     total_due = payable - r[21][1] - sum(r[i][1] for i in range(22, 29)) + r[29][1]
 
     # 신고서 계산이 대시보드 예상세액과 어긋나면 알린다(정규 증빙이 아닌 공제 거래가 있으면 일부러 다르다).
@@ -124,7 +127,8 @@ def build_vat_return(session: Session, user: User, period: str) -> dict:
         notes.append(f"공제 여부를 아직 확인하지 않은 매입 {pending}건은 신고서에서 뺐습니다. 확인 후 다시 만들어 주세요.")
     if skipped_sales:
         notes.append(f"과세 구분이나 공급가액을 확인할 수 없는 매출 {skipped_sales}건은 신고서에서 뺐습니다.")
-    notes.append("(20) 신용카드매출전표등 발행공제는 아직 계산하지 않아 빈칸입니다.")
+    if not estimate.get("card_issuance_credit"):
+        notes.append("(20) 신용카드매출전표등 발행공제는 법인이거나 사업자 정보 확인 전, 또는 발행분이 없어 빈칸입니다.")
     if final and not (filing and filing.preliminary_notice_tax is not None):
         notes.append("(24) 예정고지세액을 입력하지 않았습니다. 고지받은 세액이 있으면 신고서 생성 화면에서 입력해 주세요.")
 
@@ -134,6 +138,7 @@ def build_vat_return(session: Session, user: User, period: str) -> dict:
             values[f"r{row_no}.amount"] = _won(amount)
         if tax or row_no in ALWAYS_PRINTED:
             values[f"r{row_no}.tax"] = _won(tax)
+    values.update(dict.fromkeys(EXCEPTION_FIELDS, "예외"))
     values["rda.tax"] = _won(payable)
     values["r30.tax"] = _won(total_due)
 

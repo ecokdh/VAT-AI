@@ -9,7 +9,7 @@ from typing import Protocol
 import httpx
 
 from app.core.config import settings
-from app.vat_return.fields import FIELD_BY_ID
+from app.vat_return.fields import EXCEPTION_FIELDS, FIELD_BY_ID
 
 
 class FormReader(Protocol):
@@ -35,8 +35,8 @@ def load_reader() -> FormReader | None:
 
 
 def compare(expected: dict[str, str], read: dict[str, str]) -> list[dict]:
-    """넣으려던 값과 모델이 읽은 값이 다른 칸. 모르는 필드 ID는 무시한다."""
-    keys = [k for k in FIELD_BY_ID if k in expected or k in read]
+    """넣으려던 값과 모델이 읽은 값이 다른 칸. 모르는 필드 ID와 '예외' 칸은 무시한다."""
+    keys = [k for k in FIELD_BY_ID if (k in expected or k in read) and k not in EXCEPTION_FIELDS]
     return [{"field": k, "label": FIELD_BY_ID[k].label, "expected": expected.get(k, ""), "read": read.get(k, "")}
             for k in keys if expected.get(k, "") != read.get(k, "")]
 

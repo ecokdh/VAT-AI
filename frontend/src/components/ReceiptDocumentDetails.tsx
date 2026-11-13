@@ -1,7 +1,8 @@
 import {useEffect,useState,type FormEvent,type ReactNode} from 'react';
 import {isAxiosError} from 'axios';
 import {getReceipt,type ReceiptDetails,type ReceiptProcessingApi,type ReceiptReview} from '../api/receipts';
-import {useMaskedFormat} from '../hooks/useMaskedFormat';
+import { formatWon } from "../utils/format";
+import { NumberInput } from './NumberInput';
 
 const labels:Record<string,string>={vendor:'공급자 상호',branch:'지점',business_number:'사업자등록번호',transaction_datetime:'거래일시',printed_total_amount:'인쇄 합계',subtotal_amount:'소계',payment_amount:'실제 결제액',supply_amount:'공급가액',taxable_supply_amount:'과세 공급가액',vat_amount:'부가가치세',tax_exempt_amount:'면세금액',discount_amount:'할인액'};
 const extras:Record<string,string>={address:'주소',phone:'전화번호',payment_method:'결제수단',approval_number:'승인번호',receipt_number:'영수증 번호'};
@@ -18,8 +19,7 @@ export type DetailEdit={save:(document:Doc,details:ReceiptDetails,receipt:Receip
 export function ReceiptDocumentDetails({receiptId,edit}:{receiptId:number;edit?:DetailEdit}){
  const [receipt,setReceipt]=useState<ReceiptProcessingApi|null>(null),[error,setError]=useState(false);
  const [draft,setDraft]=useState<Draft|null>(null),[saving,setSaving]=useState(false),[saveError,setSaveError]=useState('');
- const fmt=useMaskedFormat();
- useEffect(()=>{let active=true;setReceipt(null);setError(false);getReceipt(receiptId).then(r=>{if(active)setReceipt(r);}).catch(()=>{if(active)setError(true);});return()=>{active=false;};},[receiptId]);
+useEffect(()=>{let active=true;setReceipt(null);setError(false);getReceipt(receiptId).then(r=>{if(active)setReceipt(r);}).catch(()=>{if(active)setError(true);});return()=>{active=false;};},[receiptId]);
  if(error)return <p role="alert">전체 증빙 정보를 불러오지 못했습니다. 다시 펼쳐 확인해 주세요.</p>;
  if(!receipt)return <p role="status">전체 증빙 정보를 불러오는 중입니다.</p>;
  const doc=receipt.review?.document??receipt.recognition?.document;
@@ -28,8 +28,8 @@ export function ReceiptDocumentDetails({receiptId,edit}:{receiptId:number;edit?:
  const editing=!!edit;
  const d:Draft=draft??{fields:Object.fromEntries(Object.keys(labels).map(k=>[k,text(fields[k])])),extras:Object.fromEntries(Object.keys(extras).map(k=>[k,text(receipt.details[k as keyof typeof receipt.details])])),items:items.map(i=>({name:i.name,quantity:text(i.quantity),unit_price:text(i.unit_price),line_amount:text(i.line_amount),row_type:i.row_type})),additional:receipt.details.additional_fields??[]};
  const change=(fn:(v:Draft)=>Draft)=>setDraft(fn(d));
- const input=(value:string,onChange:(v:string)=>void,label:string,numeric=false)=><input className="input detail-input" aria-label={label} value={value} placeholder="미확인" {...(numeric?{type:'number',step:'any',inputMode:'decimal' as const}:{})} onChange={e=>onChange(e.target.value)}/>;
- const show=(value:unknown,money=false)=>value==null||value===''?'미확인':money&&typeof value==='number'?fmt.won(value):String(value);
+ const input=(value:string,onChange:(v:string)=>void,label:string,numeric=false)=>numeric?<NumberInput className="input detail-input" aria-label={label} value={value} placeholder="미확인" allowDecimal allowNegative onValueChange={onChange}/>:<input className="input detail-input" aria-label={label} value={value} placeholder="미확인" onChange={e=>onChange(e.target.value)}/>;
+ const show=(value:unknown,money=false)=>value==null||value===''?'미확인':money&&typeof value==='number'?formatWon(value):String(value);
  const row=(label:string,value:unknown,money=false,editor?:ReactNode)=><div className="field-row" key={label}><span>{label}</span>{editing&&editor?editor:<span style={{textAlign:'right',overflowWrap:'anywhere',maxWidth:'65%'}}>{show(value,money)}</span>}</div>;
 
  async function save(e:FormEvent){

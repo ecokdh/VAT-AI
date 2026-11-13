@@ -58,13 +58,15 @@ app/
 ├── common/exceptions.py  공통 예외 핸들러
 ├── auth/                 /auth — 회원가입·로그인·/auth/me·비밀번호 재설정, get_current_user
 ├── business/             사업자 정보, 국세청 진위 확인(nts_client), 거래처 기억(merchant_memory)
-├── receipts/             /receipts — 업로드·저장(storage)·목록, 상세(details)·확인 질문(questions)
+├── receipts/             /receipts — 저장(storage)·목록·조회, 상세(details)·확인 질문(questions). 업로드는 /v2/receipt-jobs
 │   └── ocr/              OCR 파이프라인: contract, luna(작업자 어댑터), ocr_client(CLOVA), luna_client, photo_ocr, line_structure 등
-├── sales_monthly/        /sales/monthly — 월간 매출 정산서 인식·검토
+├── sales_monthly/        /sales/monthly — 매출 자료(정산서 사진·홈택스 엑셀) 인식·검토·보관
+├── sales_filing/         /sales/filings — 신고기간별 매출 집계(출처 확인·대조·확정). 매출세액은 확정된 집계에서만 온다
 ├── transactions/         /v2/transactions — 거래 확정·수정·휴지통·세액 요약
-├── deduction/            공제 판별: analyzer.py(계약), graph/(LangGraph), rag/(법령 임베딩·검색), /reports
+├── deduction/            공제 판별: analyzer.py(계약), graph/(LangGraph), rag/(법령 임베딩·검색)
 ├── vat_return/           engine.py(세액 계산), returns·fields·fill·render·verifier(신고서 PDF와 검증)
 ├── jobs/                 /v2/jobs — 비동기 작업 API와 worker.py
+├── team_benchmark/       /v2/team-benchmark — 팀원 권한 관리, 인식 벤치마크 사례(정답·예측) 조회
 └── migrations/versions/  Alembic
 frontend/                 React 앱 (src/api, components, pages, hooks, styles)
 tests/                    pytest
@@ -76,7 +78,7 @@ training/                 신고서 칸 인식 모델 학습 코드와 검증 �
 
 ## 구현 참고
 
-- **엔티티 관계**: `User` 1—N `Receipt`, `Receipt` 1—1 `Deduction`. 거래는 `Transaction`(v2)으로 확정·관리한다. 리포트는 테이블이 아니라 집계 조회 응답이다.
+- **엔티티 관계**: `User` 1—N `Receipt`, `Receipt` 1—0..1 `Transaction`. 거래는 `Transaction`(v2)으로 확정·관리하고, 공제 판별 결과도 `Transaction`에 저장한다.
 - **인증 흐름**: JWT payload는 `{ sub: User.id, email }`. 토큰 검증 시 `sub`로 유저를 다시 조회한다(`get_current_user` Depends).
 - **라우트 순서**: FastAPI는 선언 순서대로 매칭하므로 리터럴 경로를 path parameter 라우트보다 먼저 등록한다.
 - **마이그레이션**: 새 리비전의 `down_revision`은 항상 현재 head를 가리키게 해서 head를 하나로 유지한다.

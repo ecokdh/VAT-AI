@@ -172,6 +172,20 @@ def test_user_retry_reuses_receipt_and_allows_one_retry():
         assert getattr(error, "code", None) == "OCR_RETRY_LIMIT"
 
 
+def test_user_retry_allows_unsupported_but_not_finished_receipts():
+    session, user = setup_session()
+    unsupported = Receipt(user_id=user.id, image_url="photo.jpg", status="unsupported")
+    done = Receipt(user_id=user.id, image_url="done.jpg", status="done")
+    session.add(unsupported); session.add(done); session.commit()
+    _, updated = job_service.retry_receipt_ocr(session, user.id, unsupported.id)
+    assert updated.status == "processing" and updated.ocr_user_attempts == 2
+    try:
+        job_service.retry_receipt_ocr(session, user.id, done.id)
+        assert False, "finished receipts must not be retried"
+    except Exception as error:
+        assert getattr(error, "code", None) == "OCR_RETRY_NOT_AVAILABLE"
+
+
 def test_pdf_job_generates_review_pdf_even_with_partial_estimate(monkeypatch, tmp_path):
     session, user = setup_session()
     storage = LocalFileStorage(tmp_path)

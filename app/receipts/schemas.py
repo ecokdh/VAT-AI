@@ -23,7 +23,7 @@ def restored_review(raw):
     return review
 
 class ReceiptOut(BaseModel):
-    """api-spec.md §3.2 — POST /receipts, GET /receipts/{id} 응답."""
+    """api-spec.md §3.2 — GET /receipts/{id} 응답."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -212,6 +212,7 @@ class ExtractionConfirmation(BaseModel):
     evidence_type: Literal['tax_invoice','card_receipt','cash_receipt','tax_free_receipt','manual','unknown'] = 'unknown'
     business_related: bool | None = None
     tax_treatment: Literal['standard','zero','exempt','unknown'] = 'unknown'
+    is_fixed_asset: bool = False
 
     @model_validator(mode='after')
     def matching_core(self):

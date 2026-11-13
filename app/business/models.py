@@ -2,6 +2,7 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Optional
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -31,9 +32,10 @@ class TaxProfileV2(SQLModel, table=True):
     """User-confirmed facts required by v2 deterministic tax rules."""
 
     __tablename__ = "tax_profiles_v2"
+    __table_args__ = (UniqueConstraint("user_id"),)
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    user_id: uuid.UUID = Field(foreign_key="users.id", unique=True, nullable=False, index=True)
+    user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False, index=True)
     tax_type: Optional[str] = Field(default=None)  # User declared; separate from verified BusinessProfile.
     business_description: Optional[str] = Field(default=None)
     operating_industry: Optional[str] = Field(default=None)

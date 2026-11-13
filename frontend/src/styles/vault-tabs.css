@@ -1,0 +1,12 @@
+/* 보관함 탭: 선택 표시(파란 알약)가 탭 사이를 밀려 이동한다 */
+.vault-tabs.vault-tabs--slide { position: relative; }
+.vault-tabs--slide .vault-tabs__indicator {
+  position: absolute; top: 4px; bottom: 4px;
+  border-radius: var(--radius-pill); background: var(--color-primary); box-shadow: var(--shadow-card);
+  transition: left .3s ease, width .3s ease;
+}
+.vault-tabs.vault-tabs--slide a { position: relative; z-index: 1; transition: color .3s ease; }
+.vault-tabs.vault-tabs--slide a.active { background: transparent; box-shadow: none; color: #fff; }
+@media (prefers-reduced-motion: reduce) {
+  .vault-tabs--slide .vault-tabs__indicator, .vault-tabs.vault-tabs--slide a { transition: none; }
+}

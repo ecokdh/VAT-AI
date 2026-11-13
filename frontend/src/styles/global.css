@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap");
+
 * {
   box-sizing: border-box;
 }
@@ -11,7 +13,7 @@ body {
 body {
   background: var(--color-bg);
   color: var(--color-text);
-  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI",
+  font-family: "IBM Plex Sans KR", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI",
     sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -52,3 +54,9 @@ a {
 html { color-scheme: light; scroll-padding-top: 104px; }
 body { line-height: 1.5; }
 button { color: inherit; }
+
+/* 브라우저 기본 여백(1em, 3px 등)을 4pt 그리드로 */
+p { margin-block: 12px; }
+h3 { margin-block: 16px; }
+legend { padding: 0; }
+input[type=checkbox], input[type=radio] { margin: 4px; }

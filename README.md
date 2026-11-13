@@ -11,9 +11,10 @@ app/                      FastAPI 백엔드
 ├── common/               공통 예외 처리
 ├── auth/                 회원가입·로그인·비밀번호 재설정
 ├── business/             사업자 정보, 국세청 진위 확인, 거래처 기억
-├── receipts/             영수증 업로드·저장·목록
+├── receipts/             영수증 저장·목록·조회
 │   └── ocr/              OCR 파이프라인(CLOVA, Luna 사진 인식, 구조 파싱)
-├── sales_monthly/        월간 매출 정산서 인식·검토
+├── sales_monthly/        매출 자료(정산서 사진·홈택스 엑셀) 인식·검토·보관
+├── sales_filing/         신고기간별 매출 집계·확정
 ├── transactions/         거래 확정·수정·휴지통·세액 요약
 ├── deduction/            매입세액 공제 판별
 │   ├── analyzer.py       공제 판별 어댑터 계약
@@ -21,6 +22,7 @@ app/                      FastAPI 백엔드
 │   └── rag/              법령 임베딩·검색
 ├── vat_return/           세액 계산 엔진, 신고서 PDF 채우기·검증
 ├── jobs/                 비동기 작업(OCR·분석·PDF) API와 작업자
+├── team_benchmark/       팀원 권한, 인식 벤치마크 사례 조회
 └── migrations/           Alembic 마이그레이션
 frontend/                 React + Vite + TypeScript
 tests/                    백엔드 테스트(pytest)
@@ -90,6 +92,8 @@ python -m app.deduction.rag.fetch_laws     # 법령 개정 시 data/laws.json �
 | `FORM_VERIFIER_URL` | 신고서 검증 모델 서버(`training/serve.py`). 비우면 검증 생략 |
 
 전체 목록은 `.env.example` 참고.
+
+비밀번호 찾기의 이메일 인증 코드 흐름과 SMTP 설정은 [설정 가이드](docs/PASSWORD_RESET.md)를 참고한다.
 
 ## 테스트
 

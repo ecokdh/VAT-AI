@@ -10,9 +10,7 @@ from app.business import nts_client
 from app.business.schemas import BusinessVerifyResponse
 from app.common.exceptions import AppException
 from app.core.database import get_session
-from app.deduction.models import Deduction
 from app.main import app
-from app.receipts.models import Receipt
 
 
 def body(email="owner@example.com"):
@@ -80,7 +78,6 @@ def test_registration_persists_user_and_business(client, monkeypatch, code, stat
     assert business["verified_at"] is not None
     assert business["business_name"] == "Owner Store"
     assert "password_hash" not in registered.text + login.text + me.text
-    assert db_rows(Deduction) == []
 
 
 def test_registration_persists_marketing_opt_in(client, monkeypatch):
@@ -161,26 +158,3 @@ def test_unconfirmed_lookup_does_not_register(client, monkeypatch):
     result = client.post("/auth/register", json=body())
     assert result.status_code == 502
     assert db_rows(User) == []
-
-
-def test_closed_business_registration_does_not_change_existing_deduction(client, monkeypatch):
-    generator = app.dependency_overrides[get_session]()
-    session = next(generator)
-    try:
-        other = User(email="other@example.com", password_hash="unused", name="Other")
-        session.add(other)
-        session.flush()
-        receipt = Receipt(user_id=other.id, image_url="test.jpg", status="done")
-        session.add(receipt)
-        session.flush()
-        session.add(Deduction(receipt_id=receipt.id, is_deductible=False, reason="existing", category="test", amount=0))
-        session.commit()
-    finally:
-        generator.close()
-
-    mock_status(monkeypatch, "03", "폐업자")
-    assert client.post("/auth/register", json=body()).status_code == 201
-    deductions = db_rows(Deduction)
-    assert len(deductions) == 1
-    assert deductions[0].is_deductible is False
-    assert deductions[0].reason == "existing"
