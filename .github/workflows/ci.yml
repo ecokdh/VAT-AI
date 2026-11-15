@@ -37,6 +37,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
+      - name: Install Korean font for VAT return PDF
+        run: sudo apt-get update && sudo apt-get install -y fonts-nanum
+
       - name: Enable pgvector
         run: |
           PGPASSWORD=postgres psql \
