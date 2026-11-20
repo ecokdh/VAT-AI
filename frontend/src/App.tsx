@@ -4,6 +4,7 @@ import { PasswordResetPage } from "./pages/auth/PasswordResetPage";
 import { SignupPage } from "./pages/auth/SignupPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { CapturePage } from "./pages/CapturePage";
+import { PurchaseOcrSelectionPage } from "./pages/PurchaseOcrSelectionPage";
 import { OcrProcessingPage } from "./pages/receipts/OcrProcessingPage";
 import { OcrResultEditPage } from "./pages/receipts/OcrResultEditPage";
 import { OcrExtractionReviewPage } from "./pages/receipts/OcrExtractionReviewPage";
@@ -38,6 +39,7 @@ export default function App() {
       <Route path="/account" element={<AccountPage />} />
       <Route path="/about" element={<AboutPage />} />
       <Route path="/capture" element={<CapturePage />} />
+      <Route path="/capture/select" element={<PurchaseOcrSelectionPage />} />
       <Route path="/receipts/:id/processing" element={<OcrProcessingPage />} />
       <Route path="/receipts/monthly/:id/review" element={<MonthlySalesReviewPage />} />
       <Route path="/receipts/:id/review" element={<OcrExtractionReviewPage />} />

@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     LUNA_BUDGET_LEDGER_FILE: str = "storage/luna_budget.json"
     # photo_ocr: General OCR + image; photo: explicit legacy image-only mode.
     LUNA_INPUT_MODE: str = "photo_ocr"
+    QWEN_OCR_BASE_URL: str = ""
+    QWEN_OCR_MODEL: str = "vat-receipt-qwen-ocr"
+    QWEN_PHOTO_OCR_BASE_URL: str = ""
+    QWEN_PHOTO_OCR_MODEL: str = "vat-receipt-qwen-vl-step087"
+    QWEN_RECEIPT_API_KEY: str = ""
+    QWEN_RECEIPT_TIMEOUT_SECONDS: float = 300.0
     LOCAL_FRONTEND_ORIGIN: str = ""
     DEDUCTION_ANALYZER: str = ""
     NTS_BUSINESS_API_KEY: str = ""

@@ -8,6 +8,11 @@
 .capture-square { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: rgb(255 255 255 / .92); color: #0f172a; }
 .capture-square--ghost { background: rgb(255 255 255 / .16); color: #fff; }
 .capture-title { font-size: 16px; font-weight: 500; text-shadow: 0 1px 4px rgb(0 0 0 / .4); }
+.purchase-ocr-options { display: grid; gap: 10px; }
+.purchase-ocr-options a { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: 14px; color: inherit; }
+.purchase-ocr-options span { color: var(--color-text-muted); font-size: 13px; }
+.capture-route { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; border-radius: 10px; background: var(--color-surface-muted); color: #0f172a; font-size: 13px; }
+.capture-route button { color: var(--color-primary); padding: 4px; }
 
 /* 가운데: 영수증 자리를 알려주는 모서리 4개 */
 .capture-guide-frame { position: absolute; top: 120px; bottom: 232px; left: 48px; right: 48px; pointer-events: none; }
@@ -56,11 +61,3 @@
   .capture-hint, .capture-error { bottom: 152px; }
   .capture-controls { bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
-
-/* 앨범 사진 확인 — 제목·설명을 붙이고 사진 높이를 남는 공간에 맞춰 한 화면에 */
-.page.capture-confirm .screen-title { margin: 8px 0 0; font-size: 24px; font-weight: 600; line-height: 32px; letter-spacing: -.02em; }
-.page.capture-confirm .muted { margin: 4px 0 0; font-size: 13px; line-height: 20px; }
-.page.capture-confirm .capture-preview { display: block; max-height: calc(100dvh - 300px); margin: 16px 0; border-radius: 12px; }
-.page.capture-confirm .page__body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
-.page.capture-confirm .btn-row { gap: 8px; }
-.page.capture-confirm .btn { height: 52px; min-height: 52px; border-radius: 12px; font-size: 16px; }

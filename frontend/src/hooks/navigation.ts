@@ -5,7 +5,7 @@ export function parentRoute(pathname: string, search = "") {
   const suffix = period ? `?period=${encodeURIComponent(period)}` : "";
   if (["/signup", "/forgot-password", "/reset-password"].includes(pathname)) return "/login";
   if (params.get("from") === "reports") return `/reports${suffix}`;
-  if (pathname === "/storage/trash" || pathname === "/capture" || pathname.startsWith("/receipts/")) {
+  if (pathname === "/storage/trash" || pathname === "/capture" || pathname === "/capture/select" || pathname.startsWith("/receipts/")) {
     return `/storage/${params.get("direction") === "sales" ? "sales" : "purchase"}${suffix}`;
   }
   if (pathname.startsWith("/analysis/")) return `/storage/purchase${suffix}`;

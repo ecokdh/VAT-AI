@@ -7,6 +7,9 @@ from typing import Callable, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+PurchaseOcrRoute = Literal["qwen_ocr", "qwen_photo_ocr", "luna_photo_ocr"]
+QWEN_RECEIPT_ROUTES = {"qwen_ocr", "qwen_photo_ocr"}
+
 
 class OcrStage(StrEnum):
     PHOTO_QUALITY = "photo_quality"

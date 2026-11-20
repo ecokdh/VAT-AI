@@ -80,10 +80,11 @@ export interface ReceiptExtractionInput {
   tax_treatment?: ReceiptReview['tax_treatment'];
 }
 
-export async function enqueueReceiptOcr(file: File, direction: "purchase" | "sales"): Promise<{ job_id: string; receipt_id: number; status: "PENDING" }> {
+export async function enqueueReceiptOcr(file: File, direction: "purchase" | "sales", ocrRoute?: import("../hooks/purchaseOcrRoute").PurchaseOcrRoute): Promise<{ job_id: string; receipt_id: number; status: "PENDING" }> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("direction", direction);
+  if (ocrRoute) formData.append("ocr_route", ocrRoute);
   const { data } = await apiClient.post("/v2/receipt-jobs", formData);
   return data;
 }

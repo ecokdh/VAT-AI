@@ -5,6 +5,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, computed_field, FiniteFloat, model_validator, field_validator
 import json
 
+from app.receipts.ocr.contract import QWEN_RECEIPT_ROUTES
 
 
 def restored_review(raw):
@@ -59,7 +60,7 @@ class ReceiptOut(BaseModel):
     def recognition(self) -> dict | None:
         try:
             raw = json.loads(self.ocr_raw or '')
-            if not isinstance(raw, dict) or raw.get('engine') != 'luna_low':
+            if not isinstance(raw, dict) or raw.get('engine') not in QWEN_RECEIPT_ROUTES | {'luna_low'}:
                 return None
             review = restored_review(raw) or {}
             if review.get('document') is not None:

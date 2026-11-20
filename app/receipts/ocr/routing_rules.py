@@ -9,6 +9,7 @@ Defines heuristics based strictly on runtime signals:
 5. Preserves valid negative/cancellation transactions
 6. Aspect ratio and EXIF orientation analysis
 """
+from datetime import date
 from typing import Any, Dict, List, Optional
 import re
 
@@ -180,3 +181,59 @@ def route_suspicious_fields(norm_result: dict, image_meta: Optional[dict] = None
         "targets": suspicious_targets,
         "advisory": advisory_targets,
     }
+
+
+def apply_post_extraction_checks(
+    doc: dict,
+    orientation_meta: Optional[dict] = None,
+    *,
+    use_transaction_save_amount: bool = True,
+) -> tuple[int | None, date | None, list[str], list[str]]:
+    """Run shared routing checks, amount/date validation, and missing-field detection on normalized receipt docs."""
+    fields = doc.setdefault("fields", {})
+    warnings: list[str] = [
+        *doc.get("uncertain", []),
+        *("금액 후보 충돌: " + k for k in doc.get("conflicts", [])),
+    ]
+    routing = route_suspicious_fields(doc, orientation_meta)
+    doc["routing"] = routing
+    for target in routing.get("targets", []):
+        reason = str(target.get("reason", ""))
+        if reason == "business_number_checksum_failed":
+            warnings.append("사업자번호 체크섬 불일치: 사용자 확인 권장")
+        elif "arithmetic_mismatch" in reason:
+            warnings.append("금액 구성요소 합산 불일치: 사용자 확인 권장")
+
+    if use_transaction_save_amount:
+        # This value is only a transaction-save candidate; keep it separate from printed fields.
+        amount = fields.get("transaction_save_amount")
+        doc["amount_source"] = fields.get("transaction_save_amount_source")
+    else:
+        if fields.get("payment_amount") is not None:
+            amount = fields["payment_amount"]
+            doc["amount_source"] = "payment_amount"
+        else:
+            amount = fields.get("printed_total_amount")
+            doc["amount_source"] = "printed_total_amount" if amount is not None else None
+
+    if amount is not None and (isinstance(amount, bool) or amount < 0 or amount != int(amount)):
+        warnings.append("음수·소수 금액은 현재 MVP 정수 거래 계약에서 직접 확정할 수 없습니다. 인쇄값은 상세 결과에 보존했습니다.")
+        amount = None
+    elif amount is not None:
+        amount = int(amount)
+
+    tx_date = None
+    match = re.search(r"(20\d{2})[-./](\d{1,2})[-./](\d{1,2})", str(fields.get("transaction_datetime") or ""))
+    if match:
+        try:
+            tx_date = date(*map(int, match.groups()))
+        except ValueError:
+            warnings.append("유효하지 않은 거래일입니다.")
+
+    missing = [
+        k
+        for k, v in [("vendor", fields.get("vendor")), ("amount", amount), ("transaction_date", tx_date)]
+        if v is None or v == ""
+    ]
+    deduped_warnings = list(dict.fromkeys(warnings))
+    return amount, tx_date, missing, deduped_warnings

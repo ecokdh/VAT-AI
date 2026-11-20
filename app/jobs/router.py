@@ -10,6 +10,7 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.common.exceptions import AppException
 from app.core.config import settings
+from app.receipts.ocr.contract import PurchaseOcrRoute
 from app.core.database import get_session
 from app.jobs import service
 from app.jobs.schemas import AsyncJobOut, ReceiptJobAccepted
@@ -69,11 +70,12 @@ def retry_receipt_ocr(
 async def create_receipt_job(
     file: UploadFile = File(...),
     direction: Literal["purchase", "sales"] = Form("purchase"),
+    ocr_route: PurchaseOcrRoute | None = Form(None),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     content = await file.read(settings.MAX_UPLOAD_SIZE_BYTES + 1)
-    job, receipt = await service.enqueue_receipt_ocr(session, user.id, content, file.content_type, direction)
+    job, receipt = await service.enqueue_receipt_ocr(session, user.id, content, file.content_type, direction, ocr_route)
     return ReceiptJobAccepted(job_id=job.id, receipt_id=receipt.id, status="PENDING")
 
 

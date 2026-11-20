@@ -1,13 +1,14 @@
 import { TeamBenchmarkTab } from "../../components/TeamBenchmarkTab";
 import { VaultTabs } from "../../components/VaultTabs";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { getMe } from "../../api/auth";
 import { isAxiosError } from "axios";
 import { confirmTransaction, confirmTransactionFromReceipt, createAnalysisRun, listTransactions, moveTransactionToTrash, type TransactionApi } from "../../api/transactions";
 import { listReceiptInbox, saveReceiptEdits, type ReceiptProcessingApi } from "../../api/receipts";
 import { inPeriod, isPeriod, needsReview } from "../../hooks/useReviewOverview";
 import { filterLedger, matchesReviewStatus, reviewLabel, reviewStatusClass } from "../../hooks/reviewState";
+import { purchaseOcrSelectionPath } from "../../hooks/purchaseOcrRoute";
 import { parseSalesPeriod } from "../../hooks/salesPeriod";
 import { rememberPeriod, rememberedPeriod, useReturnedPeriod } from "../../hooks/currentPeriod";
 import { PeriodPicker } from "../../components/PeriodPicker";
@@ -159,7 +160,7 @@ const [params, setParams] = useSearchParams();
         result={!waiting && item.state === "confirmed" && item.direction === "purchase" ? { kind: needsReview(item) ? "review" : item.review_status === "excluded" ? "nondeductible" : "deductible", onClick: () => openDetail(item, true) } : undefined} />;})}
       {hiddenCount > 0 && <button type="button" className="btn btn--secondary view-all" onClick={()=>navigate(`/storage/${direction}/receipts?${new URLSearchParams({ period, month, status, order })}`)}>전체 보기 ({receipts.length + filtered.length}건)</button>}
     </>}
-    {!(purchase && judgedTab) && <div className="vault-actions">{purchase && analyzeTab && <><p className="muted">{includeWaiting ? `분석 대기 ${waitingCount}건` : `다시 분석할 거래 ${visibleSelected.length}건`}</p><button className="btn btn--primary" disabled={!(waitingCount + visibleSelected.length) || busy} onClick={()=>void analyzeAll()}>{busy?"분석 준비 중":"거래 분석하기"}</button></>}<button className="btn btn--secondary" onClick={()=>navigate(`/capture?direction=${direction}`)}>＋ {purchase?"매입":"매출"} 증빙 추가</button></div>}
+    {!(purchase && judgedTab) && <div className="vault-actions">{purchase && analyzeTab && <><p className="muted">{includeWaiting ? `분석 대기 ${waitingCount}건` : `다시 분석할 거래 ${visibleSelected.length}건`}</p><button className="btn btn--primary" disabled={!(waitingCount + visibleSelected.length) || busy} onClick={()=>void analyzeAll()}>{busy?"분석 준비 중":"거래 분석하기"}</button></>}{purchase ? <Link className="btn btn--secondary" to={purchaseOcrSelectionPath}>＋ 매입 증빙 추가</Link> : <button className="btn btn--secondary" onClick={()=>navigate(`/capture?direction=${direction}`)}>＋ 매출 증빙 추가</button>}</div>}
     <div className="section-heading utility-row"><button className="text-link" onClick={()=>navigate(`/storage/trash?direction=${direction}`)}>휴지통</button><button className="text-link" disabled={loading} onClick={()=>void refresh()}>새로고침</button></div>
     <p className="footnote">{purchase ? "거래 정보를 확인·확정한 후 세액 계산에 반영합니다." : "신고용 매출은 홈택스 매출 검증 화면에서 관리합니다."}</p>
   </main>
