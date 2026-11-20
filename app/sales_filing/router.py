@@ -5,7 +5,7 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.core.database import get_session
 from app.sales_filing import service
-from app.sales_filing.schemas import FinalizeSalesCase, ManualSalesInput, SalesFeedback, SourceUpdate
+from app.sales_filing.schemas import FinalizeSalesCase, ManualSalesInput, OtherSalesInput, SalesFeedback, SourceUpdate
 
 router = APIRouter(prefix="/sales/filings", tags=["sales filing"])
 
@@ -24,6 +24,7 @@ def update_source(
         session, user, period, source, status=body.status, query_start=body.query_start,
         query_end=body.query_end, basis=body.basis, document_ids=body.document_ids, reason=body.reason,
         expected_document_ids=body.expected_document_ids,
+        invoice_replacement_id=body.invoice_replacement_id,
     )
     return service.public_result(case)
 
@@ -37,12 +38,29 @@ def add_manual_input(
     return service.public_result(case)
 
 
+@router.put("/{period}/other-sales")
+def save_other_sale(
+    period: str, body: OtherSalesInput,
+    user: User = Depends(get_current_user), session: Session = Depends(get_session),
+):
+    return service.public_result(service.save_other_sale(session, user, period, body))
+
+
 @router.post("/{period}/feedback")
 def add_feedback(
     period: str, body: SalesFeedback,
     user: User = Depends(get_current_user), session: Session = Depends(get_session),
 ):
     case = service.add_feedback(session, user, period, body.model_dump())
+    return service.public_result(case)
+
+
+@router.delete("/{period}/feedback/{issue_id}")
+def reset_feedback(
+    period: str, issue_id: str,
+    user: User = Depends(get_current_user), session: Session = Depends(get_session),
+):
+    case = service.reset_feedback(session, user, period, issue_id)
     return service.public_result(case)
 
 

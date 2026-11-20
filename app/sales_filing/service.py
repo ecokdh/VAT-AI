@@ -19,11 +19,13 @@ from app.auth.models import User
 from app.business.models import BusinessProfile, TaxProfileV2
 from app.common.exceptions import AppException
 from app.sales_filing.models import SalesFilingWorkflow
+from app.sales_filing.schemas import OtherSalesInput
 from app.sales_monthly.models import MonthlySalesDocument
 from app.sales_monthly.spreadsheet import VERSION as SPREADSHEET_VERSION, restore_document
 from app.vat_return.engine import STANDARD_RATE, period_bounds
 
 SOURCE_STATUSES = {"확인 완료", "해당 없음 확인", "자료 없음", "검토 필요"}
+OTHER_SALES_TOTAL_KEY = "other-sales-period-total"
 SOURCES = ("hometax_card", "hometax_cash_receipt", "hometax_sales_invoice", "pg", "unissued_sales")
 SOURCE_LABELS = {
     "hometax_card": "홈택스 카드",
@@ -101,9 +103,10 @@ def _period_dates(period: str) -> tuple[date, date]:
 
 def _issue(code: str, key: Any, question: str, *, source: str | None = None,
            documents: list[int] | None = None, row: int | None = None,
-           input_key: str | None = None, impact: int | None = None) -> dict[str, Any]:
+           input_key: str | None = None, impact: int | None = None,
+           details: dict[str, Any] | None = None) -> dict[str, Any]:
     identity = {"code": code, "source": source, "documents": documents or [], "row": row, "input": input_key, "key": key}
-    return {
+    result = {
         "issue_id": _fingerprint(identity)[:24],
         "reason_code": code,
         "source": source,
@@ -113,6 +116,9 @@ def _issue(code: str, key: Any, question: str, *, source: str | None = None,
         "impact_amount": impact,
         "question": question,
     }
+    if details is not None:
+        result["details"] = details
+    return result
 
 
 def _resolution_map(case: SalesFilingWorkflow) -> dict[str, dict[str, Any]]:
@@ -470,11 +476,15 @@ def _normalize_document_rows(
 
 def _manual_rows(case: SalesFilingWorkflow, resolutions: dict[str, dict[str, Any]], issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result = []
-    for item in _loads(case.manual_inputs_json, []):
+    items = _loads(case.manual_inputs_json, [])
+    period_total = next((item for item in items if item.get("input_key") == OTHER_SALES_TOTAL_KEY), None)
+    for item in items:
         source = item.get("source")
         input_key = item.get("input_key")
+        if source == "unissued_sales" and period_total is not None and item is not period_total:
+            continue
         resolution = {}
-        if source == "unissued_sales":
+        if source == "unissued_sales" and not item.get("confirmed_unreported"):
             issue = _issue(
                 "UNISSUED_SALE_CONFIRMATION_REQUIRED", input_key,
                 f"{item.get('date') or '신고기간'} 현금·계좌이체 공급 {item.get('total_amount') or item.get('supply_amount') or 0:,}원이 실제 공급이고 신고자료에 빠졌는지 확인해 주세요.",
@@ -505,7 +515,9 @@ def _manual_rows(case: SalesFilingWorkflow, resolutions: dict[str, dict[str, Any
         if any(not isinstance(value, int) or value < 0 for value in (supply, vat, total)) or supply + vat != total:
             issues.append(_issue("MANUAL_AMOUNT_INVALID", input_key, f"{SOURCE_LABELS[source]} 입력 {input_key}의 공급가액·세액·공급대가를 확인해 주세요.", source=source, input_key=input_key, impact=total))
             continue
-        if vat != supply * STANDARD_RATE // 100:
+        if vat != supply * STANDARD_RATE // 100 and not (
+            item is period_total and (supply, vat, total) == _amounts({"합계금액": total})
+        ):
             issues.append(_issue("STANDARD_RATE_MISMATCH", input_key, f"{SOURCE_LABELS[source]} 입력 {input_key}은 공급가액의 10%와 세액이 다릅니다.", source=source, input_key=input_key, impact=total))
             continue
         payment = (item.get("payment_method") or "").lower()
@@ -513,7 +525,8 @@ def _manual_rows(case: SalesFilingWorkflow, resolutions: dict[str, dict[str, Any
         result.append({
             "source": source, "line": line, "document_id": None, "row_index": None,
             "input_key": input_key, "date": item.get("date"), "reference": item.get("reference"),
-            "label": item.get("description") or SOURCE_LABELS[source], "scope": "confirmed_manual",
+            "label": item.get("description") or SOURCE_LABELS[source],
+            "scope": "period_total" if item is period_total else "confirmed_manual",
             "lookup_start": None, "lookup_end": None, "basis": "사용자 확인",
             "supply_amount": supply, "vat_amount": vat, "total_amount": total,
             "fee_amount": item.get("fee_amount"), "deposit_amount": item.get("deposit_amount"),
@@ -534,8 +547,93 @@ def _duplicate_reference(row: dict[str, Any]) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+def _match_invoice_and_card(invoice: dict[str, Any], card: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]] | None:
+    invoice_raw = invoice.get("raw_row") or {}
+    card_raw = card.get("raw_row") or {}
+    invoice_ref = _duplicate_reference(invoice)
+    card_ref = _duplicate_reference(card)
+    invoice_fee = invoice_raw.get("봉사료") or 0
+    card_fee = card_raw.get("봉사료") or 0
+    invoice_note = (invoice_raw.get("비고") or "").strip()
+    card_note = (card_raw.get("비고") or "").strip()
+
+    invoice_date = invoice.get("date") or ""
+    card_date = card.get("date") or ""
+    same_day = bool(len(invoice_date) >= 10 and len(card_date) >= 10 and invoice_date[:10] == card_date[:10])
+    same_period = bool(invoice_date and card_date and invoice_date[:7] == card_date[:7])
+    same_supply = invoice["supply_amount"] == card["supply_amount"]
+    same_vat = invoice["vat_amount"] == card["vat_amount"]
+    same_fee = invoice_fee == card_fee
+    same_total = invoice["total_amount"] == card["total_amount"]
+    same_note = invoice_note == card_note
+    both_specific_notes = bool(invoice_note and card_note and card_note != "일반거래")
+    same_ref = bool(invoice_ref and card_ref and invoice_ref == card_ref)
+
+    matched_fields: list[str] = []
+    if same_day:
+        matched_fields.append("일자")
+    if same_supply:
+        matched_fields.append("공급가액")
+    if same_vat:
+        matched_fields.append("부가세")
+    if same_fee:
+        matched_fields.append("봉사료")
+    if same_total:
+        matched_fields.append("총금액")
+    if same_note:
+        matched_fields.append("비고")
+
+    if same_ref:
+        match_kind = "reference"
+    elif invoice.get("scope") == "detail" and card.get("scope") == "detail":
+        if not (same_day and same_supply and same_vat and same_fee and same_total):
+            return None
+        if both_specific_notes and not same_note:
+            return None
+        match_kind = "exact_6_fields" if same_note else "core_5_fields"
+    elif same_period and same_total:
+        match_kind = "month_amount"
+    else:
+        return None
+
+    details = {
+        "match_kind": match_kind,
+        "matched_fields": matched_fields,
+        "invoice": {
+            "document_id": invoice["document_id"],
+            "row_index": invoice["row_index"],
+            "label": "매출 세금계산서",
+            "date": invoice.get("date"),
+            "supply_amount": invoice["supply_amount"],
+            "vat_amount": invoice["vat_amount"],
+            "fee_amount": invoice_fee,
+            "total_amount": invoice["total_amount"],
+            "note": invoice_note or None,
+            "reference": invoice_ref,
+            "counterparty": invoice_raw.get("공급받는자사업자번호"),
+        },
+        "counterpart": {
+            "source": card["source"],
+            "document_id": card["document_id"],
+            "row_index": card["row_index"],
+            "label": SOURCE_LABELS[card["source"]],
+            "date": card.get("date"),
+            "supply_amount": card["supply_amount"],
+            "vat_amount": card["vat_amount"],
+            "fee_amount": card_fee,
+            "total_amount": card["total_amount"],
+            "note": card_note or None,
+            "reference": card_ref,
+            "identity_last4": card_raw.get("신분확인뒷4자리"),
+            "scope": card.get("scope"),
+        },
+    }
+    return match_kind, matched_fields, details
+
+
 def _apply_cross_source_duplicates(
     rows: list[dict[str, Any]], resolutions: dict[str, dict[str, Any]], issues: list[dict[str, Any]], deduplicated: list[dict[str, Any]],
+    *, invoice_replacement_id: str | None = None,
 ) -> None:
     invoices = [row for row in rows if row["source"] == "hometax_sales_invoice"]
     cards = [row for row in rows if row["source"] in CARD_SOURCES]
@@ -543,13 +641,12 @@ def _apply_cross_source_duplicates(
     pairs: set[tuple[str, str]] = set()
     for invoice in invoices:
         for card in cards:
-            invoice_ref = _duplicate_reference(invoice)
-            card_ref = _duplicate_reference(card)
-            same_period = bool(invoice.get("date") and card.get("date") and invoice["date"][:7] == card["date"][:7])
-            same_amount = invoice["total_amount"] == card["total_amount"]
-            same_ref = bool(invoice_ref and card_ref and invoice_ref == card_ref)
-            if not same_ref and not (same_period and same_amount):
+            matched = _match_invoice_and_card(invoice, card)
+            if matched is None:
                 continue
+            match_kind, _, details = matched
+            same_ref = match_kind == "reference"
+            same_amount = invoice["total_amount"] == card["total_amount"]
             pair_key = tuple(sorted((f"{invoice.get('document_id')}:{invoice.get('row_index')}", f"{card.get('document_id')}:{card.get('row_index')}")))
             if pair_key in pairs:
                 continue
@@ -557,15 +654,24 @@ def _apply_cross_source_duplicates(
             key = {"invoice": pair_key[0], "card": pair_key[1]}
             if invoice.get("spreadsheet_review_hash") or card.get("spreadsheet_review_hash"):
                 key["review"] = [invoice.get("spreadsheet_review_hash"), card.get("spreadsheet_review_hash")]
+            if invoice_replacement_id:
+                key["invoice_replacement_id"] = invoice_replacement_id
             duplicate_issue = _issue(
                 "POSSIBLE_INVOICE_CARD_DUPLICATE", key,
-                f"세금계산서와 카드·현금영수증 자료가 같은 공급인지 확인해 주세요. 두 자료 합계는 {min(invoice['total_amount'], card['total_amount']):,}원입니다. 승인·주문·증빙번호를 확인하고 중복액 또는 해당 없음으로 답해 주세요.",
+                f"세금계산서와 {SOURCE_LABELS[card['source']]} 자료가 같은 거래인지 확인해 주세요. 일치 금액은 {min(invoice['total_amount'], card['total_amount']):,}원입니다.",
                 source="hometax_sales_invoice", documents=[invoice["document_id"], card["document_id"]],
                 row=card["row_index"], impact=min(invoice["total_amount"], card["total_amount"]),
+                details=details,
             )
             if same_ref and same_amount:
                 removed[id(card)] = card["total_amount"]
-                deduplicated.append({"reason": "같은 승인·주문·증빙번호", "source_document": card["document_id"], "source_row": card["row_index"], "excluded_total_amount": card["total_amount"]})
+                deduplicated.append({
+                    "reason": "같은 승인·주문·증빙번호",
+                    "source_document": card["document_id"],
+                    "source_row": card["row_index"],
+                    "excluded_total_amount": card["total_amount"],
+                    "details": details,
+                })
                 continue
             resolution = resolutions.get(duplicate_issue["issue_id"])
             if resolution is None:
@@ -575,9 +681,16 @@ def _apply_cross_source_duplicates(
                 amount = min(invoice["total_amount"], card["total_amount"]) if amount is None else amount
                 if isinstance(amount, int) and 0 < amount <= card["total_amount"]:
                     removed[id(card)] = min(card["total_amount"], removed.get(id(card), 0) + amount)
-                    deduplicated.append({"reason": "사용자가 확인한 세금계산서·카드 중복", "source_document": card["document_id"], "source_row": card["row_index"], "excluded_total_amount": amount})
+                    deduplicated.append({
+                        "issue_id": duplicate_issue["issue_id"],
+                        "reason": f"사용자가 확인한 세금계산서·{SOURCE_LABELS[card['source']]} 중복",
+                        "source_document": card["document_id"],
+                        "source_row": card["row_index"],
+                        "excluded_total_amount": amount,
+                        "details": details,
+                    })
                 else:
-                    issues.append(_issue("DUPLICATE_AMOUNT_INVALID", key, "확인한 중복액이 카드·현금영수증 금액 범위 안인지 확인해 주세요.", source="hometax_sales_invoice", documents=[invoice["document_id"], card["document_id"]], row=card["row_index"], impact=card["total_amount"]))
+                    issues.append(_issue("DUPLICATE_AMOUNT_INVALID", key, "확인한 중복액이 카드·현금영수증 금액 범위 안인지 확인해 주세요.", source="hometax_sales_invoice", documents=[invoice["document_id"], card["document_id"]], row=card["row_index"], impact=card["total_amount"], details=details))
             elif resolution.get("action") != "해당 없음":
                 issues.append(duplicate_issue)
 
@@ -771,7 +884,10 @@ def _build_result(
     rows.extend(_manual_rows(case, resolutions, issues))
     deduplicated: list[dict[str, Any]] = []
     rows = _deduplicate_and_choose_scope(rows, resolutions, issues, deduplicated)
-    _apply_cross_source_duplicates(rows, resolutions, issues, deduplicated)
+    _apply_cross_source_duplicates(
+        rows, resolutions, issues, deduplicated,
+        invoice_replacement_id=source_checks["hometax_sales_invoice"].get("invoice_replacement_id"),
+    )
 
     payment_rows = []
     for row in rows:
@@ -883,6 +999,7 @@ def update_source(
     session: Session, user: User, period: str, source: str, *, status: str,
     query_start: date | None, query_end: date | None, basis: str | None,
     document_ids: list[int], reason: str | None, expected_document_ids: list[int] | None = None,
+    invoice_replacement_id: str | None = None,
 ) -> SalesFilingWorkflow:
     _period_dates(period)
     if source not in SOURCES:
@@ -898,18 +1015,36 @@ def update_source(
     checks = _default_checks()
     previous_checks = case.source_checks_json
     checks.update(_loads(previous_checks, {}))
+    if invoice_replacement_id is not None and (
+        source != "hometax_sales_invoice" or status != "확인 완료" or not expected_document_ids or not ids
+    ):
+        raise AppException(400, "INVALID_INVOICE_REPLACEMENT", "연결된 매출 세금계산서를 교체할 때만 중복 확인을 다시 요청할 수 있습니다.")
+    last_replacement_id = checks[source].get("invoice_replacement_id")
+    if invoice_replacement_id and last_replacement_id == invoice_replacement_id:
+        if checks[source].get("document_ids") == ids and checks[source].get("status") == status:
+            return refresh(session, user, period)
+        raise AppException(409, "SALES_SOURCE_CHANGED", "연결된 파일이 바뀌었습니다. 현재 연결 상태를 확인해 주세요.")
+    previous_inputs = case.manual_inputs_json
+    if source == "unissued_sales" and any(
+        item.get("input_key") == OTHER_SALES_TOTAL_KEY for item in _loads(previous_inputs, [])
+    ):
+        if ids or status != "확인 완료":
+            raise AppException(409, "OTHER_SALES_TOTAL_EXISTS", "기타 매출 반기 합계를 먼저 해제해 주세요.")
     if expected_document_ids is not None:
         if checks[source].get("document_ids", []) != expected_document_ids:
             raise AppException(409, "SALES_SOURCE_CHANGED", "연결된 파일이 바뀌었습니다. 현재 연결 상태를 확인하고 다시 시도해 주세요.")
-        if len(ids) != 1:
-            raise AppException(400, "SALES_DOCUMENT_REQUIRED", "연결할 매출 파일 한 개를 선택해 주세요.")
-        document = session.exec(select(MonthlySalesDocument).where(
-            MonthlySalesDocument.id == ids[0], MonthlySalesDocument.user_id == user.id,
+        if not ids:
+            raise AppException(400, "SALES_DOCUMENT_REQUIRED", "연결할 매출 파일을 선택해 주세요.")
+        found_docs = session.exec(select(MonthlySalesDocument).where(
+            MonthlySalesDocument.id.in_(ids), MonthlySalesDocument.user_id == user.id,
             MonthlySalesDocument.deleted_at.is_(None),
-        )).first()
-        evidence = (_loads(document.review_json, {}).get("매출증빙") or {}) if document else {}
-        if not document or document.status != "reviewed" or evidence.get("문서유형") not in EXPECTED_DOC_TYPES[source]:
+        )).all()
+        if len(found_docs) != len(ids):
             raise AppException(400, "INVALID_SOURCE_DOCUMENT", "이 출처에 맞는 매출 자료를 저장한 뒤 연결해 주세요.")
+        for document in found_docs:
+            evidence = _loads(document.review_json, {}).get("매출증빙") or {}
+            if document.status != "reviewed" or evidence.get("문서유형") not in EXPECTED_DOC_TYPES[source]:
+                raise AppException(400, "INVALID_SOURCE_DOCUMENT", "이 출처에 맞는 매출 자료를 저장한 뒤 연결해 주세요.")
     checks[source] = {
         "status": status,
         "query_start": query_start.isoformat() if query_start else None,
@@ -918,8 +1053,12 @@ def update_source(
         "document_ids": ids,
         "reason": (reason or "").strip() or None,
     }
+    replacement_id = invoice_replacement_id or last_replacement_id
+    if replacement_id:
+        checks[source]["invoice_replacement_id"] = replacement_id
     result = session.execute(update(SalesFilingWorkflow).where(
         SalesFilingWorkflow.id == case.id, SalesFilingWorkflow.source_checks_json == previous_checks,
+        *([SalesFilingWorkflow.manual_inputs_json == previous_inputs] if source == "unissued_sales" else []),
     ).values(source_checks_json=_json(checks)))
     if result.rowcount != 1:
         session.rollback()
@@ -936,6 +1075,8 @@ def add_manual_input(session: Session, user: User, period: str, payload: dict[st
     input_key = (payload.get("input_key") or "").strip()
     if not input_key:
         raise AppException(400, "INPUT_KEY_REQUIRED", "중복 입력 방지를 위해 input_key가 필요합니다.")
+    if input_key == OTHER_SALES_TOTAL_KEY:
+        raise AppException(400, "INVALID_INPUT_KEY", "반기 합계는 기타 매출 화면에서 저장해 주세요.")
     try:
         input_date = date.fromisoformat(payload.get("date") or "") if payload.get("date") else None
     except ValueError:
@@ -957,15 +1098,78 @@ def add_manual_input(session: Session, user: User, period: str, payload: dict[st
     if not normalized["supporting_evidence"]:
         raise AppException(400, "SALES_EVIDENCE_REQUIRED", "매출이 실제 공급이고 신고자료와 대조할 수 있는 근거를 입력해 주세요.")
     case = _case(session, user.id, period)
-    items = _loads(case.manual_inputs_json, [])
+    previous_inputs = case.manual_inputs_json
+    items = _loads(previous_inputs, [])
     existing = next((item for item in items if item.get("input_key") == input_key), None)
     if existing and existing != normalized:
         raise AppException(409, "INPUT_KEY_REUSED", "같은 input_key에는 처음 저장한 입력과 같은 내용을 보내야 합니다.")
     if existing is None:
+        if source == "unissued_sales" and any(item.get("input_key") == OTHER_SALES_TOTAL_KEY for item in items):
+            raise AppException(409, "OTHER_SALES_TOTAL_EXISTS", "이미 기타 매출 반기 합계가 저장되어 있습니다.")
         items.append(normalized)
-        case.manual_inputs_json = _json(items)
-        session.add(case)
+        result = session.execute(update(SalesFilingWorkflow).where(
+            SalesFilingWorkflow.id == case.id,
+            SalesFilingWorkflow.manual_inputs_json == previous_inputs,
+        ).values(manual_inputs_json=_json(items)))
+        if result.rowcount != 1:
+            session.rollback()
+            raise AppException(409, "SALES_INPUT_CHANGED", "매출 자료가 바뀌었습니다. 새로고침하고 다시 시도해 주세요.")
         session.commit()
+    return refresh(session, user, period)
+
+
+def save_other_sale(session: Session, user: User, period: str, body: OtherSalesInput) -> SalesFilingWorkflow:
+    _period_dates(period)
+    case = _case(session, user.id, period)
+    previous_inputs = case.manual_inputs_json
+    previous_checks = case.source_checks_json
+    items = _loads(previous_inputs, [])
+    existing = next((item for item in items if item.get("input_key") == OTHER_SALES_TOTAL_KEY), None)
+    if existing and existing.get("source") != "unissued_sales":
+        raise AppException(409, "INPUT_KEY_REUSED", "이미 다른 매출에 사용된 입력입니다.")
+    legacy_exists = any(item.get("source") == "unissued_sales" and item is not existing for item in items)
+    checks = _loads(previous_checks, {})
+    check = checks.get("unissued_sales", {})
+    if body.total_amount and check.get("document_ids"):
+        raise AppException(409, "OTHER_SALES_DOCUMENT_EXISTS", "연결된 기타 매출 자료를 먼저 확인해 주세요. 자료와 반기 합계를 함께 저장할 수 없습니다.")
+    if body.total_amount and not body.confirmed_unreported:
+        raise AppException(400, "OTHER_SALES_CONFIRMATION_REQUIRED", "다른 자료에 이미 포함된 금액을 제외했는지 확인해 주세요.")
+    if body.total_amount and legacy_exists and existing is None and not body.replace_legacy:
+        raise AppException(409, "OTHER_SALES_LEGACY_EXISTS", "기존 거래별 내역을 반기 합계로 대체할지 확인해 주세요.")
+    amounts = _amounts({"합계금액": body.total_amount})
+    if existing and existing.get("total_amount") == body.total_amount:
+        # A memo-only edit keeps the original tax amounts.
+        amounts = _amounts({"합계금액": body.total_amount, "공급가액": existing.get("supply_amount"), "부가세": existing.get("vat_amount")})
+    if amounts is None:
+        raise AppException(400, "INVALID_OTHER_SALES_AMOUNT", "기타 매출 합계를 확인해 주세요.")
+    supply, vat, total = amounts
+    item = {
+        "input_key": OTHER_SALES_TOTAL_KEY, "source": "unissued_sales",
+        "description": "반기 기타 매출", "tax_treatment": "과세",
+        "supply_amount": supply, "vat_amount": vat, "total_amount": total,
+        "supporting_evidence": body.memo.strip(), "confirmed_unreported": True,
+    }
+    if (existing == item and check.get("status") == "확인 완료") or (not body.total_amount and existing is None):
+        return refresh(session, user, period)
+
+    if existing is not None:
+        items.remove(existing)
+    if body.total_amount or legacy_exists or check.get("document_ids"):
+        if body.total_amount:
+            items.append(item)
+        checks["unissued_sales"] = {**check, "status": "확인 완료", "reason": None}
+    else:
+        checks["unissued_sales"] = {**check, "status": "해당 없음 확인", "reason": "기타 매출 반기 합계를 해제함."}
+    result = session.execute(update(SalesFilingWorkflow).where(
+        SalesFilingWorkflow.id == case.id,
+        SalesFilingWorkflow.revision == body.expected_revision,
+        SalesFilingWorkflow.manual_inputs_json == previous_inputs,
+        SalesFilingWorkflow.source_checks_json == previous_checks,
+    ).values(manual_inputs_json=_json(items), source_checks_json=_json(checks), revision=case.revision + 1))
+    if result.rowcount != 1:
+        session.rollback()
+        raise AppException(409, "SALES_INPUT_CHANGED", "매출 자료가 바뀌었습니다. 새로고침하고 다시 시도해 주세요.")
+    session.expire(case)
     return refresh(session, user, period)
 
 
@@ -1055,6 +1259,18 @@ def add_feedback(session: Session, user: User, period: str, payload: dict[str, A
     return refresh(session, user, period)
 
 
+def reset_feedback(session: Session, user: User, period: str, issue_id: str) -> SalesFilingWorkflow:
+    _period_dates(period)
+    case = _case(session, user.id, period)
+    saved = _loads(case.feedback_json, [])
+    remaining = [item for item in saved if item.get("issue_id") != issue_id]
+    if len(remaining) != len(saved):
+        case.feedback_json = _json(remaining)
+        session.add(case)
+        session.commit()
+    return refresh(session, user, period)
+
+
 def finalize(session: Session, user: User, period: str, *, confirm_changed_sources: bool = False) -> SalesFilingWorkflow:
     case = refresh(session, user, period)
     issues = _loads(case.issues_json, [])
@@ -1081,6 +1297,7 @@ def finalize(session: Session, user: User, period: str, *, confirm_changed_sourc
 
 
 def public_result(case: SalesFilingWorkflow) -> dict[str, Any]:
+    other_sales = [item for item in _loads(case.manual_inputs_json, []) if item.get("source") == "unissued_sales"]
     return {
         "id": case.id, "period": case.period, "business_number": case.business_number,
         "status": case.status, "revision": case.revision,
@@ -1088,8 +1305,11 @@ def public_result(case: SalesFilingWorkflow) -> dict[str, Any]:
         "finalized_at": case.finalized_at.isoformat() if case.finalized_at else None,
         "input_fingerprint": case.input_fingerprint,
         "source_statuses": _loads(case.source_checks_json, {}),
+        "other_sales": [item for item in other_sales if item.get("input_key") != OTHER_SALES_TOTAL_KEY],
+        "other_sales_total": next((item for item in other_sales if item.get("input_key") == OTHER_SALES_TOTAL_KEY), None),
         "aggregate": _loads(case.aggregate_json, {}),
         "issues": _loads(case.issues_json, []),
+        "feedback": _loads(case.feedback_json, []),
         "history": _loads(case.history_json, []),
     }
 

@@ -18,6 +18,7 @@ class SourceUpdate(BaseModel):
     basis: str | None = Field(default=None, max_length=120)
     document_ids: list[int] = Field(default_factory=list, max_length=100)
     expected_document_ids: list[int] | None = Field(default=None, max_length=100)
+    invoice_replacement_id: str | None = Field(default=None, min_length=1, max_length=64)
     reason: str | None = Field(default=None, max_length=1000)
 
 
@@ -35,6 +36,14 @@ class ManualSalesInput(BaseModel):
     fee_amount: int | None = Field(default=None, ge=0)
     deposit_amount: int | None = Field(default=None, ge=0)
     supporting_evidence: str = Field(min_length=1, max_length=2000)
+
+
+class OtherSalesInput(BaseModel):
+    total_amount: int = Field(ge=0, le=1_099_999_999_998)
+    memo: str = Field(default="", max_length=2000)
+    confirmed_unreported: bool = False
+    replace_legacy: bool = False
+    expected_revision: int = Field(ge=1)
 
 
 class SalesFeedback(BaseModel):

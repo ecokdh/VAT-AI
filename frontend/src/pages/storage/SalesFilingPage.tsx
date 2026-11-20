@@ -7,6 +7,7 @@ import { PageHeader } from "../../components/PageHeader";
 import { VaultTabs } from "../../components/VaultTabs";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import type { SavedDocument } from "../../components/MonthlySalesReview";
+import { SalesDuplicateCheckPanel, type FilingIssue } from "../../components/SalesDuplicateCheckPanel";
 import { formatWon } from "../../utils/format";
 import { SALES_PERIODS, friendlySalesPeriods, parseSalesPeriod, salesPeriodQuery, salesPeriods, type SalesPeriod } from "../../hooks/salesPeriod";
 import { rememberPeriod, rememberedPeriod, useReturnedPeriod } from "../../hooks/currentPeriod";
@@ -27,14 +28,23 @@ const spreadsheetLabels = {
 const statuses = ["자료 없음", "검토 필요", "확인 완료", "해당 없음 확인"] as const;
 type Source = typeof sources[number];
 type Check = {status: typeof statuses[number]; query_start?: string; query_end?: string; basis?: string; reason?: string; document_ids: number[]};
-type Issue = {source?: string; input_key?: string | null};
 type Filing = {
   period: string; status: string; revision: number; reconfirmation_required: boolean;
   source_statuses: Record<string, Check>;
-  issues: Issue[];
-  aggregate: {lines?: Record<string, {supply_amount: number; vat_amount: number; total_amount?: number}>; included_rows?: IncludedSalesRow[]};
+  other_sales?: OtherSale[];
+  other_sales_total?: OtherSalesTotal | null;
+  issues: FilingIssue[];
+  aggregate: {
+    lines?: Record<string, {supply_amount: number; vat_amount: number; total_amount?: number}>;
+    included_rows?: IncludedSalesRow[];
+  };
 };
-type IncludedSalesRow = {source: string; document_id: number | null; date?: string | null; supply_amount: number; total_amount: number};
+type IncludedSalesRow = {source: string; document_id: number | null; date?: string | null; scope?: string; supply_amount: number; total_amount: number};
+type OtherSalesTotal = {total_amount: number; supporting_evidence?: string};
+type OtherSale = {
+  input_key: string; date: string | null; description: string; payment_method: string;
+  supply_amount: number | null; total_amount: number | null;
+};
 type Submit = (path: string, body?: object, method?: "post" | "put") => Promise<boolean>;
 const resolvedSourceStatuses = new Set(["확인 완료", "해당 없음 확인"]);
 
@@ -63,10 +73,11 @@ const sourceIconPaths = {
   hometax_cash_receipt: "M5 3h14v18l-3-2-4 2-4-2-3 2z M8 8h8 M8 12h8",
   hometax_sales_invoice: "M5 3h9l5 5v13H5z M14 3v5h5 M8 12h8 M8 16h8",
   pg: "M3 9l2-5h14l2 5 M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z M5 14v6h14v-6",
+  other: "M5 3h14v18l-3-2-4 2-4-2-3 2z M8 9h8 M8 13h8",
 };
 
 // 출처 칸: 아이콘 | 이름 / (상태 · 버튼들) — 버튼을 상태 줄에 두어 칸 높이를 낮춘다.
-function SourceLabel({source, title, status, tone, children}: {source: Source[0]; title: string; status: string; tone?: "ready"; children: ReactNode}) {
+function SourceLabel({source, title, status, tone, children}: {source: keyof typeof sourceIconPaths; title: string; status: string; tone?: "ready"; children: ReactNode}) {
   return <div className="sales-source-label">
     <span className="sales-source-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round"><path d={sourceIconPaths[source]} /></svg></span>
     <div className="sales-source-name"><strong>{title}</strong>
@@ -74,17 +85,127 @@ function SourceLabel({source, title, status, tone, children}: {source: Source[0]
   </div>;
 }
 
+function OtherSalesCard({revision, sales, total, busy, submit}: {
+  revision: number; sales: OtherSale[]; total?: OtherSalesTotal | null; busy: boolean; submit: Submit;
+}) {
+  const [showList, setShowList] = useState(false);
+  const [draft, setDraft] = useState<{amount: string; revision: number} | null>(null);
+  const gross = Number(draft?.amount || 0);
+  const clearing = !!total && draft?.amount === "0";
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!draft || busy) return;
+    const fields = new FormData(event.currentTarget);
+    if (await submit("/other-sales", {
+      total_amount: gross,
+      memo: fields.get("memo"),
+      confirmed_unreported: fields.has("confirmed"),
+      replace_legacy: fields.has("replace_legacy"),
+      expected_revision: draft.revision,
+    }, "put")) {
+      setDraft(null);
+    }
+  }
+
+  const status = total ? formatWon(total.total_amount) : sales.length ? `기존 내역 ${sales.length}건` : "입력 내역 없음";
+  return <section className="sales-source sales-source--row">
+    <div className="sales-source-row">
+      <SourceLabel source="other" title="기타 매출" status={status} tone={total || sales.length ? "ready" : undefined}>
+        <div className="sales-source-actions">
+          {(total || sales.length > 0) && <button type="button" aria-expanded={showList} disabled={busy}
+            onClick={() => setShowList(!showList)}>{showList ? "닫기" : "내역 보기"}</button>}
+          <button type="button" disabled={busy || !!draft}
+            onClick={() => {
+              setShowList(false);
+              setDraft({amount: total ? String(total.total_amount) : "", revision});
+            }}>{total ? "수정" : "내역 입력"}</button>
+        </div>
+      </SourceLabel>
+    </div>
+    {(showList || draft) && <div className="sales-source__content">
+      {showList && total && <div className="sales-other-sales-values">
+        <span>합계 {formatWon(total.total_amount)}</span>
+        {total.supporting_evidence && <span className="sales-other-sales-memo">{total.supporting_evidence}</span>}
+      </div>}
+      {showList && sales.length > 0 && <>
+        <strong>{total ? "기존 거래별 내역 (반기 합계로 대체됨)" : "기존 거래별 내역"}</strong>
+        {sales.map(sale => <div className="sales-document-card" key={sale.input_key}>
+          <span className="sales-document-card__info">
+            <strong>{sale.description || sale.payment_method || "기타 매출"}</strong>
+            <small>{sale.date || "거래일 미입력"} · {sale.payment_method || "결제수단 미입력"}</small>
+            <small>{sale.supply_amount != null ? `공급가액 ${formatWon(sale.supply_amount)}` : `합계 ${formatWon(sale.total_amount ?? 0)}`}</small>
+          </span>
+        </div>)}
+      </>}
+      {draft && <form className="sales-other-sales-form" onSubmit={save}>
+        <div className="sales-other-sales-values">
+          <label>합계 (부가세 포함)
+            <input className="input" type="number" min={total ? "0" : "1"} max="1099999999998" step="1"
+              value={draft.amount} onChange={event => setDraft({...draft, amount: event.target.value})} required />
+          </label>
+          <label>메모 (선택)
+            <input className="input" name="memo" maxLength={2000} defaultValue={total?.supporting_evidence ?? ""} />
+          </label>
+        </div>
+        {gross > 0 && <label className="sales-other-sales-confirm">
+          <input type="checkbox" name="confirmed" required />다른 매출 자료에 포함된 금액은 제외했습니다.
+        </label>}
+        {gross > 0 && !total && sales.length > 0 && <label className="sales-other-sales-confirm">
+          <input type="checkbox" name="replace_legacy" required />기존 거래별 내역을 포함한 반기 합계로 대체합니다.
+        </label>}
+        {clearing && <small>
+          반기 합계를 해제합니다.{sales.length > 0 && " 기존 거래별 내역 기준으로 돌아갑니다."}
+        </small>}
+        <div className="sales-source-actions">
+          <button type="button" disabled={busy} onClick={() => setDraft(null)}>취소</button>
+        </div>
+        <button type="submit" className="btn btn--secondary" disabled={busy || !draft.amount}>
+          {clearing ? "합계 해제" : "저장"}
+        </button>
+      </form>}
+    </div>}
+  </section>;
+}
+
+function quarterSlotsForPeriod(period: SalesPeriod) {
+  return period === "2026-H1"
+    ? [
+        { key: "q1", label: "1분기 (1~3월)", months: new Set(["2026-01", "2026-02", "2026-03"]) },
+        { key: "q2", label: "2분기 (4~6월)", months: new Set(["2026-04", "2026-05", "2026-06"]) },
+      ]
+    : [
+        { key: "q3", label: "3분기 (7~9월)", months: new Set(["2026-07", "2026-08", "2026-09"]) },
+        { key: "q4", label: "4분기 (10~12월)", months: new Set(["2026-10", "2026-11", "2026-12"]) },
+      ];
+}
+
+function docMatchesSlot(doc: SavedDocument, slotMonths: Set<string>) {
+  const rows = doc.document.매출증빙?.내역 ?? [];
+  const months = rows
+    .map(r => String(r.작성일 ?? r.일자또는월 ?? "").slice(0, 7))
+    .filter(m => /^\d{4}-\d{2}$/.test(m));
+  return months.length > 0 && months.every(m => slotMonths.has(m));
+}
+
+function salesDetailPath(period: SalesPeriod, ids: number[]) {
+  if (!ids.length) return undefined;
+  const documents = ids.length > 1 ? `&docs=${ids.join(",")}` : "";
+  return `/receipts/monthly/${ids[0]}/review?${salesPeriodQuery(period)}&edit=1${documents}`;
+}
+
 function SourceForm({source, saved, docs, submit, busy, period, onConnected, onDeleted}: {
   source: Source; saved?: Check; docs: SavedDocument[]; submit: Submit; busy: boolean; period: SalesPeriod;
   onConnected: Connected; onDeleted: (ids: number[]) => void;
 }) {
-  const [openPanel, setOpenPanel] = useState<"details" | "replace" | null>(null);
+  const [openPanel, setOpenPanel] = useState<"replace" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const linked = saved?.document_ids ?? [];
   const linkedDocs = docs.filter(doc => linked.includes(doc.id));
+  const allowsMultiple = source[0] === "hometax_cash_receipt";
+  const showQuarterSlots = allowsMultiple && saved?.basis !== "거래년월";
   const status = linked.length ? "업로드 완료" : saved?.status === "해당 없음 확인" ? "자료 없음 확인" : "연결 안 됨";
-  // 상세 보기에서 뒤로 오면 다시 이 출처 목록(수정 화면)으로 돌아온다.
-  const documentPath = (doc: SavedDocument) => `/receipts/monthly/${doc.id}/review?${salesPeriodQuery(period)}&edit=1`;
+  const detailPath = salesDetailPath(period, linkedDocs.map(doc => doc.id));
   async function remove() {
     const unlinked = await submit("/sources/" + source[0], {status: "자료 없음", document_ids: []}, "put");
     setConfirmDelete(false);
@@ -92,19 +213,15 @@ function SourceForm({source, saved, docs, submit, busy, period, onConnected, onD
     await Promise.allSettled(linked.map(id => apiClient.post(`/sales/monthly/${id}/trash`)));
     onDeleted(linked);
   }
-  const direct = linkedDocs.length === 1 ? linkedDocs[0] : undefined;
   const controls = `sales-source-${source[0]}`;
+  const slots = quarterSlotsForPeriod(period);
   return <section className="sales-source sales-source--row">
     <div className="sales-source-row">
       <SourceLabel source={source[0]} title={source[1]} status={status}
         tone={linked.length ? "ready" : undefined}>
       <div className="sales-source-actions">
-        {!linked.length && <SpreadsheetUploadButton source={source} period={period} onConnected={onConnected} />}
-        {direct && <Link to={documentPath(direct)}>상세 보기</Link>}
-        {linkedDocs.length > 1 && <button type="button" aria-expanded={openPanel === "details"} aria-controls={controls}
-          onClick={() => setOpenPanel(value => value === "details" ? null : "details")}>
-          {openPanel === "details" ? "닫기" : "자료 보기"}
-        </button>}
+        {!linked.length && <SpreadsheetUploadButton source={source} period={period} existingIds={[]} mode="replace" onConnected={onConnected} />}
+        {detailPath && <Link to={detailPath}>상세 보기</Link>}
         {linked.length > 0 && <button type="button" className="sales-source-replace" aria-expanded={openPanel === "replace"} aria-controls={controls}
           onClick={() => setOpenPanel(value => value === "replace" ? null : "replace")}>
           {openPanel === "replace" ? "닫기" : "엑셀 교체"}
@@ -113,17 +230,39 @@ function SourceForm({source, saved, docs, submit, busy, period, onConnected, onD
       </div>
       </SourceLabel>
     </div>
-    {openPanel && <div className="sales-source__content" id={controls}>
-      {openPanel === "details" && linkedDocs.map(doc => {
-        const evidence = doc.document.매출증빙;
-        return <Link className="sales-document-card" key={doc.id} to={documentPath(doc)}>
-          <span className="sales-document-card__info"><strong>{source[1]}</strong>
-            <small>{doc.created_at.slice(0, 10)} · {evidence?.내역.length ?? 0}행</small></span>
-          <span className="sales-document-card__action">상세 보기</span>
-        </Link>;
-      })}
-      {openPanel === "replace" && <SpreadsheetReplace source={source} period={period} existingIds={linked}
-        onConnected={(filing, doc) => { setOpenPanel(null); onConnected(filing, doc); }} />}
+    {openPanel === "replace" && <div className="sales-source__content" id={controls}>
+      {showQuarterSlots ? (
+        <div className="sales-quarter-slots">
+          {slots.map(slot => {
+            const slotDoc = linkedDocs.find(d => docMatchesSlot(d, slot.months));
+            return (
+              <div className="sales-quarter-slot" key={slot.key}>
+                <strong className="sales-quarter-slot__title">{slot.label}</strong>
+                <SpreadsheetReplace
+                  source={source}
+                  period={period}
+                  existingIds={linked}
+                  replaceDocId={slotDoc?.id}
+                  targetMonths={slot.months}
+                  slotLabel={slot.label}
+                  submitLabel="새 엑셀로 교체"
+                  onConnected={(filing, doc) => {
+                    if (slotDoc && slotDoc.id !== doc.id) {
+                      void apiClient.post(`/sales/monthly/${slotDoc.id}/trash`).catch(() => {});
+                      onDeleted([slotDoc.id]);
+                    }
+                    setOpenPanel(null);
+                    onConnected(filing, doc);
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <SpreadsheetReplace source={source} period={period} existingIds={linked}
+          onConnected={(filing, doc) => { setOpenPanel(null); onConnected(filing, doc); }} />
+      )}
     </div>}
     <ConfirmDialog open={confirmDelete} title={`${source[1]} 자료를 삭제할까요?`} confirmLabel="삭제" busy={busy}
       onCancel={() => setConfirmDelete(false)} onConfirm={() => void remove()}>
@@ -141,7 +280,15 @@ type Connected = (filing: Filing, doc: SavedDocument) => void;
 class UploadError extends Error {}
 
 // 엑셀을 올리고 확인 화면 없이 바로 이 신고기간 출처에 연결한다. 연결하지 못하면 올린 자료를 지운다.
-async function uploadAndConnect(file: File, source: Source, period: SalesPeriod, existingIds: number[]) {
+async function uploadAndConnect(
+  file: File,
+  source: Source,
+  period: SalesPeriod,
+  existingIds: number[],
+  mode: "replace" | "append" = "replace",
+  existingBasis?: string,
+  options?: { replaceDocId?: number; targetMonths?: Set<string>; slotLabel?: string },
+) {
   const body = new FormData();
   body.set("file", file);
   body.set("source", spreadsheetSources[source[0]]);
@@ -152,10 +299,20 @@ async function uploadAndConnect(file: File, source: Source, period: SalesPeriod,
     const evidence = document.매출증빙;
     if (!evidence || !source[2].some(type => type === evidence.문서유형)) throw new UploadError(`${source[1]} 엑셀이 아닙니다. 맞는 엑셀을 올려 주세요.`);
     if (!evidence.기준일종류) throw new UploadError("엑셀의 날짜 기준을 읽지 못했습니다.");
+    if (mode === "append" && existingBasis && evidence.기준일종류 !== existingBasis) {
+      throw new UploadError(`이미 연결된 자료(${existingBasis})와 형식이 다릅니다. 기존 자료를 삭제하거나 교체한 뒤 올려 주세요.`);
+    }
     const months = evidence.내역.map(row => String(row.작성일 ?? row.일자또는월 ?? "").slice(0, 7)).filter(month => /^\d{4}-\d{2}$/.test(month));
-    const outside = (evidence.기간시작 && evidence.기간시작 !== range.start) || (evidence.기간종료 && evidence.기간종료 !== range.end)
-      || months.some(month => month < range.start.slice(0, 7) || month > range.end.slice(0, 7));
+    const isDetailCash = source[0] === "hometax_cash_receipt" && evidence.기준일종류 === "거래일";
+    const outside = isDetailCash
+      ? ((evidence.기간시작 && evidence.기간시작 < range.start) || (evidence.기간종료 && evidence.기간종료 > range.end)
+        || months.some(month => month < range.start.slice(0, 7) || month > range.end.slice(0, 7)))
+      : ((evidence.기간시작 && evidence.기간시작 !== range.start) || (evidence.기간종료 && evidence.기간종료 !== range.end)
+        || months.some(month => month < range.start.slice(0, 7) || month > range.end.slice(0, 7)));
     if (outside) throw new UploadError(`엑셀의 기간이 ${range.label}과 다릅니다. 신고 대상 기간을 바꾼 뒤 다시 올려 주세요.`);
+    if (options?.targetMonths && isDetailCash && months.some(month => !options.targetMonths!.has(month))) {
+      throw new UploadError(`${options.slotLabel ?? "해당 분기"} 기간에 맞는 엑셀을 올려 주세요.`);
+    }
     evidence.기간시작 ??= range.start;
     evidence.기간종료 ??= range.end;
     const {business} = await getMe();
@@ -165,13 +322,20 @@ async function uploadAndConnect(file: File, source: Source, period: SalesPeriod,
     document.사업장.사업자등록번호 ||= business.business_number;
     document.사업장.상호 ||= business.business_name;
     const {data: reviewed} = await apiClient.put<SavedDocument>(`/sales/monthly/${uploaded.id}/review`, {document});
+    const nextIds = options?.targetMonths && isDetailCash
+      ? [...existingIds.filter(id => id !== options.replaceDocId), uploaded.id]
+      : mode === "append" ? [...existingIds, uploaded.id] : [uploaded.id];
     const {data: filing} = await apiClient.put<Filing>(`/sales/filings/${period}/sources/${source[0]}`, {
-      status: "확인 완료", document_ids: [uploaded.id], query_start: evidence.기간시작,
-      query_end: evidence.기간종료, basis: evidence.기준일종류, expected_document_ids: existingIds,
+      status: "확인 완료", document_ids: nextIds, query_start: isDetailCash ? range.start : evidence.기간시작,
+      query_end: isDetailCash ? range.end : evidence.기간종료, basis: evidence.기준일종류, expected_document_ids: existingIds,
+      invoice_replacement_id: source[0] === "hometax_sales_invoice" && mode === "replace" && existingIds.length
+        ? crypto.randomUUID() : undefined,
     });
     return {filing, doc: {...uploaded, ...reviewed, document}};
   } catch (e) {
-    await apiClient.post(`/sales/monthly/${uploaded.id}/trash`).then(() => apiClient.delete(`/sales/monthly/${uploaded.id}`)).catch(() => {});
+    if (!existingIds.includes(uploaded.id)) {
+      await apiClient.post(`/sales/monthly/${uploaded.id}/trash`).then(() => apiClient.delete(`/sales/monthly/${uploaded.id}`)).catch(() => {});
+    }
     throw e;
   }
 }
@@ -179,8 +343,26 @@ async function uploadAndConnect(file: File, source: Source, period: SalesPeriod,
 const uploadError = (e: unknown) => e instanceof UploadError ? e.message
   : isAxiosError(e) ? friendlySalesPeriods(e.response?.data?.error?.message ?? "엑셀을 올리지 못했습니다.") : "엑셀을 올리지 못했습니다.";
 
-// 아직 자료가 없는 출처: 파일을 고르면 바로 올려 연결한다.
-function SpreadsheetUploadButton({source, period, onConnected}: {source: Source; period: SalesPeriod; onConnected: Connected}) {
+// 아직 자료가 없는 출처 또는 분기 추가 업로드: 파일을 고르면 바로 올려 연결한다.
+function SpreadsheetUploadButton({
+  source,
+  period,
+  existingIds = [],
+  existingBasis,
+  mode = "replace",
+  label = "엑셀 업로드",
+  className = "sales-source-upload",
+  onConnected,
+}: {
+  source: Source;
+  period: SalesPeriod;
+  existingIds?: number[];
+  existingBasis?: string;
+  mode?: "replace" | "append";
+  label?: string;
+  className?: string;
+  onConnected: Connected;
+}) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   async function upload(file?: File) {
@@ -188,23 +370,41 @@ function SpreadsheetUploadButton({source, period, onConnected}: {source: Source;
     setUploading(true);
     setError("");
     try {
-      const {filing, doc} = await uploadAndConnect(file, source, period, []);
+      const {filing, doc} = await uploadAndConnect(file, source, period, existingIds, mode, existingBasis);
       onConnected(filing, doc);
     } catch (e) {
       setError(uploadError(e));
     } finally { setUploading(false); }
   }
   return <>
-    <label className="sales-source-upload" aria-disabled={uploading}>
+    <label className={className} aria-disabled={uploading}>
       <input className="sr-only" aria-label={spreadsheetLabels[spreadsheetSources[source[0]]]} type="file" accept=".xls,.xlsx" disabled={uploading}
         onChange={event => { void upload(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }} />
-      {uploading ? "올리는 중" : "엑셀 업로드"}
+      {uploading ? "올리는 중" : label}
     </label>
     {error && <small className="sales-source-error" role="alert">{error}</small>}
   </>;
 }
 
-function SpreadsheetReplace({source, period, existingIds, onConnected}: {source: Source; period: SalesPeriod; existingIds: number[]; onConnected: Connected}) {
+function SpreadsheetReplace({
+  source,
+  period,
+  existingIds,
+  replaceDocId,
+  targetMonths,
+  slotLabel,
+  submitLabel = "새 엑셀로 교체",
+  onConnected,
+}: {
+  source: Source;
+  period: SalesPeriod;
+  existingIds: number[];
+  replaceDocId?: number;
+  targetMonths?: Set<string>;
+  slotLabel?: string;
+  submitLabel?: string;
+  onConnected: Connected;
+}) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [fileName, setFileName] = useState("");
@@ -216,7 +416,12 @@ function SpreadsheetReplace({source, period, existingIds, onConnected}: {source:
     setUploading(true);
     setError("");
     try {
-      const {filing, doc} = await uploadAndConnect(file, source, period, existingIds);
+      const {filing, doc} = await uploadAndConnect(file, source, period, existingIds, "replace", undefined, {
+        replaceDocId,
+        targetMonths,
+        slotLabel,
+      });
+      setFileName("");
       onConnected(filing, doc);
     } catch (e) {
       setError(uploadError(e));
@@ -224,12 +429,12 @@ function SpreadsheetReplace({source, period, existingIds, onConnected}: {source:
   }
   return <form className="sales-form" onSubmit={replace}>
     <label className="sales-file-picker">
-      <input className="sr-only" aria-label={spreadsheetLabels[spreadsheetSources[source[0]]]} name="file" type="file" accept=".xls,.xlsx" required
+      <input className="sr-only" aria-label={slotLabel ? `${slotLabel} ${spreadsheetLabels[spreadsheetSources[source[0]]]}` : spreadsheetLabels[spreadsheetSources[source[0]]]} name="file" type="file" accept=".xls,.xlsx" required
         onChange={event => { setFileName(event.currentTarget.files?.[0]?.name ?? ""); setError(""); }} />
       <span>{fileName ? "다른 파일 선택" : "엑셀 파일 선택"}</span>
     </label>
     {fileName && <p className="muted sales-file-name" role="status">{fileName}</p>}
-    <button className="btn btn--secondary" disabled={uploading || !fileName}>{uploading ? "엑셀 읽는 중" : "새 엑셀로 교체"}</button>
+    <button className="btn btn--secondary" disabled={uploading || !fileName}>{uploading ? "엑셀 읽는 중" : submitLabel}</button>
     {error && <p role="alert">{error}</p>}
   </form>;
 }
@@ -253,6 +458,7 @@ export function SalesFilingPage() {
   }, {replace: true});
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
+  const [duplicateChoices, setDuplicateChoices] = useState<Record<string, "O" | "X">>({});
   const path = `/sales/filings/${period}`;
   useEffect(() => {
     if (!selectedPeriod) return;
@@ -295,26 +501,86 @@ export function SalesFilingPage() {
     } catch (e) {setError(message(e)); return false;}
     finally {setBusy(false);}
   };
-  // 매출 증빙 확정: 자료를 올리지 않은 출처(미발급 매출 포함)는 '해당 없음'으로 확인하고 신고용 매출 집계를 확정한다.
-  // 확정돼야 대시보드·신고서의 매출세액과 예상 납부세액이 계산된다.
-  async function confirmSales() {
+  const duplicateIssues = (filing?.issues ?? []).filter(issue => issue.reason_code === "POSSIBLE_INVOICE_CARD_DUPLICATE");
+  const otherIssues = (filing?.issues ?? []).filter(issue =>
+    issue.reason_code !== "POSSIBLE_INVOICE_CARD_DUPLICATE"
+    && issue.reason_code !== "SOURCE_MISSING"
+    && issue.reason_code !== "CONFIRMED_INPUT_CHANGED",
+  );
+
+  async function saveDuplicateChoices(current: Filing, targetIssues: FilingIssue[]) {
+    let latest = current;
+    for (const issue of targetIssues) {
+      const choice = duplicateChoices[issue.issue_id];
+      if (!choice) continue;
+      const amount = issue.impact_amount ?? issue.details?.counterpart.total_amount ?? 0;
+      const shortSource = (issue.details?.counterpart.label ?? "현금영수증·카드").replace("홈택스 ", "");
+      const response = await apiClient.post<Filing>(`${path}/feedback`, {
+        request_id: `ox-${period}-${issue.issue_id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        issue_id: issue.issue_id,
+        action: choice === "O" ? "중복 확인" : "해당 없음",
+        amount,
+        evidence: choice === "O"
+          ? `사용자 O 선택: 매출 세금계산서와 동일 거래로 ${shortSource}에서 제외`
+          : `사용자 X 선택: 별개 거래로 ${shortSource} 및 세금계산서 모두 합산`,
+      });
+      latest = response.data;
+      setFiling(latest);
+    }
+    setDuplicateChoices(current => {
+      const remaining = new Set(latest.issues.map(item => item.issue_id));
+      return Object.fromEntries(Object.entries(current).filter(([id]) => remaining.has(id)));
+    });
+    return latest;
+  }
+
+  async function handleSaveDuplicateChoices() {
     if (busy || !filing) return;
+    const chosen = duplicateIssues.filter(issue => duplicateChoices[issue.issue_id] != null);
+    if (!chosen.length) return;
     setBusy(true); setError("");
     try {
-      for (const source of [...sources.map(item => item[0]), "unissued_sales"]) {
-        const status = filing.source_statuses[source]?.status ?? "자료 없음";
-        if (status !== "자료 없음") continue;
-        await apiClient.put(`${path}/sources/${source}`, {
-          status: "해당 없음 확인", document_ids: [], reason: "사업자가 매출 증빙 확정 시 이 신고기간에 해당 자료가 없음을 확인함.",
-        });
+      const updated = await saveDuplicateChoices(filing, chosen);
+      if (!updated.issues.some(issue => issue.reason_code === "POSSIBLE_INVOICE_CARD_DUPLICATE")) {
+        await finalizeSales(updated);
       }
-      setFiling((await apiClient.post<Filing>(`${path}/finalize`, {confirm_changed_sources: true})).data);
+    } catch (e) {
+      setError(message(e));
+      const latest = await apiClient.get<Filing>(path).catch(() => null);
+      if (latest) setFiling(latest.data);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finalizeSales(current: Filing) {
+    if (current.status === "확정") return;
+    for (const source of [...sources.map(item => item[0]), "unissued_sales"]) {
+      const status = current.source_statuses[source]?.status ?? "자료 없음";
+      if (status !== "자료 없음") continue;
+      await apiClient.put(`${path}/sources/${source}`, {
+        status: "해당 없음 확인", document_ids: [], reason: "사업자가 매출 증빙 확정 시 이 신고기간에 해당 자료가 없음을 확인함.",
+      });
+    }
+    setFiling((await apiClient.post<Filing>(`${path}/finalize`, {confirm_changed_sources: true})).data);
+  }
+
+  async function confirmSales() {
+    if (busy || !filing) return;
+    if (duplicateIssues.length > 0) {
+      setError("");
+      setEditingSources(false);
+      return;
+    }
+    setBusy(true); setError("");
+    try {
+      await finalizeSales(filing);
+      setEditingSources(false);
     } catch (e) {
       setError(message(e));
       setFiling((await apiClient.get<Filing>(path).catch(() => ({data: filing}))).data);
     } finally {
       setBusy(false);
-      setEditingSources(false);
     }
   }
   const connected: Connected = (next, doc) => {
@@ -327,6 +593,7 @@ export function SalesFilingPage() {
   const periodMonths = selectedPeriod ? monthsInPeriod(selectedPeriod) : [];
   const monthTotals = new Map<string, number>(periodMonths.map(month => [month, 0] as [string, number]));
   const includedRows = filing?.aggregate.included_rows ?? [];
+  const otherSalesTotal = includedRows.find(row => row.source === "unissued_sales" && row.scope === "period_total");
   includedRows.forEach(row => {
     const month = monthForRowDate(row.date);
     if (month && monthTotals.has(month)) monthTotals.set(month, (monthTotals.get(month) ?? 0) + row.supply_amount);
@@ -346,6 +613,7 @@ export function SalesFilingPage() {
         const next = new URLSearchParams(search);
         next.set("period", e.target.value);
         next.delete("edit");
+        setDuplicateChoices({});
         setSearch(next);
       }}>
         {!selectedPeriod && <option value="" disabled>신고 대상 기간 선택</option>}
@@ -361,12 +629,28 @@ export function SalesFilingPage() {
         <strong className="sales-hero__amount">{formatWon(line?.supply_amount ?? 0)}</strong>
         {filing.status === "확정" && <Link className="sales-hero__link" to={`/reports?period=${period}`}>신고서 보기 ›</Link>}
       </section>}
+      {!showSetup && duplicateIssues.length > 0 && (
+        <SalesDuplicateCheckPanel
+          issues={duplicateIssues}
+          choices={duplicateChoices}
+          onChoose={(issueId, choice) => setDuplicateChoices(current => ({ ...current, [issueId]: choice }))}
+          onSave={() => void handleSaveDuplicateChoices()}
+          busy={busy}
+        />
+      )}
       {showSetup && <section className="sales-setup" aria-label="출처별 자료">
         {sources.map(source => <SourceForm key={`${period}-${source[0]}-${JSON.stringify(filing.source_statuses[source[0]])}`} source={source}
           saved={filing.source_statuses[source[0]]}
           docs={docs.filter(doc => source[2].some(type => type === doc.document.매출증빙?.문서유형))}
           submit={submit} busy={busy} period={period} onConnected={connected}
           onDeleted={ids => setDocs(current => current.filter(doc => !ids.includes(doc.id)))} />)}
+        <OtherSalesCard key={period} revision={filing.revision}
+          sales={filing.other_sales ?? []} total={filing.other_sales_total} busy={busy} submit={submit} />
+        {otherIssues.length > 0 && (
+          <div className="banner banner--info sales-other-issues" role="status">
+            {otherIssues.map(item => <div key={item.issue_id}>{item.question}</div>)}
+          </div>
+        )}
         <button type="button" className="btn btn--primary sales-setup-continue" disabled={busy}
           onClick={() => void confirmSales()}>{editingSources ? "수정 완료" : "매출 증빙 확정"}</button>
       </section>}
@@ -384,6 +668,10 @@ export function SalesFilingPage() {
             <strong>{formatWon(monthTotals.get(month) ?? 0)}</strong>
           </li>)}
         </ol>
+        {otherSalesTotal && <div className="sales-month-card sales-period-other-total">
+          <span>반기 기타 매출</span>
+          <strong>{formatWon(otherSalesTotal.supply_amount)}</strong>
+        </div>}
       </section>}
     </>}
   </main></div>;
