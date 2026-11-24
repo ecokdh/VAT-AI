@@ -4,11 +4,11 @@ import { PasswordResetPage } from "./pages/auth/PasswordResetPage";
 import { SignupPage } from "./pages/auth/SignupPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { CapturePage } from "./pages/CapturePage";
+import { PurchaseOcrSelectionPage } from "./pages/PurchaseOcrSelectionPage";
 import { OcrProcessingPage } from "./pages/receipts/OcrProcessingPage";
 import { OcrResultEditPage } from "./pages/receipts/OcrResultEditPage";
 import { OcrExtractionReviewPage } from "./pages/receipts/OcrExtractionReviewPage";
 import { AnalysisResultPage } from "./pages/receipts/AnalysisResultPage";
-import { PurchaseStoragePage } from "./pages/storage/PurchaseStoragePage";
 import { PurchaseTransactionStoragePage } from "./pages/storage/PurchaseTransactionStoragePage";
 import { SalesFilingPage } from "./pages/storage/SalesFilingPage";
 import { TrashPage } from "./pages/storage/TrashPage";
@@ -38,6 +38,7 @@ export default function App() {
       <Route path="/account" element={<AccountPage />} />
       <Route path="/about" element={<AboutPage />} />
       <Route path="/capture" element={<CapturePage />} />
+      <Route path="/capture/select" element={<PurchaseOcrSelectionPage />} />
       <Route path="/receipts/:id/processing" element={<OcrProcessingPage />} />
       <Route path="/receipts/monthly/:id/review" element={<MonthlySalesReviewPage />} />
       <Route path="/receipts/:id/review" element={<OcrExtractionReviewPage />} />
@@ -45,7 +46,6 @@ export default function App() {
       <Route path="/receipts/:id/analysis" element={<AnalysisResultPage />} />
       <Route path="/analysis/:runId" element={<AnalysisResultPage />} />
       <Route path="/storage/purchase" element={<PurchaseTransactionStoragePage />} />
-      <Route path="/storage/purchase-legacy" element={<PurchaseStoragePage />} />
       <Route path="/storage/sales" element={<SalesFilingPage />} />
       <Route path="/storage/sales/archive" element={<SalesArchiveRedirect />} />
       <Route path="/storage/purchase/receipts" element={<ReceiptListPage />} />

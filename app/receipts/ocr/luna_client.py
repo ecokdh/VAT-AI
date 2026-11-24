@@ -45,12 +45,14 @@ def usage_cost(u):
     d=u.get('input_tokens_details') or {};c=d.get('cached_tokens',0);w=d.get('cache_write_tokens',0)
     return (max(0,u.get('input_tokens',0)-c-w)*.1+c*.01+w*.125+u.get('output_tokens',0)*.5)/1e6*2200
 
-async def recognize(image_bytes:bytes,mime_type:str):
+async def recognize(image_bytes:bytes,mime_type:str, *, input_mode: str | None = None, cached_ocr: dict | None = None):
+    mode = settings.LUNA_INPUT_MODE if input_mode is None else input_mode
     key=settings.OPENAI_API_KEY
     if not key and settings.LUNA_API_KEY_FILE:key=dotenv_values(settings.LUNA_API_KEY_FILE).get('OPENAI_API_KEY','')
     if not key:raise LunaFailure('API_KEY_MISSING')
     if mime_type not in {'image/jpeg','image/png'}:raise LunaFailure('UNSUPPORTED_IMAGE')
-    if settings.LUNA_INPUT_MODE not in {'photo', 'photo_ocr'}:raise LunaFailure('INVALID_INPUT_MODE')
+    if mode not in {'photo', 'photo_ocr'}:raise LunaFailure('INVALID_INPUT_MODE')
+    if cached_ocr is not None and mode != 'photo_ocr':raise LunaFailure('INVALID_INPUT_MODE')
     ledger_path=Path(settings.LUNA_BUDGET_LEDGER_FILE);ledger_path.parent.mkdir(parents=True,exist_ok=True)
     lock_path=ledger_path.with_suffix('.lock')
     if lock_path.exists():
@@ -64,7 +66,10 @@ async def recognize(image_bytes:bytes,mime_type:str):
     os.close(fd)
     context={}
     try:
-        return await asyncio.wait_for(_recognize(image_bytes,mime_type,key,ledger_path,context),timeout=settings.LUNA_TIMEOUT_SECONDS)
+        options = {"input_mode": mode} if input_mode is not None else {}
+        if cached_ocr is not None:
+            options.update(input_mode=mode, cached_ocr=cached_ocr)
+        return await asyncio.wait_for(_recognize(image_bytes,mime_type,key,ledger_path,context,**options),timeout=settings.LUNA_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
         exc=LunaFailure('TIMEOUT');exc.ocr=context.get('ocr');raise exc from None
     except httpx.RequestError:
@@ -74,26 +79,35 @@ async def recognize(image_bytes:bytes,mime_type:str):
         raise
     finally:lock_path.unlink(missing_ok=True)
 
-async def _recognize(image_bytes,mime_type,key,ledger_path,context=None):
+async def _recognize(image_bytes,mime_type,key,ledger_path,context=None, *, input_mode=None, cached_ocr=None):
+    mode = settings.LUNA_INPUT_MODE if input_mode is None else input_mode
     ledger=json.loads(ledger_path.read_text(encoding='utf-8')) if ledger_path.exists() else {'cap_krw':settings.LUNA_BUDGET_KRW,'attempts':[]}
-    prompt,schema,version=active_contract()
+    if mode == 'photo_ocr':
+        prompt,schema,version=photo_ocr.contract()
+    else:
+        prompt,schema,version=active_contract()
     ocr=None
-    if settings.LUNA_INPUT_MODE == 'photo_ocr':
+    if mode == 'photo_ocr':
         # Do not spend on OCR when even the minimum model reservation cannot fit.
         exposure=sum(a.get('cost_krw',a.get('reserved_krw',0)) for a in ledger['attempts'])
         minimum_reserve=(1024*.125+MAX_OUTPUT_TOKENS*.5)/1e6*2200
         if exposure+minimum_reserve>min(settings.LUNA_BUDGET_KRW,ledger.get('cap_krw',settings.LUNA_BUDGET_KRW)):
             raise LunaFailure('BUDGET_EXCEEDED')
-        ocr_attempt={'image_sha256':hashlib.sha256(image_bytes).hexdigest(),'status':'requested_usage_unverified','time':time.time(),'cost_krw':None}
-        ledger.setdefault('ocr_attempts',[]).append(ocr_attempt);atomic(ledger_path,ledger)
-        try:ocr=await photo_ocr.recognize_general(image_bytes,mime_type)
-        except photo_ocr.GeneralOcrFailure as exc:raise LunaFailure(str(exc)) from None
+        image_sha256 = hashlib.sha256(image_bytes).hexdigest()
+        if cached_ocr is None:
+            ocr_attempt={'image_sha256':image_sha256,'status':'requested_usage_unverified','time':time.time(),'cost_krw':None}
+            ledger.setdefault('ocr_attempts',[]).append(ocr_attempt);atomic(ledger_path,ledger)
+            try:ocr=await photo_ocr.recognize_general(image_bytes,mime_type)
+            except photo_ocr.GeneralOcrFailure as exc:raise LunaFailure(str(exc)) from None
+            ocr_attempt.update(status='response_recorded',request_id=ocr['request_id'],seconds=ocr['seconds'])
+            atomic(ledger_path,ledger)
+        else:
+            ocr = cached_ocr
+            if ocr.get('engine') != 'clova_general' or not (ocr.get('input') or {}).get('tokens'):
+                raise LunaFailure('INVALID_CACHED_OCR')
         if context is not None:context['ocr']=ocr
-        ocr_attempt.update(status='response_recorded',request_id=ocr['request_id'],seconds=ocr['seconds'])
-        atomic(ledger_path,ledger)
-        if ocr['image_sha256'] != hashlib.sha256(image_bytes).hexdigest():raise LunaFailure('OCR_IMAGE_MISMATCH')
+        if ocr.get('image_sha256') != image_sha256:raise LunaFailure('OCR_IMAGE_MISMATCH')
         if (callback:=on_ocr_done.get()) is not None:callback()
-        prompt,schema,version=photo_ocr.contract()
     payload={'model':MODEL,'store':False,'reasoning':{'effort':EFFORT},'max_output_tokens':MAX_OUTPUT_TOKENS,'input':[{'role':'system','content':prompt},{'role':'user','content':[{'type':'input_text','text':'원본 영수증 전체를 추출하세요.'},{'type':'input_image','image_url':'data:'+mime_type+';base64,'+base64.b64encode(image_bytes).decode(),'detail':'high'}]}],'text':{'format':{'type':'json_schema','name':'receipt','strict':True,'schema':schema}}}
     if ocr is not None:
         payload['input'][1]['content'].append({'type':'input_text','text':'[네이버 CLOVA General OCR 전체 토큰 자료]\n'+json.dumps(ocr['input'],ensure_ascii=False,separators=(',',':'))})
@@ -127,7 +141,7 @@ async def _recognize(image_bytes,mime_type,key,ledger_path,context=None):
             else:
                 document=checked_normalize(parsed)
             contract_sha=hashlib.sha256(json.dumps({'prompt':prompt,'schema':schema,'version':version},ensure_ascii=False,sort_keys=True).encode()).hexdigest()
-            return {'engine':'luna_low','input_mode':settings.LUNA_INPUT_MODE,'ocr':ocr,'model_response':raw,'model':MODEL,'reasoning_effort':EFFORT,'contract_version':version,'contract_sha256':contract_sha,'image_sha256':attempt['image_sha256'],'request_id':attempt['request_id'],'document':document,'raw_prediction':parsed,'usage':usage,'seconds':time.monotonic()-start,'confirmed':False}
+            return {'engine':'luna_low','input_mode':mode,'ocr':ocr,'model_response':raw,'model':MODEL,'reasoning_effort':EFFORT,'contract_version':version,'contract_sha256':contract_sha,'image_sha256':attempt['image_sha256'],'request_id':attempt['request_id'],'document':document,'raw_prediction':parsed,'usage':usage,'seconds':time.monotonic()-start,'confirmed':False}
         except (ValueError,KeyError,TypeError):raise LunaFailure('INVALID_OUTPUT') from None
         finally:
             attempt['seconds']=time.monotonic()-start;atomic(ledger_path,ledger)

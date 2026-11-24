@@ -10,9 +10,10 @@ export function VaultTabs({ purchaseTo, salesTo, children }: { purchaseTo: strin
   const from = (state as { vaultFrom?: number } | null)?.vaultFrom;
   const current = pathname.startsWith("/storage/sales") ? 1 : 0;
   useLayoutEffect(() => {
-    const tabs = nav.current?.querySelectorAll<HTMLElement>("a");
+    const element = nav.current;
+    const tabs = element?.querySelectorAll<HTMLElement>("a");
     const bar = indicator.current;
-    if (!tabs || !bar) return;
+    if (!element || !tabs || !bar) return;
     // 탭 칸보다 양옆 4px 안쪽에 그려 바깥 테두리에 붙지 않게 한다.
     const place = (tab: HTMLElement) => { bar.style.left = `${tab.offsetLeft + 4}px`; bar.style.width = `${tab.offsetWidth - 8}px`; };
     if (from != null && from !== current && tabs[from]) {
@@ -22,6 +23,10 @@ export function VaultTabs({ purchaseTo, salesTo, children }: { purchaseTo: strin
       bar.style.transition = "";
     }
     place(tabs[current]);
+    // 자료를 불러온 뒤 스크롤바가 생기는 등 탭 폭이 바뀌면 선택 표시를 다시 맞춘다.
+    const observer = new ResizeObserver(() => place(tabs[current]));
+    observer.observe(element);
+    return () => observer.disconnect();
   }, [pathname, from, current]);
   return <nav ref={nav} className="vault-tabs vault-tabs--slide" aria-label="보관함 종류">
     <span ref={indicator} className="vault-tabs__indicator" aria-hidden="true" />

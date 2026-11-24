@@ -7,6 +7,7 @@ import { ReceiptPreview } from "../../components/ReceiptPreview";
 import { confirmTransaction, createTransactionFromReceipt } from "../../api/transactions";
 import { PageHeader } from "../../components/PageHeader";
 import { NumberInput } from "../../components/NumberInput";
+import { capturePathForDirection } from "../../hooks/purchaseOcrRoute";
 
 export function OcrResultEditPage() {
   const navigate = useNavigate();
@@ -155,7 +156,7 @@ export function OcrResultEditPage() {
               <button className="btn btn--primary" disabled={saving} onClick={() => void saveConfirmedTransaction()}>
                 {saving ? "저장 중" : "거래 확정 및 보관함에 저장"}
               </button>
-              <button className="btn btn--secondary" onClick={() => navigate(`/capture?direction=${direction}`)}>다시 촬영하기</button>
+              <button className="btn btn--secondary" onClick={() => navigate(capturePathForDirection(direction))}>다시 촬영하기</button>
             </div>
           </>
         )}

@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { getMe, markOcrGuideSeen } from "../api/auth";
 import { CaptureGuide } from "../components/CaptureGuide";
+import { parsePurchaseOcrRoute, purchaseOcrOptions, purchaseOcrSelectionPath } from "../hooks/purchaseOcrRoute";
 import { enqueueReceiptOcr, getReceipt, retryReceiptOcr, type ReceiptProcessingApi } from "../api/receipts";
 import "../styles/capture.css";
 
@@ -13,6 +14,11 @@ export function CapturePage() {
   // 증빙 촬영은 매입 영수증만 받는다.
   const backToStorage = "/storage/purchase";
   const fileOnly = params.get("source") === "file";
+  const ocrRoute = parsePurchaseOcrRoute(params.get("ocr"));
+  const selectedRoute = ocrRoute && <div className="capture-route">
+    <span>{purchaseOcrOptions[ocrRoute].label}</span>
+    <button type="button" onClick={() => navigate(purchaseOcrSelectionPath + (fileOnly ? "?source=file" : ""))}>변경</button>
+  </div>;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,9 +30,7 @@ export function CapturePage() {
   const [cameraReady, setCameraReady] = useState(false);
   const [guide,setGuide] = useState<"loading"|"show"|"ready"|"error">("loading");
   const [seconds,setSeconds] = useState(3);
-  const [pendingFile,setPendingFile] = useState<File|null>(null);
-  const [preview,setPreview] = useState("");
-  // 셔터를 누르면 찍은 화면을 멈춰 보여 주고 그 위에서 바로 인식을 시작한다.
+  // 셔터를 누르거나 파일을 고르면 화면을 멈춰 보여 주고 그 위에서 바로 인식을 시작한다.
   const [frozen,setFrozen] = useState("");
   // 올린 영수증의 인식 진행을 이 화면 위에서 따라간다(게이지·결과 안내).
   const [receipt,setReceipt] = useState<ReceiptProcessingApi|null>(null);
@@ -62,15 +66,14 @@ export function CapturePage() {
     return()=>{window.clearInterval(tick);window.clearTimeout(timer);};
   },[guide]);
   useEffect(()=>{
-    if(!pendingFile){setPreview("");return;}
-    const url=URL.createObjectURL(pendingFile);setPreview(url);
-    return()=>URL.revokeObjectURL(url);
-  },[pendingFile]);
+    if(!frozen.startsWith("blob:"))return;
+    return()=>URL.revokeObjectURL(frozen);
+  },[frozen]);
 
   // 카메라 스트림 시작/정리 — facingMode가 바뀔 때마다 재실행됨
   useEffect(() => {
     // 인식 중(찍은·고른 사진을 띄운 동안)에는 카메라를 켜지 않는다.
-    if (guide !== "ready" || pendingFile || fileOnly || frozen) return;
+    if (guide !== "ready" || fileOnly || frozen) return;
     let cancelled = false;
 
     async function startCamera() {
@@ -103,13 +106,13 @@ export function CapturePage() {
       cancelled = true;
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [facingMode, guide, pendingFile, fileOnly, frozen]);
+  }, [facingMode, guide, fileOnly, frozen]);
 
   async function upload(file: File) {
     setError("");
     setIsUploading(true);
     try {
-      const job = await enqueueReceiptOcr(file, "purchase");
+      const job = await enqueueReceiptOcr(file, "purchase", ocrRoute);
       setReceiptId(job.receipt_id);
     } catch (requestError) {
       setFrozen("");
@@ -149,12 +152,14 @@ export function CapturePage() {
     );
   }
 
-  // "앨범에서 선택" — 기존 방식 그대로 유지 (미리 찍어둔 사진 불러오기용)
+  // "앨범에서 선택" — 파일을 고르면 바로 미리보기 위에서 인식을 시작한다.
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    setPendingFile(file);
+    setError("");
+    setFrozen(URL.createObjectURL(file));
+    void upload(file);
   }
 
   function openFilePicker() {
@@ -166,13 +171,12 @@ export function CapturePage() {
   }
 
   if(guide!=="ready")return <div className="page qa-page"><PageHeader title="증빙 촬영 안내" onBack={()=>navigate(backToStorage)}/>{guide==="show"?<CaptureGuide seconds={seconds}/>:<div className="page__body">{guide==="error"?<p className="banner banner--error">촬영 안내 정보를 불러오지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.</p>:<p role="status">촬영을 준비하고 있습니다.</p>}</div>}</div>;
-  if(pendingFile)return <div className="page qa-page capture-confirm"><PageHeader title="촬영한 증빙 확인" onBack={()=>setPendingFile(null)}/><main className="page__body"><h1 className="screen-title">글자가 선명하게 보이나요?</h1><p className="muted">영수증 전체가 보이고 금액·날짜를 읽을 수 있는지 확인해 주세요.</p><img className="capture-preview" src={preview} alt="분석할 증빙 미리보기"/>{error&&<p className="banner banner--error" role="alert">{error}</p>}<div className="btn-row"><button className="btn btn--secondary" disabled={isUploading} onClick={()=>{setPendingFile(null);setError("");}}>다시 촬영·선택</button><button className="btn btn--primary" disabled={isUploading} onClick={()=>{setFrozen(URL.createObjectURL(pendingFile));setPendingFile(null);void upload(pendingFile);}}>{isUploading?"증빙 분석 중…":"선명해요 · 분석하기"}</button></div></main></div>;
-  if(fileOnly)return <div className="page qa-page"><PageHeader title="영수증 사진 선택" onBack={()=>navigate(backToStorage)}/><main className="page__body"><h1 className="screen-title">다른 영수증 사진을 선택해 주세요</h1><p className="muted">영수증 전체와 금액·날짜가 선명하게 보이는 사진을 선택해 주세요.</p><input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} style={{display:'none'}}/><button className="btn btn--primary" onClick={openFilePicker}>앨범 및 파일 선택</button><button className="btn btn--secondary" onClick={()=>setParams(previous => { const next = new URLSearchParams(previous); next.delete("source"); return next; })}>직접 촬영하기</button></main></div>;
+  if(fileOnly && !frozen)return <div className="page qa-page"><PageHeader title="영수증 사진 선택" onBack={()=>navigate(backToStorage)}/><main className="page__body">{selectedRoute}<h1 className="screen-title">다른 영수증 사진을 선택해 주세요</h1><p className="muted">영수증 전체와 금액·날짜가 선명하게 보이는 사진을 선택해 주세요.</p>{error && <p className="banner banner--error" role="alert">{error}</p>}<input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} style={{display:'none'}}/><button className="btn btn--primary" onClick={openFilePicker}>앨범 및 파일 선택</button><button className="btn btn--secondary" onClick={()=>setParams(previous => { const next = new URLSearchParams(previous); next.delete("source"); return next; })}>직접 촬영하기</button></main></div>;
   const progress = receipt?.status === "processing" ? receipt.processing_progress : receipt ? 100 : 5;
   const canRetry = (receipt?.ocr_user_attempts ?? 2) < 2;
   const outcome = receipt?.status === "unsupported" ? { title: "영수증이 아닌 것 같아요", description: receipt.guide_message || "인쇄된 구매 영수증만 인식할 수 있어요.", icon: "M6 3h12v18l-3-2-3 2-3-2-3 2zM4 4l16 16", canRetry }
     : receipt?.status === "retake" ? { title: "사진을 다시 찍어 주세요", description: receipt.guide_message || "영수증 전체가 선명하게 나오게 찍어 주세요.", icon: "M4 8h3l2-3h6l2 3h3v11H4zM12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6", canRetry: false }
-    : receipt?.status === "failed" ? { title: "인식을 마치지 못했어요", description: "일시적인 오류예요. 다시 시도할 수 있어요.", icon: "M12 4l9 16H3zM12 10v4M12 17v.01", canRetry }
+    : receipt?.status === "failed" ? { title: "인식을 마치지 못했어요", description: receipt.guide_message || "일시적인 오류예요. 다시 시도할 수 있어요.", icon: "M12 4l9 16H3zM12 10v4M12 17v.01", canRetry }
     : null;
 
   return (

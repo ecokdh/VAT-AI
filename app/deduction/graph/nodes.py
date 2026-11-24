@@ -1,5 +1,6 @@
 """분류 그래프 노드. 외부 호출(검색·LLM)은 graph.py에서 주입받아 테스트에서 교체할 수 있게 한다."""
 
+import logging
 from collections.abc import Callable
 
 from app.deduction.analyzer import AnalysisRequest, LegalReference
@@ -11,8 +12,15 @@ from app.deduction.rag.schemas import LawOut
 Retriever = Callable[[str, list[int]], list[LawOut]]  # (검색어, 제외할 조문 id)
 CoreLaws = Callable[[], list[LawOut]]
 JudgeLLM = Callable[[AnalysisRequest, list[LawOut], list[str]], JudgeOutput]
+SlmJudge = Callable[[AnalysisRequest, list[LawOut]], tuple[JudgeOutput, float | None]]  # (판정, 신뢰도)
 
 MAX_ATTEMPTS = 3  # 최초 1회 + 재시도 2회
+# 골드셋 평가(training/deduction)에서 신뢰도 0.9 이상인 sLLM 확정 판정은 정확도 97%, 오공제 0건이었다.
+SLM_MIN_CONFIDENCE = 0.9
+# 오판 영향이 크거나 sLLM이 틀린 유형(경차·승합차)이 있는 분류는 sLLM이 확신해도 LLM이 판정한다.
+SLM_HIGH_RISK_CATEGORIES = {"차량유지비", "기업업무추진비"}
+
+logger = logging.getLogger(__name__)
 
 
 def normalize(state: DeductionState) -> DeductionState:
@@ -32,6 +40,7 @@ def rule_check(state: DeductionState) -> DeductionState:
         category=rule.category,
         reason=rule.reason,
         legal_references=[rule.reference],
+        judged_by="rule",
     )
     return {"result": result}
 
@@ -46,6 +55,33 @@ def retrieve_laws(state: DeductionState, retrieve: Retriever, core_laws: CoreLaw
     return {"laws": laws}
 
 
+def slm_judge(state: DeductionState, slm: SlmJudge) -> DeductionState:
+    """sLLM이 먼저 판정하고, 아래 조건에 걸리면 판정을 버리고 LLM(judge)으로 넘긴다."""
+    try:
+        judgement, confidence = slm(state["request"], state["laws"])
+    except Exception as exc:  # 서버가 꺼져 있거나 응답이 깨졌으면 LLM이 판정한다.
+        reason = f"sLLM 호출 실패: {type(exc).__name__}"
+    else:
+        reason = escalation_reason(judgement, confidence, {law.id for law in state["laws"]})
+        if reason is None:
+            return {"judgement": judgement, "judged_by": "slm"}
+
+    logger.info("공제 판정을 LLM으로 넘김: %s", reason)
+    return {"route_reason": reason}
+
+
+def escalation_reason(judgement: JudgeOutput, confidence: float | None, law_ids: set[int]) -> str | None:
+    if errors := validate(judgement, law_ids):
+        return "sLLM 출력 검증 실패: " + "; ".join(errors)
+    if judgement.verdict == "ambiguous":
+        return "애매 판정"
+    if confidence is None or confidence < SLM_MIN_CONFIDENCE:
+        return f"신뢰도 낮음({confidence})"
+    if judgement.category in SLM_HIGH_RISK_CATEGORIES:
+        return f"고위험 분류({judgement.category})"
+    return None
+
+
 def judge(state: DeductionState, judge_llm: JudgeLLM) -> DeductionState:
     attempts = state["attempts"] + 1
     try:
@@ -53,7 +89,7 @@ def judge(state: DeductionState, judge_llm: JudgeLLM) -> DeductionState:
     except Exception as exc:
         return {"judgement": None, "errors": [f"LLM 호출 실패: {exc}"], "attempts": attempts}
 
-    return {"judgement": judgement, "attempts": attempts}
+    return {"judgement": judgement, "attempts": attempts, "judged_by": "llm"}
 
 
 def verify(state: DeductionState) -> DeductionState:
@@ -110,12 +146,15 @@ def finalize(state: DeductionState) -> DeductionState:
         decision_point=judgement.decision_point if ambiguous else None,
         cases=cases,
         legal_references=[to_reference(law) for law in state["laws"] if law.id in cited],
+        judged_by=state["judged_by"],
+        route_reason=state.get("route_reason"),
     )
     return {"result": result}
 
 
 def mark_failed(state: DeductionState) -> DeductionState:
-    result = ClassificationResult(verdict="failed", error_message="; ".join(state["errors"]))
+    result = ClassificationResult(verdict="failed", error_message="; ".join(state["errors"]),
+                                  route_reason=state.get("route_reason"))
     return {"result": result}
 
 

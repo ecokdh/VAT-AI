@@ -40,6 +40,8 @@ class ClassificationResult(BaseModel):
     cases: list[JudgeCase] = []
     legal_references: list[LegalReference] = []
     error_message: str | None = None
+    judged_by: Literal["rule", "slm", "llm"] | None = None  # 판정한 경로
+    route_reason: str | None = None  # sLLM 판정을 LLM으로 넘긴 이유
 
 
 class DeductionState(TypedDict, total=False):
@@ -49,4 +51,6 @@ class DeductionState(TypedDict, total=False):
     judgement: JudgeOutput | None
     errors: list[str]
     attempts: int
+    judged_by: str
+    route_reason: str
     result: ClassificationResult

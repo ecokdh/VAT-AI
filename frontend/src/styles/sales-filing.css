@@ -55,6 +55,12 @@
 .sales-source-error { max-width: 160px; color: #dc2626; font-size: 12px; line-height: 16px; text-align: right; }
 .sales-source-actions button:focus-visible, .sales-edit-button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
 .sales-filing .sales-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; padding: 0 .25rem .9rem; }
+.sales-other-sales-form { display: grid; gap: 4px; }
+.sales-other-sales-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; font-size: 12px; }
+.sales-other-sales-values label { display: grid; gap: 2px; min-width: 0; }
+.sales-other-sales-memo { overflow-wrap: anywhere; }
+.sales-other-sales-values .input { width: 100%; min-width: 0; min-height: 36px; height: 36px; padding: 4px 8px; border-radius: 8px; }
+.sales-other-sales-confirm { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1.4; }
 .sales-source__content { display: grid; gap: 8px; padding: 8px 11px 12px; border-top: 1px solid var(--color-border, #dce3ec); }
 .sales-source__content[hidden] { display: none; }
 .sales-document-card {
@@ -98,7 +104,6 @@
 .sales-hero { position: relative; display: flex; flex-direction: column; padding: 12px 20px; border-radius: 16px; background: #1d4ed8; color: #fff; }
 .sales-hero__label { font-size: 13px; line-height: 20px; color: rgb(255 255 255 / .72); }
 .sales-hero__amount { margin-top: 4px; font-size: 32px; font-weight: 700; line-height: 40px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.sales-hero__link { position: absolute; top: 12px; right: 20px; color: #fff; font-size: 13px; font-weight: 600; line-height: 20px; }
 .sales-monthly { display: flex; flex: 1 0 auto; flex-direction: column; gap: 12px; }
 .sales-monthly-heading { display: flex; align-items: center; justify-content: space-between; }
 .sales-monthly-heading .section-title { margin: 0; font-size: 16px; line-height: 24px; }
@@ -108,4 +113,134 @@
 .sales-month-grid { display: grid; flex: 1 0 auto; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(64px, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .sales-month-card { display: flex; flex-direction: column; justify-content: center; gap: 0; padding: 8px 16px; border: 1px solid #c6dcff; border-radius: 16px; background: var(--color-surface, #fff); }
 .sales-month-card time { color: #6b7385; font-size: 13px; font-weight: 600; line-height: 20px; }
+.sales-period-other-total { margin-top: 8px; }
+.sales-period-other-total span { color: #6b7385; font-size: 13px; font-weight: 600; line-height: 20px; }
 .sales-month-card strong { font-size: 16px; font-weight: 700; line-height: 24px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+
+/* 중복 매출 확인 O/X UI */
+.sales-other-issues { display: grid; gap: 6px; margin-top: 12px; font-size: 13px; }
+.dup-section { display: grid; gap: 12px; margin-top: 12px; }
+.dup-panel {
+  display: grid; gap: 14px; padding: 16px;
+  border: 1px solid #c6dcff; border-radius: 18px; background: #fff;
+}
+.dup-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dup-panel__header h2 { margin: 0; font-size: 16px; font-weight: 700; line-height: 22px; }
+.dup-panel__subtitle { margin: 4px 0 0; font-size: 13px; line-height: 18px; color: #526075; }
+.dup-count-pill {
+  flex: 0 0 auto; padding: 4px 10px; border-radius: 999px;
+  background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700;
+}
+.dup-list { display: grid; gap: 12px; }
+.dup-card {
+  display: grid; gap: 12px; padding: 14px;
+  border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc;
+}
+.dup-card__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dup-card__index { font-size: 12px; font-weight: 700; color: #475569; }
+.dup-match-pill {
+  padding: 3px 10px; border-radius: 999px;
+  background: #dcfce7; color: #166534; font-size: 12px; font-weight: 700;
+}
+.dup-matched-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dup-chip {
+  padding: 2px 8px; border-radius: 999px;
+  background: #eef2ff; color: #3730a3; font-size: 11px; font-weight: 600;
+}
+.dup-compare { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.dup-side-card {
+  display: grid; gap: 10px; padding: 12px;
+  border: 1px solid #dbe4f0; border-radius: 12px; background: #fff;
+}
+.dup-side-card--invoice { border-color: #bfdbfe; }
+.dup-side-card__head { display: flex; align-items: center; align-self: start; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.dup-badge { padding: 2px 8px; border: 1px solid transparent; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.dup-badge--cash { background: #dcfce7; color: #166534; }
+.dup-badge--invoice { background: #2563eb; color: #fff; }
+.dup-keep-tag {
+  padding: 2px 7px; border-radius: 999px; border: 1px solid #bfdbfe;
+  background: #eff6ff; color: #1d4ed8; font-size: 11px; font-weight: 600;
+}
+.dup-fields { display: grid; gap: 6px; margin: 0; font-size: 12.5px; }
+.dup-fields > div { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.dup-fields dt { color: #64748b; font-weight: 500; flex: 0 0 auto; }
+.dup-fields dd { min-width: 0; margin: 0; text-align: right; color: #0f172a; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dup-fields > div.is-matched dd { color: #0f172a; font-weight: 600; }
+.dup-fields > div.dup-field-total dd { font-size: 14px; font-weight: 700; }
+.dup-ref { font-size: 11.5px; color: #475569; }
+@media (min-width: 521px) {
+  .dup-compare {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 10px;
+    row-gap: 6px;
+  }
+  /* Share the title and each fact row across the two cards, including wrapped values. */
+  .dup-compare .dup-side-card { grid-row: 1 / span 6; grid-template-rows: subgrid; row-gap: inherit; }
+  .dup-compare[data-fee] .dup-side-card { grid-row-end: span 7; }
+  .dup-side-card--cash { grid-column: 1; }
+  .dup-side-card--invoice { grid-column: 2; }
+  .dup-compare .dup-fields { grid-row: 2 / -1; grid-template-rows: subgrid; }
+}
+.dup-fallback-question { margin: 0; font-size: 13px; color: #334155; }
+.dup-ox-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dup-ox-btn {
+  display: grid; justify-items: center; gap: 4px; padding: 12px 10px;
+  border: 1.5px solid #cbd5e1; border-radius: 14px; background: #fff;
+  cursor: pointer; text-align: center; transition: border-color .15s, background-color .15s;
+}
+.dup-ox-btn strong { font-size: 14px; color: #0f172a; }
+.dup-ox-btn small { font-size: 11.5px; line-height: 16px; color: #64748b; }
+.dup-ox-mark {
+  display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  font-size: 16px; font-weight: 800; border: 2px solid currentColor;
+}
+.dup-ox-btn--o .dup-ox-mark { color: #0f766e; background: #f0fdfa; }
+.dup-ox-btn--x .dup-ox-mark { color: #b91c1c; background: #fef2f2; }
+.dup-ox-btn--o.is-selected { border-color: #0f766e; background: #f0fdfa; box-shadow: 0 0 0 1px #0f766e; }
+.dup-ox-btn--x.is-selected { border-color: #dc2626; background: #fef2f2; box-shadow: 0 0 0 1px #dc2626; }
+.dup-summary-bar {
+  display: grid; gap: 10px; padding: 12px 14px;
+  border-radius: 14px; background: #f1f5f9;
+}
+.dup-summary-bar__rows { display: grid; gap: 4px; }
+.dup-summary-bar__rows > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.dup-summary-bar__rows strong { font-size: 18px; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
+.dup-summary-bar__sub { font-size: 12px; color: #475569; }
+.dup-deduct-text { color: #0f766e; font-weight: 700; }
+.dup-save-btn { width: 100%; min-height: 44px; border-radius: 14px; font-weight: 700; }
+.dup-history {
+  display: grid; gap: 8px; padding: 12px 14px;
+  border: 1px solid #dce3ec; border-radius: 14px; background: #fff;
+}
+.dup-history__head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13.5px; }
+.dup-history__list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dup-history__list li {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding-top: 8px; border-top: 1px solid #f1f5f9; font-size: 12.5px;
+}
+.dup-history__list li > div { display: grid; gap: 2px; }
+.dup-history__list small { color: #64748b; }
+
+.sales-document-card__link {
+  display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 8px 12px; min-width: 0;
+}
+.sales-document-card__remove {
+  border: 0; background: transparent; padding: 4px 6px; color: #dc2626; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.sales-source-actions .sales-source-append {
+  display: inline-flex; align-items: center; min-height: 26px;
+  color: var(--color-primary); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.sales-source-append[aria-disabled="true"] { opacity: .6; cursor: progress; }
+.sales-quarter-slots {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+.sales-quarter-slot {
+  display: grid; gap: 8px; min-width: 0;
+}
+.sales-quarter-slot__title {
+  font-size: 13px; font-weight: 600; color: var(--color-text);
+}
+.sales-quarter-slot .sales-form { padding: 0; gap: 8px; }
+.cash-sales-downloads { display: flex; gap: 10px; }

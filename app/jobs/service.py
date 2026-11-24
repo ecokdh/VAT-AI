@@ -10,6 +10,7 @@ from app.common.exceptions import AppException
 from app.jobs.models import AsyncJob
 from app.receipts import service as receipt_service
 from app.receipts.models import Receipt
+from app.receipts.ocr.contract import PurchaseOcrRoute
 from app.receipts.schemas import ExtractionConfirmation
 from app.transactions.models import Transaction
 from app.transactions.service import calculate_period_estimate
@@ -19,7 +20,9 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-async def enqueue_receipt_ocr(session: Session, user_id: uuid.UUID, content: bytes, content_type: str | None, direction: str = "purchase"):
+async def enqueue_receipt_ocr(session: Session, user_id: uuid.UUID, content: bytes, content_type: str | None, direction: str = "purchase", ocr_route: PurchaseOcrRoute | None = None):
+    if ocr_route and direction != "purchase":
+        raise AppException(400, "INVALID_OCR_ROUTE", "매입 영수증에서만 인식 방식 선택을 지원합니다.")
     media_type, extension = receipt_service.validate_image(content, content_type)
     try:
         stored = receipt_service.storage.save(user_id, content, media_type, extension)
@@ -32,12 +35,13 @@ async def enqueue_receipt_ocr(session: Session, user_id: uuid.UUID, content: byt
         "missing_field_check": "pending",
     }
     luna_local = settings.OCR_PIPELINE == 'app.receipts.ocr.luna:create_pipeline'
-    if luna_local:
+    if luna_local or ocr_route:
         initial_stages['photo_quality'] = 'skipped'
     receipt = Receipt(
         user_id=user_id,
         image_url=stored.key,
         direction=direction,
+        ocr_route=ocr_route,
         status="processing",
         processing_stage="text_recognition",
         processing_progress=20,
@@ -50,8 +54,8 @@ async def enqueue_receipt_ocr(session: Session, user_id: uuid.UUID, content: byt
         job = AsyncJob(
             user_id=user_id,
             job_type="ocr",
-            max_attempts=1 if luna_local else 3,
-            payload_json=json.dumps({"receipt_id": receipt.id}, ensure_ascii=False),
+            max_attempts=1 if luna_local or ocr_route else 3,
+            payload_json=json.dumps({"receipt_id": receipt.id, **({"ocr_route": ocr_route} if ocr_route else {})}, ensure_ascii=False),
         )
         session.add(job)
         commit_attempted = True
@@ -247,7 +251,7 @@ def retry_receipt_ocr(session: Session, user_id: uuid.UUID, receipt_id: int):
     receipt.processing_stage = "text_recognition"
     receipt.processing_progress = 20
     receipt.stage_statuses_json = json.dumps({
-        "photo_quality": "skipped" if luna_local else "completed", "text_recognition": "processing",
+        "photo_quality": "skipped" if luna_local or receipt.ocr_route else "completed", "text_recognition": "processing",
         "transaction_extraction": "pending", "missing_field_check": "pending",
     })
     receipt.ocr_warnings_json = "[]"
@@ -255,8 +259,8 @@ def retry_receipt_ocr(session: Session, user_id: uuid.UUID, receipt_id: int):
     job = AsyncJob(
         user_id=user_id,
         job_type="ocr",
-        max_attempts=1 if luna_local else 3,
-        payload_json=json.dumps({"receipt_id": receipt.id}, ensure_ascii=False),
+        max_attempts=1 if luna_local or receipt.ocr_route else 3,
+        payload_json=json.dumps({"receipt_id": receipt.id, **({"ocr_route": receipt.ocr_route} if receipt.ocr_route else {})}, ensure_ascii=False),
     )
     session.add(receipt)
     session.add(job)

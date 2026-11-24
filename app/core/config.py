@@ -38,8 +38,17 @@ class Settings(BaseSettings):
     LUNA_BUDGET_LEDGER_FILE: str = "storage/luna_budget.json"
     # photo_ocr: General OCR + image; photo: explicit legacy image-only mode.
     LUNA_INPUT_MODE: str = "photo_ocr"
+    QWEN_OCR_BASE_URL: str = ""
+    QWEN_OCR_MODEL: str = "vat-receipt-qwen-ocr"
+    QWEN_PHOTO_OCR_BASE_URL: str = ""
+    QWEN_PHOTO_OCR_MODEL: str = "vat-receipt-qwen-vl-step087"
+    QWEN_RECEIPT_API_KEY: str = ""
+    QWEN_RECEIPT_TIMEOUT_SECONDS: float = 300.0
     LOCAL_FRONTEND_ORIGIN: str = ""
     DEDUCTION_ANALYZER: str = ""
+    # 공제 1차 판정 sLLM 서버(training/deduction/serve_slm.py) 주소. 비우면 모든 판정을 LLM이 한다.
+    DEDUCTION_SLM_URL: str = ""
+    DEDUCTION_SLM_TIMEOUT_SECONDS: float = 120.0
     NTS_BUSINESS_API_KEY: str = ""
     NTS_BUSINESS_API_URL: str = "https://api.odcloud.kr/api/nts-businessman/v1/status"
     NTS_BUSINESS_VALIDATE_URL: str = "https://api.odcloud.kr/api/nts-businessman/v1/validate"

@@ -93,6 +93,27 @@ python evaluate.py --data data --adapter outputs/qwen3vl4b-lora/adapter --limit 
 
 학습이 끝나면 `outputs/qwen3vl4b-lora/adapter`(LoRA 가중치, 수십 MB)를 이 PC로 내려받아 보관한다. 서버는 2달 뒤 닫힌다.
 
+## 모델 서버 한 번에 켜고 끄기
+
+앱이 쓰는 DGX 서버 3개를 tmux 세션으로 한꺼번에 띄운다. 이미 떠 있는 세션은 건너뛴다.
+
+| 세션 | 포트 | 서버 | 이 PC `.env` |
+|---|---|---|---|
+| `form` | 8001 | `serve.py` 신고서 PDF 검증 | `FORM_VERIFIER_URL=http://localhost:8001` |
+| `judge` | 8002 | `deduction/serve_slm.py` 공제 판정 | `DEDUCTION_SLM_URL=http://localhost:8002` |
+| `ocr` | 8003 | `receipt_ocr/serve_receipt_ocr.py` 매입 OCR | `QWEN_OCR_BASE_URL`, `QWEN_PHOTO_OCR_BASE_URL` = `http://localhost:8003/v1` |
+
+```bash
+bash ~/vat-ai-dong/training/start_all.sh
+```
+
+```bash
+bash ~/vat-ai-dong/training/stop_all.sh
+```
+
+서버가 꺼져 있어도 앱은 동작한다(검증 생략, 공제는 LLM이 판정, OCR은 Luna로 대체).
+`stop_all.sh`는 요청 처리 중 멈춰 일반 종료가 안 되는 서버도 강제로 정리한다.
+
 ## 6. 앱과 연결 (검증 서버)
 
 앱은 신고서 PDF를 만든 뒤 1쪽 이미지를 이 서버로 보내 다시 읽고, 넣으려던 값과 칸별로 대조한다(`app/vat_form/verifier.py`).

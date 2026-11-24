@@ -98,3 +98,38 @@ def apply_safe_receipt_orientation(
             "mime_type": mime_type,
             "reason": f"fallback_non_image_or_error: {str(exc)[:100]}",
         }
+
+
+def prepare_receipt_image(
+    image_bytes: bytes,
+    content_type: str,
+    report_progress: Any,
+) -> Tuple[bytes, str, Dict[str, Any]]:
+    """Run safe orientation normalization and sniff actual JPEG/PNG MIME type."""
+    from app.receipts.ocr.contract import OcrStage, OcrStageStatus, OcrStageUpdate
+
+    oriented_bytes, orientation_meta = apply_safe_receipt_orientation(image_bytes)
+    rotated = orientation_meta.get("rotation_applied_deg", 0) > 0
+    if rotated:
+        report_progress(OcrStageUpdate(
+            stage=OcrStage.PHOTO_QUALITY,
+            status=OcrStageStatus.COMPLETED,
+            progress_percent=20,
+            message=f"가로 영수증 방향을 세로로 자동 보정했습니다 ({orientation_meta['rotation_applied_deg']}° 회전).",
+        ))
+        input_bytes = oriented_bytes
+    else:
+        report_progress(OcrStageUpdate(
+            stage=OcrStage.PHOTO_QUALITY,
+            status=OcrStageStatus.SKIPPED,
+            progress_percent=15,
+            message="사진 파일을 확인했습니다.",
+        ))
+        input_bytes = oriented_bytes if orientation_meta.get("exif_transformed") else image_bytes
+
+    input_mime = (
+        "image/png" if input_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+        else "image/jpeg" if input_bytes.startswith(b"\xff\xd8\xff")
+        else content_type
+    )
+    return input_bytes, input_mime, orientation_meta

@@ -8,6 +8,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import '../../styles/receipt-review.css';
 import {apiClient} from '../../api/client';
 import { NumberInput } from '../../components/NumberInput';
+import { capturePathForDirection } from '../../hooks/purchaseOcrRoute';
 
 const textKeys = ['vendor','branch','business_number'] as const;
 const moneyLabels: Record<string,string> = {payment_amount:'실제 결제액',supply_amount:'공급가액',vat_amount:'부가가치세',tax_exempt_amount:'면세금액',discount_amount:'할인액',printed_total_amount:'인쇄 합계',subtotal_amount:'소계',taxable_supply_amount:'과세 공급가액'};
@@ -97,7 +98,7 @@ export function OcrExtractionReviewPage() {
     }catch(e){const message=isAxiosError(e)?e.response?.data?.error?.message:null;setError(message??'수정 내용을 저장하지 못했습니다. 입력값은 유지됩니다.');}
     finally{setSaving(false);}
   }
-  function retake(){if(!dirty||window.confirm('수정한 내용이 아직 저장되지 않았습니다. 다시 촬영할까요?'))navigate(`/capture?direction=${receipt?.direction??'purchase'}`);}
+  function retake(){if(!dirty||window.confirm('수정한 내용이 아직 저장되지 않았습니다. 다시 촬영할까요?'))navigate(capturePathForDirection(receipt?.direction??'purchase'));}
   return <div className="page receipt-review-page purchase-review">
     <PageHeader title={detailed?"전체 정보 확인":"추출 결과 확인"} onBack={()=>setConfirm('leave')} />
     <div className="page__body review-body">

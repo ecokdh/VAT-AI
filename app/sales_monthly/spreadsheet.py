@@ -78,8 +78,8 @@ def amount(value, *, optional=False):
         raise ValueError("not an amount")
     if isinstance(value, (int, float)) and int(value) == value:
         return int(value)
-    if isinstance(value, str) and re.fullmatch(r"-?(?:\d+|\d{1,3}(?:,\d{3})+)", value.strip()):
-        return int(value.replace(",", ""))
+    if isinstance(value, str) and re.fullmatch(r"-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.0+)?", value.strip()):
+        return int(value.strip().split(".")[0].replace(",", ""))
     raise ValueError("not an amount")
 
 
@@ -103,6 +103,20 @@ def mapped_cells(row, columns):
     return [row[column] if column < len(row) else None for column in columns]
 
 
+def _normalize_year_month(value):
+    if isinstance(value, (date, datetime)):
+        return value.strftime("%Y-%m")
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and int(value) == value:
+        raw = str(int(value))
+    else:
+        raw = text(value)
+    if re.fullmatch(r"[1-9]\d{3}(0[1-9]|1[0-2])", raw):
+        return f"{raw[:4]}-{raw[4:]}"
+    if re.fullmatch(r"[1-9]\d{3}-(0[1-9]|1[0-2])", raw):
+        return raw
+    raise ValueError("invalid year-month")
+
+
 def normalize_card(rows):
     header = next(((index, columns) for index, row in enumerate(rows)
                    if (columns := header_columns(row, CARD)) is not None), None)
@@ -119,13 +133,18 @@ def normalize_card(rows):
             continue
         row = {**empty_object(row_schema), **dict.fromkeys(EXTRA_FIELDS)}
         try:
-            if "합계" in map(compact_header, raw[:3]):
+            if any(token in ("합계", "총계") for token in map(compact_header, raw[:3])):
                 totals.append([amount(value, optional=True) for value in raw[3:8]])
                 continue
-            seq, month, category = amount(raw[0]), text(raw[1]), text(raw[2])
-            if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month) or not category:
+            seq = amount(raw[0])
+            month = _normalize_year_month(raw[1])
+            category = text(raw[2])
+            if not category:
                 raise ValueError("card row")
-            count, total, card, purchase, exempt = [amount(value, optional=index == 4) for index, value in enumerate(raw[3:8])]
+            count, total, card, purchase, exempt = [
+                0 if parsed is None else parsed
+                for parsed in (amount(value, optional=True) for value in raw[3:8])
+            ]
             row.update({"범위": "집계", "순번": seq, "일자또는월": month, "자료구분": category,
                         "원문항목": category, "결제수단": "카드", "건수": count, "합계금액": total,
                         "카드금액": card, "구매전용카드금액": purchase, "비과세금액": exempt})
@@ -154,22 +173,28 @@ def normalize_card(rows):
 def normalize_pg(rows):
     split = ("계", "신용카드", "기타결제수단")
     split_titles = [*PG[:3], *split, PG[4]]
+    base_pg_required = {compact_header(title) for title in PG if title != "매출금액"}
     header = None
     for index, raw in enumerate(rows):
+        lower = mapped_cells(rows[index + 1], range(len(raw))) if index + 1 < len(rows) else []
+        top_labels = list(map(compact_header, raw))
+        if base_pg_required <= set(top_labels) and "매출금액" in top_labels and any(compact_header(value) in split for value in lower):
+            labels = [
+                sub if compact_header(top) in {"", "매출금액"} and compact_header(sub) in split else top
+                for top, sub in zip(raw, lower)
+            ]
+            split_columns = header_columns(labels, split_titles)
+            if split_columns is None:
+                raise invalid("판매·결제대행의 계·신용카드·기타결제수단 열 제목을 확인해 주세요.")
+            header = (index + 2, split_columns, True)
+            break
+        split_columns = header_columns(raw, split_titles)
+        if split_columns is not None:
+            header = (index + 1, split_columns, True)
+            break
         columns = header_columns(raw, PG)
         if columns is not None:
-            lower = mapped_cells(rows[index + 1], range(len(raw))) if index + 1 < len(rows) else []
-            if any(compact_header(value) in split for value in lower):
-                labels = [
-                    sub if compact_header(top) in {"", "매출금액"} and compact_header(sub) in split else top
-                    for top, sub in zip(raw, lower)
-                ]
-                split_columns = header_columns(labels, split_titles)
-                if split_columns is None:
-                    raise invalid("판매·결제대행의 계·신용카드·기타결제수단 열 제목을 확인해 주세요.")
-                header = (index + 2, split_columns, True)
-            else:
-                header = (index + 1, columns, False)
+            header = (index + 1, columns, False)
             break
     if header is None:
         raise invalid("승인년월·건수·매출금액·대행업체 상호가 있는 판매·결제대행 엑셀을 올려 주세요.")
@@ -178,6 +203,7 @@ def normalize_pg(rows):
     row_schema = service.SCHEMA["properties"]["매출증빙"]["properties"]["내역"]["items"]
     evidence, identities = [], set()
     control = None
+    pg_provider_header = compact_header(PG[4])
     for line, raw in enumerate(rows[first_row:], first_row + 1):
         cells = mapped_cells(raw, columns)
         if not any(map(text, cells)):
@@ -190,14 +216,14 @@ def normalize_pg(rows):
                 raise ValueError
             identifiers = {compact_header(value) for value in (seq, month, provider)}
             if "합계" in identifiers:
-                if control is not None or identifiers - {"", "합계"}:
+                if control is not None or identifiers - {"", "합계", pg_provider_header}:
                     raise ValueError
                 control = amounts
                 continue
             seq = amount(seq)
-            month = month.strftime("%Y-%m") if isinstance(month, (date, datetime)) else text(month)
+            month = _normalize_year_month(month)
             provider = text(provider)
-            if seq <= 0 or not re.fullmatch(r"[1-9]\d{3}-(0[1-9]|1[0-2])", month) or not provider:
+            if seq <= 0 or not provider:
                 raise ValueError
         except (ValueError, OverflowError):
             raise invalid(f"엑셀 {line}행의 순번·승인년월·건수·매출금액·대행업체 상호를 확인해 주세요.") from None
@@ -223,6 +249,138 @@ def normalize_pg(rows):
         "매출증빙": {"문서유형": "홈택스판매결제대행", "기간시작": None, "기간종료": None,
                  "기준일종류": "승인월", "내역": evidence},
     }, ["원본 조회 화면에서 사업자번호와 조회기간을 확인하세요. 카드·기타 금액이 섞인 행은 별도 자료로 대조하세요."]
+
+
+def _cash_detail_header(rows):
+    date_aliases = ("매출일시", "거래일시", "거래일자", "승인일시", "승인일자", "발행일시", "발행일자", "일자")
+    vat_aliases = ("부가세", "세액", "부가가치세")
+    total_aliases = ("총금액", "합계금액", "거래금액", "매출금액")
+    for index, row in enumerate(rows[:30]):
+        labels = [compact_header(cell) for cell in row]
+        if "거래년월" in labels and "거래건수" in labels:
+            return None
+        date_col = next((labels.index(name) for name in date_aliases if labels.count(name) == 1), None)
+        supply_col = labels.index("공급가액") if labels.count("공급가액") == 1 else None
+        vat_col = next((labels.index(name) for name in vat_aliases if labels.count(name) == 1), None)
+        total_col = next((labels.index(name) for name in total_aliases if labels.count(name) == 1), None)
+        if None not in (date_col, supply_col, vat_col, total_col):
+            optional = {
+                name: labels.index(name)
+                for name in ("봉사료", "비고", "승인번호", "원승인번호", "발급수단", "용도구분", "거래구분", "발급결과", "발행구분", "신분확인뒷4자리")
+                if labels.count(name) == 1
+            }
+            return index, {"date": date_col, "supply": supply_col, "vat": vat_col, "total": total_col, **optional}
+    return None
+
+
+def _parse_detail_date(value):
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    raw = text(value)
+    if not raw:
+        return None
+    matched = re.match(r"^(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})(?:\D.*)?$", raw)
+    if not matched:
+        raise ValueError("invalid detail date")
+    y, m, d = map(int, matched.groups())
+    return date(y, m, d).isoformat()
+
+
+def _format_id_last4(value):
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and int(value) == value and 0 <= int(value) <= 9999:
+        return f"{int(value):04d}"
+    raw = text(value)
+    return raw or None
+
+
+def normalize_cash_detail(rows, header_info):
+    header, cols = header_info
+    row_schema = service.SCHEMA["properties"]["매출증빙"]["properties"]["내역"]["items"]
+    business_number = business_name = None
+    for raw in rows[:header]:
+        populated = [text(value) for value in raw if text(value)]
+        for label, value in zip(populated, populated[1:]):
+            compact = compact_header(label)
+            if compact in {"사업자번호", "사업자등록번호"}:
+                business_number = value
+            elif compact == "상호":
+                business_name = value
+
+    evidence = []
+    approvals = set()
+    for line, raw in enumerate(rows[header + 1:], header + 2):
+        if not any(text(value) for value in raw):
+            continue
+        def cell(key):
+            idx = cols.get(key)
+            return raw[idx] if idx is not None and idx < len(raw) else None
+        raw_date = text(cell("date"))
+        if any(token in compact_header(v) for v in raw[:3] for token in ("합계", "총계")):
+            continue
+        if compact_header(raw_date).rstrip(".") == "조회된결과가없습니다":
+            continue
+        try:
+            day = _parse_detail_date(cell("date"))
+            if not day:
+                continue
+            supply = amount(cell("supply"))
+            vat = amount(cell("vat"))
+            total = amount(cell("total"))
+            fee = amount(cell("봉사료"), optional=True) if "봉사료" in cols else 0
+            fee = 0 if fee is None else fee
+            if total != supply + vat + fee:
+                raise ValueError("cash detail sum mismatch")
+            approval = text(cell("승인번호")) or None
+            if approval:
+                key = approval.replace("-", "").lower()
+                if key in approvals:
+                    raise invalid(f"엑셀 {line}행의 현금영수증 승인번호가 중복되었습니다.")
+                approvals.add(key)
+            trade_kind = text(cell("거래구분")) or None
+            section = text(cell("발행구분")) or None
+            row = {**empty_object(row_schema), **dict.fromkeys(EXTRA_FIELDS)}
+            row.update({
+                "범위": "건별",
+                "원문항목": trade_kind or section or "현금영수증",
+                "발행구분": section,
+                "일자또는월": day,
+                "결제수단": "현금영수증",
+                "거래구분": trade_kind,
+                "용도구분": text(cell("용도구분")) or None,
+                "발급수단": text(cell("발급수단")) or None,
+                "발급결과": text(cell("발급결과")) or None,
+                "승인번호": approval,
+                "신분확인뒷4자리": _format_id_last4(cell("신분확인뒷4자리")),
+                "원승인번호": text(cell("원승인번호")) or None,
+                "공급가액": supply,
+                "부가세": vat,
+                "봉사료": fee,
+                "합계금액": total,
+                "비고": text(cell("비고")) or None,
+                "과세구분": "과세" if vat != 0 else None,
+            })
+            evidence.append(row)
+        except (ValueError, OverflowError):
+            raise invalid(f"엑셀 {line}행의 일자·공급가액·부가세·봉사료 또는 총금액을 확인해 주세요.") from None
+    if not evidence:
+        raise invalid("가져올 건별 현금영수증 내역이 없습니다.")
+    base = service.LEGACY_SCHEMA["properties"]
+    return {
+        "사업장": {"상호": business_name, "사업자등록번호": business_number},
+        "거래일": None, "집계합계": empty_object(base["집계합계"]), "매출집계_유형별": [],
+        "세무조정_필수항목": empty_object(base["세무조정_필수항목"]),
+        "매출증빙": {"문서유형": "홈택스현금영수증", "기간시작": None, "기간종료": None,
+                 "기준일종류": "거래일", "내역": evidence},
+    }, ["신고기간 전체 현금영수증 내역이 포함됐는지 원본에서 확인해 주세요."]
+
+
+def normalize_cash(rows):
+    detail_header = _cash_detail_header(rows)
+    if detail_header is not None:
+        return normalize_cash_detail(rows, detail_header)
+    return normalize_cash_summary(rows)
 
 
 def normalize_cash_summary(rows):
@@ -368,7 +526,8 @@ def normalize_invoice(rows):
             approvals.add(key)
             supplier_numbers.add(supplier)
             total, supply, vat = [amount(value(name)) for name in ("합계금액", "공급가액", "세액")]
-            if total != supply + vat:
+            fee = amount(value("봉사료"), optional=True) if "봉사료" in positions else None
+            if total != supply + vat + (fee or 0):
                 raise ValueError
             category, kind = text(value("전자세금계산서분류")), text(value("전자세금계산서종류"))
             if not category or not kind:
@@ -378,7 +537,8 @@ def normalize_invoice(rows):
                         "발급일": issued, "전송일": sent, "승인번호": approval,
                         "공급자사업자번호": supplier, "공급받는자사업자번호": buyer,
                         "전자세금계산서분류": category, "세금계산서종류": kind, "발급유형": text(value("발급유형")) or None,
-                        "합계금액": total, "공급가액": supply, "부가세": vat,
+                        "합계금액": total, "공급가액": supply, "부가세": vat, "봉사료": fee,
+                        "비고": text(value("비고")) or None,
                         "과세구분": "과세" if category in {"세금계산서", "수정세금계산서"} and vat != 0 else None})
             evidence.append(row)
         except (ValueError, OverflowError):
@@ -402,7 +562,7 @@ def normalize_invoice(rows):
 
 def read(data, filename, source):
     extension = Path(filename).suffix.lower().lstrip(".")
-    normalizers = {"card": normalize_card, "cash": normalize_cash_summary, "invoice": normalize_invoice, "pg": normalize_pg}
+    normalizers = {"card": normalize_card, "cash": normalize_cash, "invoice": normalize_invoice, "pg": normalize_pg}
     if extension not in MIME or source not in normalizers:
         raise invalid("홈택스 매출자료의 XLS·XLSX 파일을 선택해 주세요.")
     try:
@@ -418,9 +578,9 @@ def read(data, filename, source):
 REVIEW_FIELDS = {
     "홈택스카드": {"순번", "일자또는월", "자료구분", "건수", "합계금액", "카드금액", "구매전용카드금액", "비과세금액"},
     "홈택스현금영수증": {"일자또는월", "발행구분", "건수", "합계금액", "공급가액", "부가세", "봉사료",
-                     "승인번호", "발급수단", "용도구분", "거래구분", "발급결과", "원승인번호"},
+                     "승인번호", "신분확인뒷4자리", "발급수단", "용도구분", "거래구분", "발급결과", "원승인번호", "비고"},
     "매출세금계산서": {"작성일", "승인번호", "발급일", "전송일", "공급자사업자번호", "공급받는자사업자번호",
-                  "합계금액", "공급가액", "부가세", "전자세금계산서분류", "세금계산서종류", "발급유형"},
+                  "합계금액", "공급가액", "부가세", "봉사료", "비고", "전자세금계산서분류", "세금계산서종류", "발급유형"},
     "홈택스판매결제대행": {"순번", "일자또는월", "건수", "합계금액", "카드금액", "기타결제금액", "업체명", "결제수단"},
 }
 
@@ -559,13 +719,17 @@ def validate_review(document, original):
                             reject(f"{label} 자료의 매출금액이 신용카드와 기타결제수단의 합과 다릅니다.")
                 if kind == "홈택스카드" and (row["카드금액"] is None or row["구매전용카드금액"] is None):
                     raise ValueError
+            elif kind == "홈택스현금영수증" and not cash_summary:
+                date.fromisoformat(text(row["일자또는월"]))
+                approval = text(row.get("승인번호"))
+                identity = approval.replace("-", "").lower() if approval else None
             else:
                 identity = None
-            if kind == "매출세금계산서" or cash_summary:
+            if kind in {"매출세금계산서", "홈택스현금영수증"}:
                 if row["공급가액"] is None or row["부가세"] is None or row["합계금액"] != (
-                    row["공급가액"] + row["부가세"] + ((row["봉사료"] or 0) if cash_summary else 0)
+                    row["공급가액"] + row["부가세"] + (row["봉사료"] or 0)
                 ):
-                    reject(f"{label} 자료의 총금액이 공급가액·세액{'·봉사료' if cash_summary else ''}의 합과 다릅니다.")
+                    reject(f"{label} 자료의 총금액이 공급가액·세액·봉사료의 합과 다릅니다.")
             if identity is not None:
                 if identity in identities:
                     reject(f"{label} 자료에 같은 승인번호 또는 같은 월·구분이 두 번 입력됐습니다.")

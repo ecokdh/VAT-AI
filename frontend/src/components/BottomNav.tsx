@@ -1,11 +1,11 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { Icon } from "./Icon";
 import { parseSalesPeriod, salesPeriodQuery } from "../hooks/salesPeriod";
+import { purchaseOcrSelectionPath } from "../hooks/purchaseOcrRoute";
 
 export function BottomNav() {
   const { pathname, search } = useLocation();
-  const navigate = useNavigate();
   const nav = useRef<HTMLElement>(null);
   // 홈·보관함 중 현재 화면 뒤로 연한 배경이 미끄러져 옮겨간다.
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
@@ -20,7 +20,7 @@ export function BottomNav() {
   if (!["/dashboard", "/storage", "/account", "/about", "/reports"].some(path => pathname.startsWith(path))) return null;
   return <nav ref={nav} className="bottom-nav" aria-label="주요 메뉴">
     {indicator && <span className="bottom-nav__indicator" style={indicator} aria-hidden="true" />}
-    <button className="bottom-nav__ocr" onClick={() => navigate("/capture")}><Icon name="camera"/>OCR</button>
+    <Link className="bottom-nav__ocr" to={purchaseOcrSelectionPath}><Icon name="camera"/>OCR</Link>
     <NavLink to="/dashboard"><Icon name="home"/>홈</NavLink>
     <NavLink to={`/storage/${vault}${periodSuffix}`} className={pathname.startsWith("/storage") ? "active" : ""}><Icon name="folder"/>보관함</NavLink>
   </nav>;

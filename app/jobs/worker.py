@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from html import escape
 import time
 from datetime import datetime, timezone
@@ -26,6 +27,7 @@ from app.receipts.ocr.contract import (
     OcrPipelineInput,
     OcrPipelineResult,
     OcrStageUpdate,
+    QWEN_RECEIPT_ROUTES,
     load_pipeline,
 )
 from app.transactions.models import AnalysisRun, Transaction
@@ -202,7 +204,17 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
             raise RuntimeError("OCR 작업의 영수증이 존재하지 않습니다.")
         image = receipt_service.storage.read(receipt.image_url)
         media_type = "image/png" if receipt.image_url.lower().endswith(".png") else "image/jpeg"
-        pipeline = load_pipeline(settings.OCR_PIPELINE)
+        route = receipt.ocr_route
+        if route == "luna_photo_ocr":
+            from app.receipts.ocr.luna import LunaLowPipeline
+            pipeline = LunaLowPipeline(input_mode="photo_ocr")
+        elif route in QWEN_RECEIPT_ROUTES:
+            from app.receipts.ocr.qwen import QwenReceiptPipeline
+            pipeline = QwenReceiptPipeline(photo=route == "qwen_photo_ocr", with_ocr=True)
+        elif route is None:
+            pipeline = load_pipeline(settings.OCR_PIPELINE)
+        else:
+            raise ValueError("Unknown purchase OCR route")
         stage_statuses = receipt.stage_statuses
 
         def report_progress(update: OcrStageUpdate) -> None:
@@ -213,14 +225,19 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
             session.add(receipt)
             session.commit()
 
-        result = OcrPipelineResult.model_validate(pipeline.process(
-            OcrPipelineInput(
-                receipt_id=receipt.id,
-                content_type=media_type,
-                image_bytes=image,
-            ),
-            report_progress,
-        ))
+        pipeline_input = OcrPipelineInput(
+            receipt_id=receipt.id,
+            content_type=media_type,
+            image_bytes=image,
+        )
+        result = OcrPipelineResult.model_validate(pipeline.process(pipeline_input, report_progress))
+        fallback_from: str | None = None
+        if route in QWEN_RECEIPT_ROUTES and result.status == "FAILED":
+            fallback_from = route
+            from app.receipts.ocr.luna import LunaLowPipeline
+            fallback = LunaLowPipeline(input_mode="photo_ocr", cached_ocr=pipeline.recognized_ocr)
+            logger.info("Qwen OCR route %s failed (%s); falling back to Luna %s", route, result.issue_code, fallback.input_mode)
+            result = OcrPipelineResult.model_validate(fallback.process(pipeline_input, report_progress))
         receipt.vendor = result.vendor
         receipt.amount = result.amount
         receipt.date = result.transaction_date
@@ -249,11 +266,12 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
         receipt.stage_statuses_json = json.dumps(stage_statuses, ensure_ascii=False)
 
         from app.receipts.details import extract_details
-        details=extract_details(result.raw_text) if result.pipeline_name!='luna_low' else {}
-        if result.pipeline_name=='luna_low':
+        if result.pipeline_name == "luna_low" or result.pipeline_name in QWEN_RECEIPT_ROUTES:
             from app.receipts.details import project_luna_details
             raw=json.loads(result.raw_text or '{}')
-            details=project_luna_details(raw.get('document') or {},details)
+            details=project_luna_details(raw.get('document') or {}) if raw.get("document") else {}
+        else:
+            details=extract_details(result.raw_text)
         receipt.details_json = json.dumps(details,ensure_ascii=False)
         receipt.ocr_warnings_json = json.dumps(result.warnings, ensure_ascii=False)
         receipt.ocr_missing_fields_json = json.dumps(result.missing_fields, ensure_ascii=False)
@@ -289,6 +307,8 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
             "warnings": result.warnings,
             "pipeline_name": result.pipeline_name,
             "pipeline_version": result.pipeline_version,
+            **({"ocr_route": route} if route else {}),
+            **({"fallback_from": fallback_from} if fallback_from else {}),
             "doc_type": receipt.doc_type,
             "support_status": receipt.support_status,
             "issue_code": receipt.issue_code,
@@ -425,6 +445,8 @@ def process_one() -> bool:
 
 
 def main() -> None:
+    # Windows는 출력을 파이프·파일로 보낼 때 cp949로 써서 한글 로그가 깨진다. 항상 UTF-8로 쓴다.
+    sys.stderr.reconfigure(encoding="utf-8")
     logging.basicConfig(level=logging.INFO)
     while True:
         if not process_one():

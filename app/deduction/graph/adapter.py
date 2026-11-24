@@ -13,10 +13,11 @@ from app.deduction.graph.rules import CORE_LAWS
 from app.deduction.graph.state import ClassificationResult
 from app.deduction.rag.schemas import LawOut
 from app.deduction.rag.service import get_laws, search_laws
+from app.deduction.slm_client import load_slm
 
 
-ANALYZER_NAME = "langgraph-deduction"
-ANALYZER_VERSION = "0.1.0"
+ANALYZER_NAME = "langgraph-deduction"  # 뒤에 판정 경로를 붙인다: /rule, /slm, /llm
+ANALYZER_VERSION = "0.2.0"
 REASON_MAX_LENGTH = 4000  # AnalysisDecision.reason 제한
 
 DISPOSITIONS = {
@@ -45,7 +46,7 @@ class LangGraphAnalyzer:
             disposition=DISPOSITIONS[result.verdict],
             reason=build_reason(result)[:REASON_MAX_LENGTH],
             legal_references=result.legal_references,
-            analyzer_name=ANALYZER_NAME,
+            analyzer_name=f"{ANALYZER_NAME}/{result.judged_by}",
             analyzer_version=ANALYZER_VERSION,
         )
 
@@ -73,4 +74,4 @@ def _core_laws() -> list[LawOut]:
 
 
 def create_analyzer() -> LangGraphAnalyzer:
-    return LangGraphAnalyzer(build_graph(_retrieve, _core_laws, judge_with_laws))
+    return LangGraphAnalyzer(build_graph(_retrieve, _core_laws, judge_with_laws, load_slm()))

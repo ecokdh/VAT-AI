@@ -39,6 +39,9 @@ venv/
 # 웹 수집 영수증 평가 데이터 (이용 조건 미확인, 로컬 검토용)
 data/receipts/
 
+# 발표·데모 자료 (영상·슬라이드·스크립트, 앱 실행과 무관)
+demo-video/
+
 # Local backups, experiments and generated audit artifacts
 *.bak
 *.bak_*

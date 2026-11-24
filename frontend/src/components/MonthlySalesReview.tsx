@@ -18,7 +18,7 @@ export type MonthlyDocument = { 사업장: Values; 거래일: string | null; 집
 const SALES_EVIDENCE_TYPES = ["홈택스카드", "홈택스현금영수증", "매출세금계산서", "매출계산서", "홈택스판매결제대행", "플랫폼정산", "기타매출장", "확인필요"];
 const EVIDENCE_AMOUNTS = new Set(["합계금액", "공급가액", "부가세", "비과세금액", "봉사료", "카드금액", "구매전용카드금액", "기타결제금액", "취소환불액", "수수료", "실입금액"]);
 const CARD_SHEET_FIELDS = ["순번", "일자또는월", "자료구분", "건수", "합계금액", "카드금액", "구매전용카드금액", "비과세금액"];
-const CASH_SHEET_FIELDS = ["일자또는월", "승인번호", "발급수단", "용도구분", "거래구분", "공급가액", "부가세", "봉사료", "합계금액", "발급결과", "원승인번호", "과세구분"];
+const CASH_SHEET_FIELDS = ["일자또는월", "승인번호", "신분확인뒷4자리", "발급수단", "용도구분", "거래구분", "공급가액", "부가세", "봉사료", "합계금액", "비고", "발급결과", "원승인번호", "과세구분"];
 const CASH_SUMMARY_FIELDS = ["발행구분", "일자또는월", "건수", "합계금액", "공급가액", "부가세", "봉사료"];
 const INVOICE_SHEET_FIELDS = ["작성일", "승인번호", "발급일", "전송일", "공급자사업자번호", "공급받는자사업자번호", "합계금액", "공급가액", "부가세", "전자세금계산서분류", "세금계산서종류", "발급유형", "과세구분"];
 const PG_SHEET_LABELS: Record<string, string> = {"순번": "순번", "일자또는월": "승인년월", "건수": "건수", "합계금액": "매출금액", "카드금액": "신용카드", "기타결제금액": "기타결제수단", "업체명": "판매(결제)대행업체 상호"};
@@ -29,7 +29,7 @@ const FILING_SOURCE: Record<string, string> = {
 const CASH_SUMMARY_LABELS: Record<string, string> = {"발행구분": "발행 구역", "일자또는월": "거래년월", "합계금액": "총금액", "부가세": "세액"};
 const SALES_FIELD_LABELS: Record<string, string> = {작성일:"작성일자", 발급일:"발급일자", 전송일:"전송일자",
   일자또는월:"거래일 또는 거래월", 공급자사업자번호:"공급자 사업자등록번호", 공급받는자사업자번호:"공급받는 자 사업자등록번호",
-  부가세:"세액", 전자세금계산서분류:"세금계산서 분류", 세금계산서종류:"세금계산서 종류"};
+  신분확인뒷4자리:"신분확인 뒷4자리", 부가세:"세액", 전자세금계산서분류:"세금계산서 분류", 세금계산서종류:"세금계산서 종류"};
 const SHEET_NAMES: Record<string, string> = {홈택스카드:"카드 매출", 홈택스현금영수증:"현금영수증 매출",
   매출세금계산서:"매출 전자세금계산서", 홈택스판매결제대행:"판매·결제대행 매출"};
 
@@ -85,16 +85,21 @@ function ChoiceField({ label, value, options, onChange }: { label: string; value
   return <label className="review-field"><span>{label}</span><select className="input" aria-label={label} value={value ?? ""} onChange={e => onChange(e.target.value || null)}><option value="">확인 필요</option>{options.map(o => <option key={o}>{o}</option>)}</select></label>;
 }
 
+type LoadedPart = { id: number; rowCount: number; saved: SavedDocument };
+
 export function MonthlySalesReviewPage() {
   const { id } = useParams(); const navigate = useNavigate();const [search, setSearch] = useSearchParams(); const detailed = search.get("view") === "all";
   const [doc, setDoc] = useState<MonthlyDocument | null>(null);
   const [stored, setStored] = useState<SavedDocument | null>(null);
+  const [parts, setParts] = useState<LoadedPart[]>([]);
   const [isSpreadsheet, setIsSpreadsheet] = useState(false);
+  const docsParam = search.get("docs");
   const period = parseSalesPeriod(search.get("period"));
   const selectedRange = period ? SALES_PERIODS[period] : null;
   const bounds = selectedRange ? [selectedRange.start, selectedRange.end] : null;
   // 매출 보관함 수정 화면에서 열었으면 그 화면으로 돌아간다.
-  const editSuffix = search.get("edit") === "1" ? "&edit=1" : "";
+  const editMode = search.get("edit");
+  const editSuffix = editMode === "0" || editMode === "1" ? `&edit=${editMode}` : "";
   const backToSales = period ? `/storage/sales?${salesPeriodQuery(period)}${editSuffix}` : "/storage/sales";
   const [scopeConfirmed, setScopeConfirmed] = useState(false);
   const [editingSheet, setEditingSheet] = useState(false);
@@ -113,10 +118,49 @@ export function MonthlySalesReviewPage() {
   }, [period, search, setSearch]);
   useEffect(() => {
     let active = true;
-    apiClient.get<SavedDocument>(`/sales/monthly/${id}`).then(({ data }) => { if (active) { setDoc(data.document); setStored(data); setWarnings(data.warnings); setIsSpreadsheet(data.file_type === "spreadsheet"); } })
-      .catch(() => { if (active) setError("정산서를 불러오지 못했습니다."); }).finally(() => { if (active) setLoading(false); });
+    const requestedIds = docsParam
+      ? [...new Set(docsParam.split(",").map(Number).filter(n => Number.isInteger(n) && n > 0))]
+      : [];
+    const targetIds = requestedIds.length > 0 ? requestedIds : [Number(id)];
+    Promise.all(targetIds.map(targetId => apiClient.get<SavedDocument>(`/sales/monthly/${targetId}`)))
+      .then(responses => {
+        if (!active) return;
+        const items = responses.map(r => r.data);
+        const primary = items[0];
+        if (items.length === 1 || !primary.document.매출증빙) {
+          setDoc(primary.document);
+          setStored(primary);
+          setParts([{ id: primary.id, rowCount: primary.document.매출증빙?.내역.length ?? 0, saved: primary }]);
+          setWarnings(primary.warnings);
+          setIsSpreadsheet(primary.file_type === "spreadsheet");
+          return;
+        }
+        const combinedRows = items.flatMap(item => item.document.매출증빙?.내역 ?? []);
+        const combinedRawRows = items.flatMap(item => item.raw_prediction.매출증빙?.내역 ?? []);
+        const mergedDoc: MonthlyDocument = {
+          ...structuredClone(primary.document),
+          매출증빙: { ...structuredClone(primary.document.매출증빙), 내역: structuredClone(combinedRows) },
+        };
+        const mergedStored: SavedDocument = {
+          ...primary,
+          document: mergedDoc,
+          raw_prediction: {
+            ...structuredClone(primary.raw_prediction),
+            매출증빙: primary.raw_prediction.매출증빙
+              ? { ...structuredClone(primary.raw_prediction.매출증빙), 내역: structuredClone(combinedRawRows) }
+              : undefined,
+          },
+        };
+        setDoc(mergedDoc);
+        setStored(mergedStored);
+        setParts(items.map(item => ({ id: item.id, rowCount: item.document.매출증빙?.내역.length ?? 0, saved: item })));
+        setWarnings([...new Set(items.flatMap(item => item.warnings))]);
+        setIsSpreadsheet(items.every(item => item.file_type === "spreadsheet"));
+      })
+      .catch(() => { if (active) setError("정산서를 불러오지 못했습니다."); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [id]);
+  }, [id, docsParam]);
   // 수정할 때마다 세액 계산 반영 결과를 서버 규칙으로 다시 계산한다(저장하지 않음).
   useEffect(() => {
     if (!doc || doc.매출증빙) return;
@@ -186,11 +230,27 @@ export function MonthlySalesReviewPage() {
           return;
         }
       }
-      await apiClient.put(`/sales/monthly/${id}/review`, { document });
+      if (parts.length > 1 && document.매출증빙) {
+        let offset = 0;
+        for (const part of parts) {
+          const partRows = document.매출증빙.내역.slice(offset, offset + part.rowCount);
+          offset += part.rowCount;
+          const partDoc: MonthlyDocument = {
+            ...structuredClone(part.saved.document),
+            사업장: structuredClone(document.사업장),
+            매출증빙: { ...structuredClone(part.saved.document.매출증빙!), 내역: partRows },
+          };
+          await apiClient.put(`/sales/monthly/${part.id}/review`, { document: partDoc });
+        }
+      } else {
+        await apiClient.put(`/sales/monthly/${id}/review`, { document });
+      }
       if (connectSource && evidence) {
         await apiClient.put(`${filingPath}/sources/${connectSource}`, {
           status: "확인 완료", document_ids: [Number(id)], query_start: evidence.기간시작,
           query_end: evidence.기간종료, basis: evidence.기준일종류, expected_document_ids: existingIds,
+          invoice_replacement_id: connectSource === "hometax_sales_invoice" && replacing && existingIds.length
+            ? crypto.randomUUID() : undefined,
         });
       }
       setDirty(false);
@@ -201,13 +261,13 @@ export function MonthlySalesReviewPage() {
     finally { setSaving(false); }
   }
   function leave() { setDirty(false); navigate(backToSales); }
-  async function downloadSpreadsheet() {
+  async function downloadSpreadsheet(targetId = Number(id), label = "매출원본") {
     try {
-      const {data} = await apiClient.get<Blob>(`/sales/monthly/${id}/image`, {responseType: "blob"});
+      const {data} = await apiClient.get<Blob>(`/sales/monthly/${targetId}/image`, {responseType: "blob"});
       const url = URL.createObjectURL(data);
       const link = document.createElement("a");
       link.href = url;
-      link.download = data.type === "application/vnd.ms-excel" ? "매출원본.xls" : "매출원본.xlsx";
+      link.download = data.type === "application/vnd.ms-excel" ? `${label}.xls` : `${label}.xlsx`;
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {setError("원본 엑셀을 내려받지 못했습니다.");}
@@ -216,11 +276,15 @@ export function MonthlySalesReviewPage() {
   const rows = doc?.매출집계_유형별 ?? [];
   const evidence = doc?.매출증빙;
   const isCashSummary = evidence?.문서유형 === "홈택스현금영수증" && evidence.내역[0]?.범위 === "집계";
+  const isCashDetail = isSpreadsheet && evidence?.문서유형 === "홈택스현금영수증" && !isCashSummary;
   const isInvoiceSheet = isSpreadsheet && evidence?.문서유형 === "매출세금계산서";
   const isPgSheet = isSpreadsheet && evidence?.문서유형 === "홈택스판매결제대행";
   const hasPgSplit = isPgSheet && stored?.raw_prediction.매출증빙?.내역.some(row => row.카드금액 != null || row.기타결제금액 != null);
   const pgFields = Object.keys(PG_SHEET_LABELS).filter(name => hasPgSplit || (name !== "카드금액" && name !== "기타결제금액"));
-  const sheetFields = isPgSheet ? [...pgFields, "과세구분", "결제수단"] : isInvoiceSheet ? INVOICE_SHEET_FIELDS : evidence?.문서유형 === "홈택스카드" ? CARD_SHEET_FIELDS : isCashSummary ? CASH_SUMMARY_FIELDS : CASH_SHEET_FIELDS;
+  const invoiceFields = evidence?.내역.some(row => row.비고 != null || row.봉사료 != null)
+    ? [...INVOICE_SHEET_FIELDS, ...(evidence.내역.some(row => row.봉사료 != null) ? ["봉사료"] : []), ...(evidence.내역.some(row => row.비고 != null) ? ["비고"] : [])]
+    : INVOICE_SHEET_FIELDS;
+  const sheetFields = isPgSheet ? [...pgFields, "과세구분", "결제수단"] : isInvoiceSheet ? invoiceFields : evidence?.문서유형 === "홈택스카드" ? CARD_SHEET_FIELDS : isCashSummary ? CASH_SUMMARY_FIELDS : CASH_SHEET_FIELDS;
   const groups = Object.entries((summary?.lines ?? []).reduce<Record<string, number>>((sum, l) => ({ ...sum, [l.evidence_type]: (sum[l.evidence_type] ?? 0) + l.total_amount }), {}));
 
   if (isSpreadsheet && stored?.status === "reviewed" && !connectSource && !editingSheet && doc && evidence) {
@@ -235,7 +299,17 @@ export function MonthlySalesReviewPage() {
         <div className="cash-sales-tools">
           <span>{selectedRange && evidence.기간시작 === selectedRange.start && evidence.기간종료 === selectedRange.end
             ? selectedRange.label : evidence.기간시작 && evidence.기간종료 ? `${evidence.기간시작} ~ ${evidence.기간종료}` : "조회기간 미확인"}</span>
-          <button type="button" className="text-link" onClick={() => void downloadSpreadsheet()}>원본 엑셀 내려받기</button>
+          {parts.length > 1 ? (
+            <span className="cash-sales-downloads">
+              {parts.map((part, idx) => (
+                <button key={part.id} type="button" className="text-link" onClick={() => void downloadSpreadsheet(part.id, `매출원본_${idx + 1}`)}>
+                  원본 {idx + 1}
+                </button>
+              ))}
+            </span>
+          ) : (
+            <button type="button" className="text-link" onClick={() => void downloadSpreadsheet()}>원본 엑셀 내려받기</button>
+          )}
         </div>
         {error && <p role="alert" className="review-error">{error}</p>}
         <h1 className="section-title">월별 매출</h1>
@@ -244,7 +318,7 @@ export function MonthlySalesReviewPage() {
           const entries = indices.map(index => evidence.내역[index]);
           const total = entries.every(row => typeof row.합계금액 === "number")
             ? entries.reduce((sum, row) => sum + Number(row.합계금액), 0) : null;
-          const count = isInvoiceSheet ? entries.length : entries.every(row => typeof row.건수 === "number")
+          const count = (isInvoiceSheet || isCashDetail) ? entries.length : entries.every(row => typeof row.건수 === "number")
             ? entries.reduce((sum, row) => sum + Number(row.건수), 0) : null;
           return <details className="cash-sales-row" key={month}>
             <summary className="cash-sales-columns"><span>{salesMonthLabel(month)}</span>
@@ -303,7 +377,8 @@ export function MonthlySalesReviewPage() {
               if (name === "건수" || name === "순번") return <label key={name} className="review-field">{label}<NumberInput className="input" value={value} onValueChange={raw => onChange(raw === "" ? null : Number(raw))} /></label>;
               return EVIDENCE_AMOUNTS.has(name) ? <MoneyField key={name} label={label} value={value} onChange={onChange} />
                 : <TextField key={name} label={label} value={value} type={["작성일","발급일","전송일"].includes(name) ? "date"
-                  : name === "일자또는월" && isSpreadsheet && row.범위 === "집계" ? "month" : "text"} onChange={onChange} />;
+                  : name === "일자또는월" && isSpreadsheet && row.범위 === "집계" ? "month"
+                  : name === "일자또는월" && isSpreadsheet && row.범위 === "건별" ? "date" : "text"} onChange={onChange} />;
               })}</div>;
               return indices.length === 1 ? fields : <details className="sales-edit-entry" key={index}>
                 <summary>{salesRowLabel(row)}{typeof row.합계금액 === "number" ? ` · ${formatWon(row.합계금액)}` : ""}</summary>

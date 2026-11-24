@@ -29,6 +29,7 @@ class Receipt(SQLModel, table=True):
     )
     ocr_warnings_json: str = Field(default="[]", nullable=False)
     ocr_pipeline_name: Optional[str] = Field(default=None)
+    ocr_route: Optional[str] = Field(default=None, max_length=32)
     ocr_pipeline_version: Optional[str] = Field(default=None)
     ocr_missing_fields_json: str = Field(default="[]", nullable=False)
     extraction_confirmed: bool = Field(default=False, nullable=False, index=True)

@@ -241,3 +241,70 @@ def test_adapter_raises_on_failure_instead_of_needs_review():
 
     with pytest.raises(AnalysisFailedError, match="법령 조문"):
         LangGraphAnalyzer(graph).analyze(request())
+
+
+# ── sLLM 1차 판정 라우팅 ──
+
+class FakeSlm:
+    """미리 정한 (판정, 신뢰도)를 돌려주거나 예외를 던진다."""
+
+    def __init__(self, output, confidence=0.99):
+        self.output, self.confidence, self.calls = output, confidence, 0
+
+    def __call__(self, request, laws):
+        self.calls += 1
+        if isinstance(self.output, Exception):
+            raise self.output
+        return self.output, self.confidence
+
+
+def run_with_slm(slm, judge, **transaction_kwargs):
+    graph = build_graph(lambda query, exclude: LAWS, lambda: [], judge, slm)
+    return classify(graph, request(**transaction_kwargs))
+
+
+def test_confident_slm_judgement_skips_llm():
+    judge = FakeJudge()
+    result = run_with_slm(FakeSlm(deductible(cited=[1])), judge)
+
+    assert result.verdict == "deductible"
+    assert result.judged_by == "slm" and result.route_reason is None
+    assert [ref.source_id for ref in result.legal_references] == ["1"]
+    assert judge.received_errors == []
+
+
+@pytest.mark.parametrize(
+    "slm, reason",
+    [
+        (FakeSlm(ambiguous([BUSINESS, PRIVATE])), "애매 판정"),
+        (FakeSlm(deductible(), confidence=0.6), "신뢰도 낮음"),
+        (FakeSlm(deductible(), confidence=None), "신뢰도 낮음"),
+        (FakeSlm(deductible(category="차량유지비")), "고위험 분류"),
+        (FakeSlm(deductible(category="기업업무추진비")), "고위험 분류"),
+        (FakeSlm(deductible(cited=[99])), "검증 실패"),
+        (FakeSlm(ConnectionError("down")), "호출 실패"),
+    ],
+)
+def test_slm_escalates_to_llm(slm, reason):
+    judge = FakeJudge(deductible(cited=[2], reason="LLM 판정"))
+    result = run_with_slm(slm, judge)
+
+    assert result.judged_by == "llm"
+    assert result.reason == "LLM 판정"
+    assert reason in result.route_reason
+    # sLLM 검증 오류는 LLM 재시도 프롬프트에 넘기지 않는다.
+    assert judge.received_errors == [[]]
+
+
+def test_rule_match_skips_slm():
+    slm = FakeSlm(deductible())
+    result = run_with_slm(slm, FakeJudge(), vendor="강남 유흥주점")
+
+    assert result.judged_by == "rule" and slm.calls == 0
+
+
+def test_adapter_records_judging_path():
+    graph = build_graph(lambda query, exclude: LAWS, lambda: [], FakeJudge(), FakeSlm(deductible(cited=[1])))
+    decision = LangGraphAnalyzer(graph).analyze(request())
+
+    assert decision.analyzer_name == "langgraph-deduction/slm"

@@ -5,6 +5,7 @@ import { getReceipt, retryReceiptOcr, type ReceiptProcessingApi } from "../../ap
 import { ReceiptPreview } from "../../components/ReceiptPreview";
 import { RecognitionDetails } from "../../components/RecognitionDetails";
 import { ProcessingTimeline, useStageReveal } from "../../components/ProcessingTimeline";
+import { capturePathForDirection } from "../../hooks/purchaseOcrRoute";
 
 export function OcrProcessingPage() {
   const navigate = useNavigate();
@@ -137,7 +138,7 @@ export function OcrProcessingPage() {
 
         {unsupported && receipt && (
           <div className="stack-gap-sm" style={{ marginTop: 24 }}>
-            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}&source=file`, { replace: true })}>
+            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(capturePathForDirection(receipt.direction, "file"), { replace: true })}>
               다른 사진 선택
             </button>
             <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/storage/${receipt.direction}`)}>
@@ -148,10 +149,10 @@ export function OcrProcessingPage() {
 
         {retake && receipt && (
           <div className="stack-gap-sm" style={{ marginTop: 24 }}>
-            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}`, { replace: true })}>
+            <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(capturePathForDirection(receipt.direction), { replace: true })}>
               다시 촬영하기
             </button>
-            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}&source=file`, { replace: true })}>
+            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(capturePathForDirection(receipt.direction, "file"), { replace: true })}>
               다른 사진 선택
             </button>
             <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/storage/${receipt.direction}`)}>
@@ -165,7 +166,7 @@ export function OcrProcessingPage() {
             <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/receipts/${id}/review`, { replace: true })}>
               읽은 정보 확인 · 수정
             </button>
-            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}&source=file`, { replace: true })}>
+            <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(capturePathForDirection(receipt.direction, "file"), { replace: true })}>
               다른 사진 선택
             </button>
             <button className="btn btn--secondary" style={{ width: "100%" }} onClick={() => navigate(`/storage/${receipt.direction}`)}>
@@ -181,7 +182,7 @@ export function OcrProcessingPage() {
                 {retrying ? "재분석 준비 중" : "같은 사진으로 한 번 더 분석"}
               </button>
             ) : (
-              <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(`/capture?direction=${receipt.direction}`, { replace: true })}>
+              <button className="btn btn--primary" style={{ width: "100%" }} onClick={() => navigate(capturePathForDirection(receipt.direction), { replace: true })}>
                 새로 촬영하기
               </button>
             )}
