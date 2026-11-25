@@ -17,7 +17,7 @@ def body(email="owner@example.com"):
     return {
         "email": email, "password": "correct-password", "name": "Owner",
         "business_name": " Owner Store ", "business_number": "123-45-67890",
-        "tax_profile": {"business_start_date": "2025-01-01"}, "terms_accepted": True, "privacy_accepted": True, "marketing_accepted": False,
+        "tax_profile": {"business_start_date": "2025-01-01"}, "terms_accepted": True, "privacy_accepted": True, "age_confirmed": True, "overseas_transfer_accepted": True, "ai_notice_accepted": True, "sample_pdf_notice_accepted": True, "marketing_accepted": False,
     }
 
 
@@ -62,10 +62,11 @@ def test_registration_persists_user_and_business(client, monkeypatch, code, stat
     assert users[0].name == "Owner"
     consents = db_rows(ConsentRecord)
     assert {(consent.consent_type, consent.accepted) for consent in consents} == {
-        ("terms", True), ("privacy", True), ("marketing", False),
+        ("age_14", True), ("terms", True), ("privacy", True), ("overseas_transfer", True),
+        ("ai_notice", True), ("sample_pdf_notice", True), ("marketing", False),
     }
     assert all(consent.user_id == users[0].id and consent.recorded_at is not None for consent in consents)
-    assert all(consent.document_version is None for consent in consents)
+    assert all(consent.document_version == "2026-11-25" for consent in consents)
 
     login = client.post("/auth/login", json={"email": "owner@example.com", "password": "correct-password"})
     assert login.status_code == 200

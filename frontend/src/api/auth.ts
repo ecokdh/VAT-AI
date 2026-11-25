@@ -42,8 +42,12 @@ export interface RegisterRequest {
   nickname: string;
   business_name: string;
   business_number: string;
+  age_confirmed: boolean;
   terms_accepted: boolean;
   privacy_accepted: boolean;
+  overseas_transfer_accepted: boolean;
+  ai_notice_accepted: boolean;
+  sample_pdf_notice_accepted: boolean;
   marketing_accepted: boolean;
   tax_profile?: TaxProfileInput;
   filing_info?: BusinessFilingInfo;

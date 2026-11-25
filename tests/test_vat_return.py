@@ -17,7 +17,7 @@ from app.sales_filing import service as sales_filing
 from app.sales_monthly.models import MonthlySalesDocument
 from app.transactions import service
 from app.transactions.schemas import TransactionCreate
-from app.vat_return.fill import fill_page1
+from app.vat_return.fill import add_watermark, fill_page1
 from app.vat_return.returns import build_vat_return
 from app.vat_return.verifier import verify
 
@@ -125,10 +125,10 @@ def test_simplified_taxpayer_is_not_supported():
         build_vat_return(session, user, "2026-YEAR")
 
 
-def test_filled_pdf_keeps_six_pages_and_prints_values():
-    pdf = fill_page1({"biz.name": "카페 느린오후", "r30.tax": "160,000"})
+def test_filled_pdf_has_only_page1_and_prints_values():
+    pdf = add_watermark(fill_page1({"biz.name": "카페 느린오후", "r30.tax": "160,000"}))
     reader = PdfReader(__import__("io").BytesIO(pdf))
-    assert len(reader.pages) == 6
+    assert len(reader.pages) == 1
     text = reader.pages[0].extract_text()
     assert "카페 느린오후" in text and "160,000" in text
 

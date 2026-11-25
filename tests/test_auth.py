@@ -17,7 +17,7 @@ def register_body(email="owner@example.com", password="correct-password"):
     return {
         "email": email, "password": password, "name": "Owner",
         "business_name": "Owner Store", "business_number": "123-45-67890",
-        "tax_profile": {"business_start_date": "2025-01-01"}, "terms_accepted": True, "privacy_accepted": True, "marketing_accepted": False,
+        "tax_profile": {"business_start_date": "2025-01-01"}, "terms_accepted": True, "privacy_accepted": True, "age_confirmed": True, "overseas_transfer_accepted": True, "ai_notice_accepted": True, "sample_pdf_notice_accepted": True, "marketing_accepted": False,
     }
 
 
@@ -82,7 +82,8 @@ def test_password_over_bcrypt_utf8_boundary_is_json_validation_error(client):
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-@pytest.mark.parametrize("field", ["terms_accepted", "privacy_accepted"])
+@pytest.mark.parametrize("field", ["age_confirmed", "terms_accepted", "privacy_accepted", "overseas_transfer_accepted",
+                                   "ai_notice_accepted", "sample_pdf_notice_accepted"])
 def test_registration_requires_mandatory_consents(client, field):
     body = register_body()
     body[field] = False

@@ -9,6 +9,7 @@ import { verifyBusinessIdentity, type BusinessVerificationResponse } from "../..
 
 import { TaxProfileFields, emptyTaxProfile } from "../../components/TaxProfileFields";
 import type { TaxProfileInput } from "../../api/transactions";
+import { consentItems, emptyConsents, type ConsentItem, type ConsentKey } from "./signupConsents";
 import "../../styles/signup.css";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -56,6 +57,23 @@ function sentences(text: string) {
   return text.split(/(?<=[.?!])\s+/).map((line, i) => <span key={i} className="text-line">{line}</span>);
 }
 
+function ConsentRow({ item, checked, onChange }: { item: ConsentItem; checked: boolean; onChange: (checked: boolean) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="signup-consent">
+      <div className="signup-consent__row">
+        <label>
+          <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+          <span><em className={item.required ? "is-required" : undefined}>{item.required ? "[필수]" : "[선택]"}</em> {item.label}</span>
+        </label>
+        {item.detail && <button type="button" className="signup-consent__toggle" aria-expanded={open} onClick={() => setOpen(!open)}>보기</button>}
+      </div>
+      {item.notice && <p className="signup-consent__notice">{item.notice}</p>}
+      {open && <ul className="signup-consent__detail">{item.detail?.map((line) => <li key={line}>{line}</li>)}</ul>}
+    </div>
+  );
+}
+
 function PasswordRequirement({ met, children }: { met: boolean; children: string }) {
   return (
     <li className={met ? "is-met" : undefined}>
@@ -91,9 +109,7 @@ export function SignupPage() {
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [privacyAccepted, setPrivacyAccepted] = useState(false);
-  const [marketingAccepted, setMarketingAccepted] = useState(false);
+  const [consents, setConsents] = useState(emptyConsents);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -130,7 +146,13 @@ export function SignupPage() {
     && (taxProfile.industry_category !== "manufacturing" || taxProfile.entity_type !== "corporation" || taxProfile.industry_subtype !== "other" || taxProfile.is_sme != null)
     && (verification?.tax_type_code !== "02" || taxProfile.simplified_industry_rate != null)
     && taxProfile.confirmed;
-  const canSubmit = accountStepValid && businessStepValid && termsAccepted && privacyAccepted && !isSubmitting;
+  const allConsented = consentItems.every((item) => consents[item.key]);
+  const consentStepValid = consentItems.every((item) => !item.required || consents[item.key]);
+  const canSubmit = consentStepValid && accountStepValid && businessStepValid && !isSubmitting;
+
+  function setConsent(key: ConsentKey, checked: boolean) {
+    setConsents((current) => ({ ...current, [key]: checked }));
+  }
 
   function invalidateIdentity() {
     verificationRun.current += 1;
@@ -184,9 +206,7 @@ export function SignupPage() {
         nickname: nickname.trim(),
         business_name: businessName.trim(),
         business_number: normalizedBusinessNumber(businessNumber),
-        terms_accepted: termsAccepted,
-        privacy_accepted: privacyAccepted,
-        marketing_accepted: marketingAccepted,
+        ...consents,
         tax_profile: taxProfile,
         filing_info: filingInfo,
       });
@@ -196,14 +216,13 @@ export function SignupPage() {
       const code = isAxiosError(requestError) ? requestError.response?.data?.error?.code : undefined;
       if (code === "EMAIL_ALREADY_EXISTS") {
         setEmailAvailability("taken");
-        setStep(1);
+        setStep(2);
         setError("이미 가입된 이메일입니다. 로그인해 주세요.");
       } else if (typeof code === "string" && code.startsWith("BUSINESS_")) {
         setVerifiedIdentity("");
         setVerification(null);
         setIdentityError(businessError(requestError));
         setError("사업자정보를 다시 확인해 주세요.");
-        setStep(2);
       } else {
         setError("회원가입에 실패했습니다. 입력 내용을 확인하고 다시 시도해 주세요.");
       }
@@ -214,8 +233,8 @@ export function SignupPage() {
 
   function nextStep() {
     setError("");
-    if (step === 1 && accountStepValid) setStep(2);
-    else if (step === 2 && businessStepValid) setStep(3);
+    if (step === 1 && consentStepValid) setStep(2);
+    else if (step === 2 && accountStepValid) setStep(3);
   }
 
   async function handleVerifyIdentity() {
@@ -242,9 +261,22 @@ export function SignupPage() {
       <div className="page__body">
         <div className="signup-progress" aria-hidden="true">{[1, 2, 3].map((n) => <span key={n} className={n <= step ? "is-on" : undefined} />)}</div>
         <div className="signup-pane" key={step}>
-        <p className="signup-step">{step} / 3 · {step === 1 ? "계정 정보 입력" : step === 2 ? "사업자번호 확인" : "약관 동의"}</p>
+        <p className="signup-step">{step} / 3 · {step === 1 ? "약관 동의" : step === 2 ? "계정 정보 입력" : "사업자번호 확인"}</p>
 
         {step === 1 && <>
+          <h1 className="signup-title">서비스 이용을 위해<br />약관에 동의해 주세요</h1>
+          <p className="signup-sub"><span className="text-line">필수 항목에 모두 동의해야 가입할 수 있어요.</span></p>
+          <label className="signup-consent-all">
+            <input type="checkbox" checked={allConsented} onChange={(e) => setConsents(Object.fromEntries(consentItems.map((item) => [item.key, e.target.checked])) as typeof consents)} />
+            <span>전체 동의하기</span>
+          </label>
+          <div className="signup-consents">
+            {consentItems.map((item) => <ConsentRow key={item.key} item={item} checked={consents[item.key]} onChange={(checked) => setConsent(item.key, checked)} />)}
+          </div>
+          <div className="signup-cta"><button className="btn btn--primary" onClick={nextStep} disabled={!consentStepValid}>동의하고 시작하기</button></div>
+        </>}
+
+        {step === 2 && <>
           <h1 className="signup-title">부가가치세 신고,<br />VAT-AI와 시작해 보세요</h1>
           <div className="form-field"><label className="form-field__label" htmlFor="signup-nickname">닉네임</label><input id="signup-nickname" className="input" autoComplete="nickname" maxLength={20} value={nickname} onChange={e=>setNickname(e.target.value)}/><p className="form-field__hint"><span className="text-line">홈 화면에 보일 이름이에요.</span><span className="text-line">2~20자로 입력하세요.</span></p></div>
           <div className="form-field">
@@ -284,7 +316,7 @@ export function SignupPage() {
           <div className="signup-cta"><button className="btn btn--primary" onClick={nextStep} disabled={!accountStepValid}>다음</button></div>
         </>}
 
-        {step === 2 && <>
+        {step === 3 && <>
           <h1 className="signup-title">사업자번호 확인</h1>
           <p className="signup-sub"><span className="text-line">사업자 기본 정보를 입력해 주세요.</span><span className="text-line">국세청에서 사업자 상태를 확인해요.</span></p>
           <div className="form-field">
@@ -321,31 +353,10 @@ export function SignupPage() {
             <BusinessFilingFields signup value={filingInfo} onChange={(key, value) => setFilingInfo(current => ({ ...current, [key]: value }))} />
             <label className="check-row"><input type="checkbox" checked={taxProfile.confirmed} onChange={e=>setTaxProfile(current=>({...current,confirmed:e.target.checked}))}/>입력한 사업자 정보를 확인했습니다.</label>
           </section>}
-          <div className="signup-cta"><button className="btn btn--primary" onClick={nextStep} disabled={!businessStepValid}>다음</button></div>
-        </>}
-
-        {step === 3 && <>
-          <h1 className="signup-title">약관 동의</h1>
-          <p className="signup-sub"><span className="text-line">필수 항목에 동의해야 가입할 수 있어요.</span></p>
-          <div className="signup-terms">
-            <label>
-              <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />
-              <span>[필수] 서비스 이용약관에 동의합니다.</span>
-              <span className="signup-terms__arrow" aria-hidden="true">›</span>
-            </label>
-            <label>
-              <input type="checkbox" checked={privacyAccepted} onChange={(e) => setPrivacyAccepted(e.target.checked)} />
-              <span>[필수] 개인정보 처리방침에 동의합니다.</span>
-              <span className="signup-terms__arrow" aria-hidden="true">›</span>
-            </label>
-            <label>
-              <input type="checkbox" checked={marketingAccepted} onChange={(e) => setMarketingAccepted(e.target.checked)} />
-              <span>[선택] 혜택 및 소식 안내를 받겠습니다.</span>
-            </label>
-          </div>
           {error && <div className="banner banner--error signup-error" role="alert">{sentences(error)}</div>}
           <div className="signup-cta"><button className="btn btn--primary" onClick={handleSignup} disabled={!canSubmit}>{isSubmitting ? "가입 처리 중..." : "가입 완료"}</button></div>
         </>}
+
         </div>
       </div>
     </div>

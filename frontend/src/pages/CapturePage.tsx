@@ -15,9 +15,12 @@ export function CapturePage() {
   const backToStorage = "/storage/purchase";
   const fileOnly = params.get("source") === "file";
   const ocrRoute = parsePurchaseOcrRoute(params.get("ocr"));
+  const selectionPath = purchaseOcrSelectionPath + (fileOnly ? "?source=file" : "");
+  // 사진을 올리기 전에는 영수증 특징 선택 화면으로 돌아간다.
+  const backBeforeShot = ocrRoute ? selectionPath : backToStorage;
   const selectedRoute = ocrRoute && <div className="capture-route">
     <span>{purchaseOcrOptions[ocrRoute].label}</span>
-    <button type="button" onClick={() => navigate(purchaseOcrSelectionPath + (fileOnly ? "?source=file" : ""))}>변경</button>
+    <button type="button" onClick={() => navigate(selectionPath)}>변경</button>
   </div>;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -170,8 +173,8 @@ export function CapturePage() {
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
   }
 
-  if(guide!=="ready")return <div className="page qa-page"><PageHeader title="증빙 촬영 안내" onBack={()=>navigate(backToStorage)}/>{guide==="show"?<CaptureGuide seconds={seconds}/>:<div className="page__body">{guide==="error"?<p className="banner banner--error">촬영 안내 정보를 불러오지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.</p>:<p role="status">촬영을 준비하고 있습니다.</p>}</div>}</div>;
-  if(fileOnly && !frozen)return <div className="page qa-page"><PageHeader title="영수증 사진 선택" onBack={()=>navigate(backToStorage)}/><main className="page__body">{selectedRoute}<h1 className="screen-title">다른 영수증 사진을 선택해 주세요</h1><p className="muted">영수증 전체와 금액·날짜가 선명하게 보이는 사진을 선택해 주세요.</p>{error && <p className="banner banner--error" role="alert">{error}</p>}<input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} style={{display:'none'}}/><button className="btn btn--primary" onClick={openFilePicker}>앨범 및 파일 선택</button><button className="btn btn--secondary" onClick={()=>setParams(previous => { const next = new URLSearchParams(previous); next.delete("source"); return next; })}>직접 촬영하기</button></main></div>;
+  if(guide!=="ready")return <div className="page qa-page"><PageHeader title="증빙 촬영 안내" onBack={()=>navigate(backBeforeShot)}/>{guide==="show"?<CaptureGuide seconds={seconds}/>:<div className="page__body">{guide==="error"?<p className="banner banner--error">촬영 안내 정보를 불러오지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.</p>:<p role="status">촬영을 준비하고 있습니다.</p>}</div>}</div>;
+  if(fileOnly && !frozen)return <div className="page qa-page"><PageHeader title="영수증 사진 선택" onBack={()=>navigate(backBeforeShot)}/><main className="page__body">{selectedRoute}<h1 className="screen-title">다른 영수증 사진을 선택해 주세요</h1><p className="muted">영수증 전체와 금액·날짜가 선명하게 보이는 사진을 선택해 주세요.</p>{error && <p className="banner banner--error" role="alert">{error}</p>}<input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} style={{display:'none'}}/><button className="btn btn--primary" onClick={openFilePicker}>앨범 및 파일 선택</button><button className="btn btn--secondary" onClick={()=>setParams(previous => { const next = new URLSearchParams(previous); next.delete("source"); return next; })}>직접 촬영하기</button></main></div>;
   const progress = receipt?.status === "processing" ? receipt.processing_progress : receipt ? 100 : 5;
   const canRetry = (receipt?.ocr_user_attempts ?? 2) < 2;
   const outcome = receipt?.status === "unsupported" ? { title: "영수증이 아닌 것 같아요", description: receipt.guide_message || "인쇄된 구매 영수증만 인식할 수 있어요.", icon: "M6 3h12v18l-3-2-3 2-3-2-3 2zM4 4l16 16", canRetry }
@@ -186,7 +189,7 @@ export function CapturePage() {
       {frozen && <img className="capture-video" src={frozen} alt="" />}
       <div className="capture-guide-frame" aria-hidden="true"><i /><i /><i /><i /></div>
       <div className="capture-top">
-        <button className="capture-square" aria-label="보관함으로 돌아가기" onClick={() => navigate(backToStorage)}><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+        <button className="capture-square" aria-label={frozen ? "보관함으로 돌아가기" : "뒤로 가기"} onClick={() => navigate(frozen ? backToStorage : backBeforeShot)}><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
         <span className="capture-title">매입 영수증 촬영</span>
         <span className="capture-square capture-square--ghost" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 3L5 13h6l-1 8 8-10h-6z" /></svg></span>
       </div>

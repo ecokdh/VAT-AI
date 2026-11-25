@@ -3,9 +3,12 @@
 학습용 training/vatform/fill.py와 같은 좌표·글자 배치를 쓴다. 둘이 달라지면 모델 검증이 틀어진다.
 """
 import io
+from collections.abc import Callable
 from pathlib import Path
 
-from pypdf import PdfReader, PdfWriter
+from PIL import Image
+from pypdf import PageObject, PdfReader, PdfWriter
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
@@ -13,7 +16,10 @@ from reportlab.pdfgen import canvas
 from app.core.config import settings
 from app.vat_return.fields import FIELD_BY_ID, PAGE_HEIGHT, PAGE_WIDTH, REG_NO_DASH_CELLS, Field
 
-TEMPLATE = Path(__file__).resolve().parent / "assets" / "vat_return_form21_2026.pdf"
+ASSETS = Path(__file__).resolve().parent / "assets"
+TEMPLATE = ASSETS / "vat_return_form21_2026.pdf"
+LOGO = ASSETS / "vat-ai-logo.png"  # vat-ai-logo.svg(앱 시작 화면 로고)를 640px로 그린 투명 PNG
+WATERMARK_OPACITY = 0.12  # 0~1. 칸에 적힌 값이 가려지지 않을 만큼 연하게.
 FONT_NAME = "VatFormFont"
 FONT_CANDIDATES = ("C:/Windows/Fonts/malgun.ttf", "/usr/share/fonts/truetype/nanum/NanumGothic.ttf")
 
@@ -50,19 +56,50 @@ def _draw(c: canvas.Canvas, field: Field, value: str) -> None:
         c.drawString(x0 + 2, y, value)
 
 
-def fill_page1(values: dict[str, str], template: Path = TEMPLATE) -> bytes:
-    """values: {필드 id: 인쇄할 문자열}. 1쪽만 채운 6쪽 PDF를 돌려준다."""
-    _register_font()
-    overlay = io.BytesIO()
-    c = canvas.Canvas(overlay, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
-    for field_id, value in values.items():
-        if value:
-            _draw(c, FIELD_BY_ID[field_id], value)
-    c.showPage()  # 값이 하나도 없어도 페이지 1장을 만들어 합칠 수 있게 한다.
+def _overlay(draw: Callable[[canvas.Canvas], None]) -> PageObject:
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
+    draw(c)
+    c.showPage()  # 그린 것이 없어도 페이지 1장을 만들어 합칠 수 있게 한다.
     c.save()
+    return PdfReader(buffer).pages[0]
 
-    writer = PdfWriter(clone_from=PdfReader(template))
-    writer.pages[0].merge_page(PdfReader(overlay).pages[0])
+
+def _stamp_page1(source: PdfReader, overlay: PageObject) -> bytes:
+    """source의 1쪽에 overlay를 얹어 1쪽짜리 PDF로 돌려준다."""
+    writer = PdfWriter()
+    writer.add_page(source.pages[0]).merge_page(overlay)
     out = io.BytesIO()
     writer.write(out)
     return out.getvalue()
+
+
+def fill_page1(values: dict[str, str], template: Path = TEMPLATE) -> bytes:
+    """values: {필드 id: 인쇄할 문자열}. 값을 채운 1쪽짜리 PDF를 돌려준다(2쪽 이후는 쓰지 않아 뺀다)."""
+    _register_font()
+
+    def draw(c: canvas.Canvas) -> None:
+        for field_id, value in values.items():
+            if value:
+                _draw(c, FIELD_BY_ID[field_id], value)
+
+    return _stamp_page1(PdfReader(template), _overlay(draw))
+
+
+def _watermark_image() -> Image.Image:
+    # 투명 배경 로고 전체를 WATERMARK_OPACITY만큼 연하게 만든다.
+    logo = Image.open(LOGO).convert("RGBA")
+    logo.putalpha(logo.getchannel("A").point(lambda v: round(v * WATERMARK_OPACITY)))
+    return logo
+
+
+def add_watermark(pdf: bytes) -> bytes:
+    """제출용으로 쓰이지 않도록 1쪽 가운데에 VAT-AI 로고를 연하게 얹는다."""
+    logo = _watermark_image()
+    width = PAGE_WIDTH * 0.5
+    height = width * logo.height / logo.width
+
+    def draw(c: canvas.Canvas) -> None:
+        c.drawImage(ImageReader(logo), (PAGE_WIDTH - width) / 2, (PAGE_HEIGHT - height) / 2, width, height, mask="auto")
+
+    return _stamp_page1(PdfReader(io.BytesIO(pdf)), _overlay(draw))

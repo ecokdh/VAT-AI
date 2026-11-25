@@ -333,13 +333,14 @@ def process_async_job(session: Session, job: AsyncJob) -> None:
         job.result_json = json.dumps({"file_key": stored.key}, ensure_ascii=False)
         return
     if job.job_type == "vat_return":
-        from app.vat_return.fill import fill_page1
+        from app.vat_return.fill import add_watermark, fill_page1
         from app.vat_return.render import page1_png
         from app.vat_return.verifier import load_reader, verify
 
         pdf_bytes = fill_page1(payload["values"])
-        stored = receipt_service.storage.save(job.user_id, pdf_bytes, "application/pdf", "pdf")
+        # 검증 모델은 워터마크 없는 양식으로 학습했으므로 워터마크를 얹기 전에 검증한다.
         verification = verify(payload["values"], page1_png(pdf_bytes), load_reader())
+        stored = receipt_service.storage.save(job.user_id, add_watermark(pdf_bytes), "application/pdf", "pdf")
         job.result_json = json.dumps({"file_key": stored.key, "period": payload["period"], "payable": payload["payable"],
                                       "notes": payload["notes"], "verification": verification}, ensure_ascii=False)
         return

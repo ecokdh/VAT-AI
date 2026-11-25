@@ -47,7 +47,7 @@ def _register_user(client, monkeypatch, email: str = "edge-e2e@example.com") -> 
             "business_name": "엣지상점",
             "business_number": "123-45-67890",
             "tax_profile": {"business_start_date": "2025-01-01"}, "terms_accepted": True,
-            "privacy_accepted": True,
+            "privacy_accepted": True, "age_confirmed": True, "overseas_transfer_accepted": True, "ai_notice_accepted": True, "sample_pdf_notice_accepted": True,
             "marketing_accepted": False,
         },
     )

@@ -13,6 +13,9 @@ from app.business.service import verify_business, verify_identity, save_tax_prof
 from app.common.exceptions import AppException
 from app.core.security import create_access_token, hash_password, verify_password
 
+# 회원가입 동의 문안(frontend/src/pages/auth/signupConsents.ts)의 판. 문안을 바꾸면 두 곳을 함께 올린다.
+CONSENT_DOCUMENT_VERSION = "2026-11-25"
+
 
 def _to_business_out(profile: BusinessProfile) -> BusinessProfileOut:
     return BusinessProfileOut(
@@ -62,8 +65,17 @@ def register_user(db: Session, data: RegisterRequest) -> AuthResponse:
     name = data.name.strip()
     if not name:
         raise AppException(400, "VALIDATION_ERROR", "이름은 비어 있을 수 없습니다.")
-    if not data.terms_accepted or not data.privacy_accepted:
-        raise AppException(400, "CONSENT_REQUIRED", "서비스 이용약관과 개인정보 처리방침에 동의해야 가입할 수 있습니다.")
+    consents = {
+        "age_14": data.age_confirmed,
+        "terms": data.terms_accepted,
+        "privacy": data.privacy_accepted,
+        "overseas_transfer": data.overseas_transfer_accepted,
+        "ai_notice": data.ai_notice_accepted,
+        "sample_pdf_notice": data.sample_pdf_notice_accepted,
+    }
+    if not all(consents.values()):
+        raise AppException(400, "CONSENT_REQUIRED", "필수 약관과 안내에 모두 동의해야 가입할 수 있습니다.")
+    consents["marketing"] = data.marketing_accepted
     if db.exec(select(User).where(User.email == email)).first() is not None:
         raise AppException(409, "EMAIL_ALREADY_EXISTS", "이미 가입된 이메일입니다.")
 
@@ -107,24 +119,9 @@ def register_user(db: Session, data: RegisterRequest) -> AuthResponse:
         if data.tax_profile is not None:
             save_tax_profile(db, user.id, data.tax_profile, commit=False)
         db.add_all([
-            ConsentRecord(
-                user_id=user.id,
-                consent_type="terms",
-                accepted=data.terms_accepted,
-                recorded_at=consent_recorded_at,
-            ),
-            ConsentRecord(
-                user_id=user.id,
-                consent_type="privacy",
-                accepted=data.privacy_accepted,
-                recorded_at=consent_recorded_at,
-            ),
-            ConsentRecord(
-                user_id=user.id,
-                consent_type="marketing",
-                accepted=data.marketing_accepted,
-                recorded_at=consent_recorded_at,
-            ),
+            ConsentRecord(user_id=user.id, consent_type=consent_type, accepted=accepted,
+                          document_version=CONSENT_DOCUMENT_VERSION, recorded_at=consent_recorded_at)
+            for consent_type, accepted in consents.items()
         ])
         db.commit()
         db.refresh(user)

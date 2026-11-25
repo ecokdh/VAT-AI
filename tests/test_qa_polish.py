@@ -21,7 +21,7 @@ def registration(monkeypatch):
         tax_type='일반과세', tax_type_code='01', verified=True))
     return dict(email='qa-polish@example.com', password='Test-pass-123!', name='실제 대표자', nickname='  별빛상점  ',
                 business_name='고정 상호', business_number='1234567890', terms_accepted=True,
-                privacy_accepted=True, tax_profile={'business_start_date':'2025-01-01'})
+                privacy_accepted=True, age_confirmed=True, overseas_transfer_accepted=True, ai_notice_accepted=True, sample_pdf_notice_accepted=True, tax_profile={'business_start_date':'2025-01-01'})
 
 
 def test_nickname_is_separate_and_only_owner_can_update(client, registration):

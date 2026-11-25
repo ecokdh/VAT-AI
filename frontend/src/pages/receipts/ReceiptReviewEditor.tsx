@@ -69,7 +69,8 @@ export function OcrExtractionReviewPage() {
   const removeItem=(index:number)=>{setItems(v=>v.filter((_,i)=>i!==index).map(item=>({...item,parent_row:item.parent_row===null?null:item.parent_row===index?null:item.parent_row>index?item.parent_row-1:item.parent_row})));setDirty(true);};
   function money(key:string){return <label className="review-field" key={key} htmlFor={`review-${key}`}><span>{moneyLabels[key]}</span><NumberInput className="input" id={`review-${key}`} allowNegative value={fields[key]??''} placeholder="미확인" onValueChange={v=>editField(key,v)} required={key==='payment_amount'} />{receipt?.recognition?.document?.conflicts.includes(key)&&<small>사진에서 금액을 확인해 주세요.</small>}</label>;}
   function askSave(e:FormEvent){e.preventDefault();if(receipt&&!saving)setConfirm('save');}
-  function leave(){setDirty(false);navigate(`/storage/${receipt?.direction??'purchase'}`);}
+  // 추출 결과를 저장하지 않고 나가면 메인 화면으로 간다.
+  function leave(){setDirty(false);navigate('/dashboard');}
   async function save(){
     setConfirm(null);if(!receipt||saving)return;
     setError('');

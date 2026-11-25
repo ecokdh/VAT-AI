@@ -13,8 +13,12 @@ class RegisterRequest(BaseModel):
     nickname: str | None = Field(default=None, min_length=2, max_length=20)
     business_name: str
     business_number: str
+    age_confirmed: bool  # 만 14세 이상
     terms_accepted: bool
     privacy_accepted: bool
+    overseas_transfer_accepted: bool  # 개인정보 국외 이전(OpenAI)
+    ai_notice_accepted: bool  # 공제 판별은 AI 예측이라는 안내 확인
+    sample_pdf_notice_accepted: bool  # 신고서 PDF는 예시라 제출하면 안 된다는 안내 확인
     marketing_accepted: bool = False
     tax_profile: TaxProfileUpdate | None = None
     filing_info: BusinessFilingInfo | None = None

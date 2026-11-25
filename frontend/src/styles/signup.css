@@ -64,12 +64,19 @@
 .page.signup-page .field-row { padding: 16px 0 0; font-size: 13px; color: #4b5568; }
 .page.signup-page .check-row { display: flex; align-items: center; gap: 12px; margin-top: 24px; font-size: 14px; }
 
-/* 3단계 — 약관 */
-.signup-terms { margin-top: 24px; }
-.signup-terms label { display: flex; align-items: center; gap: 12px; min-height: 56px; border-bottom: 1px solid #eef1f6; font-size: 15px; cursor: pointer; }
-.signup-terms label:last-child { border-bottom: 0; color: #4b5568; }
-.signup-terms label > span:nth-of-type(1) { flex: 1; }
-.signup-terms__arrow { color: #a3acbd; font-size: 20px; }
+/* 1단계 — 약관 동의 */
+.signup-consent-all { display: flex; align-items: center; gap: 12px; min-height: 56px; margin-top: 24px; padding: 0 16px; border: 1px solid #d5dce8; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.signup-consents { margin-top: 8px; }
+.signup-consent { padding: 4px 0; border-bottom: 1px solid #eef1f6; }
+.signup-consent:last-child { border-bottom: 0; }
+.signup-consent__row { display: flex; align-items: center; gap: 12px; min-height: 48px; }
+.signup-consent__row label { flex: 1; display: flex; align-items: center; gap: 12px; font-size: 15px; line-height: 20px; cursor: pointer; }
+.signup-consent__row em { font-style: normal; color: #6b7385; }
+.signup-consent__row em.is-required { color: var(--color-primary); }
+.signup-consent__toggle { flex-shrink: 0; height: 32px; padding: 0 8px; color: #8a94a6; font-size: 13px; text-decoration: underline; }
+.signup-consent__notice { margin: 0 0 12px 32px; padding: 12px; border-radius: 12px; background: #eef4ff; color: #1e3a8a; font-size: 13px; font-weight: 600; line-height: 20px; }
+.signup-consent__detail { margin: 0 0 12px 32px; padding: 12px 12px 12px 28px; border-radius: 12px; background: #f4f6fa; color: #4b5568; font-size: 12px; line-height: 20px; }
+.signup-consent__detail li + li { margin-top: 4px; }
 .signup-error { margin-top: 16px; }
 
 /* 체크박스 — 로그인 화면과 같은 모양 */
